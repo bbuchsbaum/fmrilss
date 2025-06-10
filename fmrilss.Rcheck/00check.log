@@ -1,0 +1,103 @@
+* using log directory ‘/Users/bbuchsbaum/code/fmrilss/fmrilss.Rcheck’
+* using R version 4.3.2 (2023-10-31)
+* using platform: aarch64-apple-darwin20 (64-bit)
+* R was compiled by
+    Apple clang version 14.0.0 (clang-1400.0.29.202)
+    GNU Fortran (GCC) 12.2.0
+* running under: macOS Sonoma 14.3
+* using session charset: UTF-8
+* using option ‘--no-manual’
+* checking for file ‘fmrilss/DESCRIPTION’ ... OK
+* checking extension type ... Package
+* this is package ‘fmrilss’ version ‘0.1.0’
+* package encoding: UTF-8
+* checking package namespace information ... OK
+* checking package dependencies ... OK
+* checking if this is a source package ... WARNING
+Subdirectory ‘src’ contains:
+  lss-1faaa7f3.o.tmp
+These are unlikely file names for src files.
+* checking if there is a namespace ... OK
+* checking for executable files ... OK
+* checking for hidden files and directories ... OK
+* checking for portable file names ... OK
+* checking for sufficient/correct file permissions ... OK
+* checking whether package ‘fmrilss’ can be installed ... OK
+* used C++ compiler: ‘Apple clang version 15.0.0 (clang-1500.1.0.2.5)’
+* used SDK: ‘MacOSX14.2.sdk’
+* checking C++ specification ... NOTE
+  Specified C++11: please drop specification unless essential
+* checking installed package size ... OK
+* checking package directory ... OK
+* checking DESCRIPTION meta-information ... OK
+* checking top-level files ... OK
+* checking for left-over files ... OK
+* checking index information ... OK
+* checking package subdirectories ... OK
+* checking R files for non-ASCII characters ... OK
+* checking R files for syntax errors ... OK
+* checking whether the package can be loaded ... OK
+* checking whether the package can be loaded with stated dependencies ... OK
+* checking whether the package can be unloaded cleanly ... OK
+* checking whether the namespace can be loaded with stated dependencies ... OK
+* checking whether the namespace can be unloaded cleanly ... OK
+* checking loading without being on the library search path ... OK
+* checking dependencies in R code ... OK
+* checking S3 generic/method consistency ... OK
+* checking replacement functions ... OK
+* checking foreign function calls ... OK
+* checking R code for possible problems ... OK
+* checking Rd files ... OK
+* checking Rd metadata ... OK
+* checking Rd cross-references ... WARNING
+Missing link or links in documentation object 'fmrilss-package.Rd':
+  ‘project_confounds_cpp’
+
+See section 'Cross-references' in the 'Writing R Extensions' manual.
+* checking for missing documentation entries ... WARNING
+Undocumented code objects:
+  ‘project_confounds_cpp’
+All user-level objects in a package should have documentation entries.
+See chapter ‘Writing R documentation files’ in the ‘Writing R
+Extensions’ manual.
+* checking for code/documentation mismatches ... OK
+* checking Rd \usage sections ... OK
+* checking Rd contents ... OK
+* checking for unstated dependencies in examples ... OK
+* checking line endings in C/C++/Fortran sources/headers ... OK
+* checking line endings in Makefiles ... OK
+* checking compilation flags in Makevars ... WARNING
+Non-portable flags in variable 'PKG_CXXFLAGS':
+  -O3 -ffast-math
+* checking for GNU extensions in Makefiles ... WARNING
+Found the following file(s) containing GNU extensions:
+  src/Makevars
+Portable Makefiles do not use GNU extensions such as +=, :=, $(shell),
+$(wildcard), ifeq ... endif, .NOTPARALLEL See section ‘Writing portable
+packages’ in the ‘Writing R Extensions’ manual.
+* checking for portable use of $(BLAS_LIBS) and $(LAPACK_LIBS) ... OK
+* checking use of PKG_*FLAGS in Makefiles ... OK
+* checking compiled code ... OK
+* checking examples ... OK
+* checking for unstated dependencies in ‘tests’ ... OK
+* checking tests ... ERROR
+  Running ‘testthat.R’
+Running the tests in ‘tests/testthat.R’ failed.
+Last 13 lines of output:
+  Backtrace:
+      ▆
+   1. ├─testthat::expect_warning(...) at test-lss-equivalence.R:222:3
+   2. │ └─testthat:::expect_condition_matching(...)
+   3. │   └─testthat:::quasi_capture(...)
+   4. │     ├─testthat (local) .capture(...)
+   5. │     │ └─base::withCallingHandlers(...)
+   6. │     └─rlang::eval_bare(quo_get_expr(.quo), quo_get_env(.quo))
+   7. └─fmrilss::lss(Y = Y_df, bdes = bdes)
+   8.   └─fmrilss:::lss_fast(dset = dset, bdes = bdes, Y = Y, use_cpp = use_cpp)
+   9.     └─fmrilss:::lss_compute_cpp(res$Q_dmat_ran, res$residual_data)
+  
+  [ FAIL 10 | WARN 0 | SKIP 1 | PASS 17 ]
+  Error: Test failures
+  Execution halted
+* DONE
+Status: 1 ERROR, 5 WARNINGs, 1 NOTE

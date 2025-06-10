@@ -1,0 +1,6 @@
+fmrilss-package         fmrilss: Least Squares Separate (LSS) Analysis
+                        for fMRI Data
+lss                     Least Squares Separate (LSS) Analysis
+lss_beta_cpp            Vectorized LSS Beta Computation Using C++
+lss_naive               Naive Least Squares Separate (LSS) Analysis
+project_confounds       Project Out Confound Variables
