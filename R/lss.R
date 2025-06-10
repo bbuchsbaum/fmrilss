@@ -1,73 +1,208 @@
 #' Least Squares Separate (LSS) Analysis
 #'
-#' Performs least squares separate (LSS) analysis for fMRI data to estimate
-#' trial-by-trial activation patterns in event-related designs.
+#' Computes trial-wise beta estimates using the Least Squares Separate approach
+#' of Mumford et al. (2012). This method fits a separate GLM for each trial,
+#' with the trial of interest and all other trials as separate regressors.
 #'
-#' @param Y A numeric matrix where rows are timepoints and columns are voxels/features.
-#'   If NULL, the function will attempt to extract data from \code{dset}.
-#' @param bdes A list containing design matrices with components:
+#' @param Y A numeric matrix of size n × V where n is the number of timepoints
+#'   and V is the number of voxels/variables
+#' @param X A numeric matrix of size n × T where T is the number of trials.
+#'   Each column represents the design for one trial
+#' @param Z A numeric matrix of size n × F representing fixed effects to include
+#'   in all models (e.g., intercept, run effects). If NULL, an intercept-only
+#'   design is used. Defaults to NULL
+#' @param Nuisance A numeric matrix of size n × N representing nuisance regressors
+#'   to be projected out before LSS analysis (e.g., motion parameters, physiological
+#'   noise). If NULL, no nuisance projection is performed. Defaults to NULL
+#' @param method Character string specifying which implementation to use.
+#'   Options are:
 #'   \itemize{
-#'     \item \code{dmat_base}: Base design matrix (e.g., intercept, drift terms)
-#'     \item \code{dmat_fixed}: Fixed effects design matrix (optional)
-#'     \item \code{dmat_ran}: Random/trial design matrix for LSS analysis
-#'     \item \code{fixed_ind}: Indices for fixed effects (optional)
+#'     \item "r_optimized" - Optimized R implementation (recommended, default)
+#'     \item "cpp_optimized" - Optimized C++ implementation with parallel support
+#'     \item "r_vectorized" - Standard R vectorized implementation  
+#'     \item "cpp" - Standard C++ implementation
+#'     \item "naive" - Simple loop-based R implementation (for testing)
 #'   }
-#' @param dset Optional dataset object. If provided and Y is NULL, data will be
-#'   extracted using \code{get_data_matrix}.
-#' @param use_cpp Logical. If TRUE (default), uses C++ implementation for speed.
-#'   If FALSE, uses pure R implementation.
 #'
-#' @return A numeric matrix with dimensions (n_events x n_voxels) containing
-#'   the LSS beta estimates for each trial and voxel.
+#' @return A numeric matrix of size T × V containing the trial-wise beta estimates
 #'
 #' @details
-#' LSS (Least Squares Separate) is a method for estimating single-trial activation
-#' patterns in event-related fMRI designs. For each trial, it estimates the activation
-#' while treating all other trials as confounds.
-#'
-#' The function supports both R and C++ implementations. The C++ version uses
-#' vectorized matrix algebra with Cholesky decomposition and is recommended for 
-#' large datasets (provides ~8x speed improvement and ~100x memory reduction).
-#' Both implementations use identical projection methods for numerical consistency.
-#'
-#' @examples
-#' \dontrun{
-#' # Create example design matrices
-#' n_timepoints <- 100
-#' n_trials <- 20
-#' n_voxels <- 1000
-#' 
-#' # Base design (intercept + linear trend)
-#' dmat_base <- cbind(1, 1:n_timepoints)
-#' 
-#' # Trial design matrix (one column per trial)
-#' dmat_ran <- matrix(0, n_timepoints, n_trials)
-#' for(i in 1:n_trials) {
-#'   trial_onset <- sample(1:(n_timepoints-10), 1)
-#'   dmat_ran[trial_onset:(trial_onset+5), i] <- 1
+#' The LSS approach fits a separate GLM for each trial, where each model includes:
+#' \itemize{
+#'   \item The trial of interest (from column i of X)
+#'   \item All other trials combined (sum of all other columns of X) 
+#'   \item Fixed effects (Z matrix)
 #' }
 #' 
-#' # Create design list
-#' bdes <- list(
-#'   dmat_base = dmat_base,
-#'   dmat_ran = dmat_ran,
-#'   fixed_ind = NULL
-#' )
-#' 
-#' # Simulate data
-#' Y <- matrix(rnorm(n_timepoints * n_voxels), n_timepoints, n_voxels)
-#' 
-#' # Run LSS analysis
-#' beta_estimates <- lss(Y = Y, bdes = bdes)
-#' }
+#' If Nuisance regressors are provided, they are first projected out from both
+#' Y and X using standard linear regression residualization.
 #'
 #' @references
-#' Mumford, J.A., et al. (2012). Deconvolving BOLD activation in event-related
-#' designs for multivoxel pattern classification analyses. NeuroImage, 59(3), 2636-2643.
+#' Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
+#' Deconvolving BOLD activation in event-related designs for multivoxel pattern
+#' classification analyses. NeuroImage, 59(3), 2636-2643.
+#'
+#' @examples
+#' # Generate example data
+#' n_timepoints <- 100
+#' n_trials <- 10
+#' n_voxels <- 50
+#' 
+#' # Create trial design matrix
+#' X <- matrix(0, n_timepoints, n_trials)
+#' for(i in 1:n_trials) {
+#'   start <- (i-1) * 8 + 1
+#'   if(start + 5 <= n_timepoints) {
+#'     X[start:(start+5), i] <- 1
+#'   }
+#' }
+#' 
+#' # Create data with some signal
+#' Y <- matrix(rnorm(n_timepoints * n_voxels), n_timepoints, n_voxels)
+#' true_betas <- matrix(rnorm(n_trials * n_voxels, 0, 0.5), n_trials, n_voxels)
+#' for(i in 1:n_trials) {
+#'   Y <- Y + X[, i] %*% matrix(true_betas[i, ], 1, n_voxels)
+#' }
+#' 
+#' # Run LSS analysis
+#' beta_estimates <- lss(Y, X)
+#' 
+#' # With fixed effects (intercept + linear trend)
+#' Z <- cbind(1, scale(1:n_timepoints))
+#' beta_estimates_with_fixed <- lss(Y, X, Z = Z)
+#' 
+#' # With nuisance regression (motion parameters)
+#' Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)
+#' beta_estimates_clean <- lss(Y, X, Z = Z, Nuisance = Nuisance)
 #'
 #' @export
-lss <- function(Y = NULL, bdes, dset = NULL, use_cpp = TRUE) {
-  return(lss_fast(dset = dset, bdes = bdes, Y = Y, use_cpp = use_cpp))
+lss <- function(Y, X, Z = NULL, Nuisance = NULL, 
+                method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive")) {
+  
+  # Input validation
+  if (!is.matrix(Y) || !is.numeric(Y)) {
+    stop("Y must be a numeric matrix")
+  }
+  if (!is.matrix(X) || !is.numeric(X)) {
+    stop("X must be a numeric matrix")
+  }
+  if (nrow(Y) != nrow(X)) {
+    stop("Y and X must have the same number of rows (timepoints)")
+  }
+  if (!is.null(Z) && (!is.matrix(Z) || !is.numeric(Z) || nrow(Z) != nrow(Y))) {
+    stop("Z must be a numeric matrix with the same number of rows as Y")
+  }
+  if (!is.null(Nuisance) && (!is.matrix(Nuisance) || !is.numeric(Nuisance) || nrow(Nuisance) != nrow(Y))) {
+    stop("Nuisance must be a numeric matrix with the same number of rows as Y")
+  }
+  
+  method <- match.arg(method)
+  
+  # Set up default fixed effects (intercept) if not provided
+  if (is.null(Z)) {
+    Z <- matrix(1, nrow(Y), 1)
+    colnames(Z) <- "Intercept"
+  }
+  
+  # Step 1: Project out nuisance regressors if provided
+  if (!is.null(Nuisance)) {
+    # Create full nuisance design matrix
+    X_nuisance <- cbind(Z, Nuisance)
+    
+    # Project out nuisance from Y and X
+    proj_result <- .project_out_nuisance(Y, X, X_nuisance)
+    Y_clean <- proj_result$Y_residual
+    X_clean <- proj_result$X_residual
+  } else {
+    Y_clean <- Y
+    X_clean <- X
+  }
+  
+  # Step 2: Run LSS analysis with the chosen method
+  result <- switch(method,
+    "r_optimized" = .lss_r_optimized(Y_clean, X_clean, Z),
+    "cpp_optimized" = .lss_cpp_optimized(Y_clean, X_clean, Z),
+    "r_vectorized" = .lss_r_vectorized(Y_clean, X_clean, Z),
+    "cpp" = .lss_cpp(Y_clean, X_clean, Z),
+    "naive" = .lss_naive(Y_clean, X_clean, Z),
+    stop("Unknown method: ", method)
+  )
+  
+  # Add row and column names if available
+  if (!is.null(colnames(X))) {
+    rownames(result) <- colnames(X)
+  } else {
+    rownames(result) <- paste0("Trial_", 1:ncol(X))
+  }
+  
+  if (!is.null(colnames(Y))) {
+    colnames(result) <- colnames(Y)
+  } else {
+    colnames(result) <- paste0("Voxel_", 1:ncol(Y))
+  }
+  
+  return(result)
+}
+
+# Helper function to project out nuisance regressors
+.project_out_nuisance <- function(Y, X, X_nuisance) {
+  # Compute projection matrix P = I - X_nuisance * (X_nuisance' * X_nuisance)^-1 * X_nuisance'
+  XtX_inv <- chol2inv(chol(crossprod(X_nuisance)))
+  P_coef <- XtX_inv %*% t(X_nuisance)
+  
+  # Compute residuals
+  Y_residual <- Y - X_nuisance %*% (P_coef %*% Y)
+  X_residual <- X - X_nuisance %*% (P_coef %*% X)
+  
+  list(Y_residual = Y_residual, X_residual = X_residual)
+}
+
+# Implementation functions (these will call the existing optimized functions)
+.lss_r_optimized <- function(Y, X, Z) {
+  # Create design list for compatibility with existing function
+  bdes <- list(
+    dmat_base = Z,
+    dmat_ran = X,
+    dmat_fixed = NULL,
+    fixed_ind = NULL
+  )
+  return(lss_optimized(Y, bdes))
+}
+
+.lss_cpp_optimized <- function(Y, X, Z) {
+  return(lss_cpp_optimized(Y, list(dmat_base = Z, dmat_ran = X)))
+}
+
+.lss_r_vectorized <- function(Y, X, Z) {
+  # Use existing lss_fast function with use_cpp = FALSE
+  bdes <- list(
+    dmat_base = Z,
+    dmat_ran = X,
+    dmat_fixed = NULL,
+    fixed_ind = NULL
+  )
+  return(lss_fast(dset = NULL, bdes = bdes, Y = Y, use_cpp = FALSE))
+}
+
+.lss_cpp <- function(Y, X, Z) {
+  # Use existing lss_fast function with use_cpp = TRUE  
+  bdes <- list(
+    dmat_base = Z,
+    dmat_ran = X,
+    dmat_fixed = NULL,
+    fixed_ind = NULL
+  )
+  return(lss_fast(dset = NULL, bdes = bdes, Y = Y, use_cpp = TRUE))
+}
+
+.lss_naive <- function(Y, X, Z) {
+  bdes <- list(
+    dmat_base = Z,
+    dmat_ran = X,
+    dmat_fixed = NULL,
+    fixed_ind = NULL
+  )
+  return(lss_naive(Y, bdes))
 }
 
 #' Orthogonal Projection Matrix

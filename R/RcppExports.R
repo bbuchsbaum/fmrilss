@@ -17,3 +17,11 @@ lss_beta_cpp <- function(C_projected, Y_projected) {
     .Call(`_fmrilss_lss_beta_cpp`, C_projected, Y_projected)
 }
 
+compute_residuals_optim <- function(X, Y, C) {
+    .Call(`_fmrilss_compute_residuals_optim`, X, Y, C)
+}
+
+lss_compute_optim <- function(C, Y) {
+    .Call(`_fmrilss_lss_compute_optim`, C, Y)
+}
+

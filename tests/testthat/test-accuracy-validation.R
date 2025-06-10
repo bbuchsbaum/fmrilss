@@ -6,39 +6,43 @@ test_that("LSS implementations are numerically consistent", {
   n_voxels <- 5
   n_trials <- 3
   
-  # Realistic design: intercept + linear trend + quadratic
-  dmat_base <- cbind(
+  # Fixed effects: intercept + linear trend + quadratic
+  Z <- cbind(
     rep(1, n_timepoints),
     scale(1:n_timepoints)[,1],
     scale((1:n_timepoints)^2)[,1]
   )
   
   # Trial regressors with some minimal overlap
-  dmat_ran <- matrix(0, n_timepoints, n_trials)
-  dmat_ran[8:12, 1] <- 1
-  dmat_ran[20:24, 2] <- 1  
-  dmat_ran[35:39, 3] <- 1
+  X <- matrix(0, n_timepoints, n_trials)
+  X[8:12, 1] <- 1
+  X[20:24, 2] <- 1  
+  X[35:39, 3] <- 1
   
   # Generate realistic data
   Y <- matrix(rnorm(n_timepoints * n_voxels, sd = 1), n_timepoints, n_voxels)
   
-  bdes <- list(dmat_base = dmat_base, dmat_ran = dmat_ran, fixed_ind = NULL)
-  
   # Test all implementations work
-  expect_no_error(beta_r <- lss(Y = Y, bdes = bdes, use_cpp = FALSE))
-  expect_no_error(beta_cpp <- lss(Y = Y, bdes = bdes, use_cpp = TRUE))
-  expect_no_error(beta_naive <- lss_naive(Y = Y, bdes = bdes))
+  expect_no_error(beta_r_optimized <- lss(Y, X, Z, method = "r_optimized"))
+  expect_no_error(beta_cpp_optimized <- lss(Y, X, Z, method = "cpp_optimized"))
+  expect_no_error(beta_r_vectorized <- lss(Y, X, Z, method = "r_vectorized"))
+  expect_no_error(beta_cpp <- lss(Y, X, Z, method = "cpp"))
+  expect_no_error(beta_naive <- lss(Y, X, Z, method = "naive"))
   
   # Check dimensions
-  expect_equal(dim(beta_r), c(n_trials, n_voxels))
+  expect_equal(dim(beta_r_optimized), c(n_trials, n_voxels))
+  expect_equal(dim(beta_cpp_optimized), c(n_trials, n_voxels))
+  expect_equal(dim(beta_r_vectorized), c(n_trials, n_voxels))
   expect_equal(dim(beta_cpp), c(n_trials, n_voxels))
   expect_equal(dim(beta_naive), c(n_trials, n_voxels))
   
   # R and C++ should be numerically equivalent
-  expect_equal(beta_r, beta_cpp, tolerance = 1e-12)
+  expect_equal(beta_r_vectorized, beta_cpp, tolerance = 1e-12)
   
   # All should produce finite results
-  expect_true(all(is.finite(beta_r)), info = "R implementation should produce finite results")
+  expect_true(all(is.finite(beta_r_optimized)), info = "R optimized implementation should produce finite results")
+  expect_true(all(is.finite(beta_cpp_optimized)), info = "C++ optimized implementation should produce finite results") 
+  expect_true(all(is.finite(beta_r_vectorized)), info = "R vectorized implementation should produce finite results")
   expect_true(all(is.finite(beta_cpp)), info = "C++ implementation should produce finite results") 
   expect_true(all(is.finite(beta_naive)), info = "Naive implementation should produce finite results")
 })
@@ -50,21 +54,21 @@ test_that("LSS vs standard GLM for single trial", {
   n_timepoints <- 100
   n_voxels <- 10
   
-  # Design matrices
-  dmat_base <- cbind(rep(1, n_timepoints), scale(1:n_timepoints)[,1])
-  dmat_ran <- matrix(0, n_timepoints, 1)
-  dmat_ran[40:50, 1] <- 1
+  # Fixed effects
+  Z <- cbind(rep(1, n_timepoints), scale(1:n_timepoints)[,1])
+  
+  # Single trial design
+  X <- matrix(0, n_timepoints, 1)
+  X[40:50, 1] <- 1
   
   # Generate data
   Y <- matrix(rnorm(n_timepoints * n_voxels), n_timepoints, n_voxels)
   
-  bdes <- list(dmat_base = dmat_base, dmat_ran = dmat_ran, fixed_ind = NULL)
-  
   # LSS estimates
-  beta_lss <- lss(Y = Y, bdes = bdes, use_cpp = FALSE)
+  beta_lss <- lss(Y, X, Z, method = "r_vectorized")
   
   # Standard GLM estimates for comparison
-  X_full <- cbind(dmat_base, dmat_ran)
+  X_full <- cbind(Z, X)
   beta_glm <- matrix(NA, 1, n_voxels)
   
   for (v in 1:n_voxels) {
@@ -72,8 +76,8 @@ test_that("LSS vs standard GLM for single trial", {
     beta_glm[1, v] <- coef(fit)[ncol(X_full)]  # Last coefficient is the trial effect
   }
   
-  # LSS should match GLM for single trial case
-  expect_equal(beta_lss, beta_glm, tolerance = 1e-10,
+  # LSS should match GLM for single trial case (ignoring dimnames)
+  expect_equal(unname(as.matrix(beta_lss)), unname(as.matrix(beta_glm)), tolerance = 1e-10,
                info = "LSS should match standard GLM for single trial")
 })
 
@@ -86,40 +90,42 @@ test_that("LSS handles non-overlapping trials correctly", {
   n_voxels <- 8
   n_trials <- 3
   
-  dmat_base <- cbind(1, scale(1:n_timepoints)[,1])  # Intercept + trend
+  Z <- cbind(1, scale(1:n_timepoints)[,1])  # Intercept + trend
   
   # Create non-overlapping but not block trial design
-  dmat_ran <- matrix(0, n_timepoints, n_trials)
-  dmat_ran[10:15, 1] <- 1     # Trial 1: short duration 
-  dmat_ran[40:45, 2] <- 1     # Trial 2: separate period
-  dmat_ran[70:75, 3] <- 1     # Trial 3: separate period
+  X <- matrix(0, n_timepoints, n_trials)
+  X[10:15, 1] <- 1     # Trial 1: short duration 
+  X[40:45, 2] <- 1     # Trial 2: separate period
+  X[70:75, 3] <- 1     # Trial 3: separate period
   
   # Generate data with known effects + more realistic noise
   true_effects <- c(1.5, -2.0, 0.8)
   Y <- matrix(0, n_timepoints, n_voxels)
   for (v in 1:n_voxels) {
     Y[, v] <- 5 + 0.2 * scale(1:n_timepoints)[,1] +  # intercept + trend
-              dmat_ran %*% true_effects +
+              X %*% true_effects +
               rnorm(n_timepoints, sd = 0.5)  # Higher noise for realism
   }
   
-  bdes <- list(dmat_base = dmat_base, dmat_ran = dmat_ran, fixed_ind = NULL)
-  
   # All implementations should work without errors
-  expect_no_error(beta_r <- lss(Y = Y, bdes = bdes, use_cpp = FALSE))
-  expect_no_error(beta_cpp <- lss(Y = Y, bdes = bdes, use_cpp = TRUE))
-  expect_no_error(beta_naive <- lss_naive(Y = Y, bdes = bdes))
+  expect_no_error(beta_r_optimized <- lss(Y, X, Z, method = "r_optimized"))
+  expect_no_error(beta_cpp_optimized <- lss(Y, X, Z, method = "cpp_optimized"))
+  expect_no_error(beta_r_vectorized <- lss(Y, X, Z, method = "r_vectorized"))
+  expect_no_error(beta_cpp <- lss(Y, X, Z, method = "cpp"))
+  expect_no_error(beta_naive <- lss(Y, X, Z, method = "naive"))
   
   # Check basic properties
-  expect_equal(dim(beta_r), c(n_trials, n_voxels))
+  expect_equal(dim(beta_r_optimized), c(n_trials, n_voxels))
+  expect_equal(dim(beta_cpp_optimized), c(n_trials, n_voxels))
+  expect_equal(dim(beta_r_vectorized), c(n_trials, n_voxels))
   expect_equal(dim(beta_cpp), c(n_trials, n_voxels))
   expect_equal(dim(beta_naive), c(n_trials, n_voxels))
   
   # Check R and C++ equivalence (should be very close)
-  expect_equal(beta_r, beta_cpp, tolerance = 1e-10)
+  expect_equal(beta_r_vectorized, beta_cpp, tolerance = 1e-10)
   
   # For this simple design, LSS and naive should be similar (but not identical)
-  expect_equal(beta_r, beta_naive, tolerance = 1.0,
+  expect_equal(beta_r_vectorized, beta_naive, tolerance = 1.0,
                info = "LSS and naive should be reasonably similar for non-overlapping trials")
 })
 
@@ -166,32 +172,39 @@ test_that("Memory usage test for large design", {
   n_voxels <- 100
   n_trials <- 50
   
-  dmat_base <- cbind(rep(1, n_timepoints), scale(1:n_timepoints)[,1])
-  dmat_ran <- matrix(0, n_timepoints, n_trials)
+  Z <- cbind(rep(1, n_timepoints), scale(1:n_timepoints)[,1])
+  X <- matrix(0, n_timepoints, n_trials)
   
   # Create random trial design
   for (i in 1:n_trials) {
     onset <- sample(1:(n_timepoints-10), 1)
-    dmat_ran[onset:(onset+5), i] <- 1
+    X[onset:(onset+5), i] <- 1
   }
   
   Y <- matrix(rnorm(n_timepoints * n_voxels), n_timepoints, n_voxels)
-  bdes <- list(dmat_base = dmat_base, dmat_ran = dmat_ran, fixed_ind = NULL)
   
   # These should all complete without memory issues
   expect_no_error({
-    beta_r <- lss(Y = Y, bdes = bdes, use_cpp = FALSE)
+    beta_r_optimized <- lss(Y, X, Z, method = "r_optimized")
   })
   
   expect_no_error({
-    beta_cpp <- lss(Y = Y, bdes = bdes, use_cpp = TRUE)
+    beta_cpp_optimized <- lss(Y, X, Z, method = "cpp_optimized")
   })
   
   expect_no_error({
-    beta_naive <- lss_naive(Y = Y, bdes = bdes)
+    beta_r_vectorized <- lss(Y, X, Z, method = "r_vectorized")
+  })
+  
+  expect_no_error({
+    beta_cpp <- lss(Y, X, Z, method = "cpp")
+  })
+  
+  expect_no_error({
+    beta_naive <- lss(Y, X, Z, method = "naive")
   })
   
   # Results should still be equivalent
-  expect_equal(beta_r, beta_cpp, tolerance = 1e-8)
-  expect_equal(beta_r, beta_naive, tolerance = 1e-6)
+  expect_equal(beta_r_vectorized, beta_cpp, tolerance = 1e-8)
+  expect_equal(beta_r_vectorized, beta_naive, tolerance = 1e-6)
 }) 
