@@ -91,6 +91,7 @@ lss_optimized <- function(Y = NULL, bdes, dset = NULL, use_cpp = TRUE) {
 
 #' LSS Engine (Optimized)
 #'
+#' @importFrom stats lm.fit
 #' @keywords internal
 #' @noRd
 .lss_engine_optimized <- function(dset, bdes, Y = NULL, use_cpp = TRUE) {

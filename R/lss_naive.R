@@ -34,7 +34,7 @@
 #' implementation is conceptually clear and serves as a reference for validation.
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' # Using same setup as lss() examples
 #' beta_estimates_naive <- lss_naive(Y = Y, bdes = bdes)
 #' 

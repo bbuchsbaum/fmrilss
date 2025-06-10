@@ -1,0 +1,19 @@
+* installing *source* package ‘fmrilss’ ...
+** using staged installation
+** libs
+using C++ compiler: ‘Homebrew clang version 20.1.6’
+using C++11
+using SDK: ‘MacOSX14.2.sdk’
+make: Nothing to be done for `all'.
+make: `symbols.rds' is up to date.
+installing to /Users/bbuchsbaum/code/fmrilss/..Rcheck/00LOCK-fmrilss/00new/fmrilss/libs
+** R
+** byte-compile and prepare package for lazy loading
+** help
+*** installing help indices
+** building package indices
+** testing if installed package can be loaded from temporary location
+** checking absolute paths in shared objects and dynamic libraries
+** testing if installed package can be loaded from final location
+** testing if installed package keeps a record of temporary installation path
+* DONE (fmrilss)
