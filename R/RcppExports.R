@@ -38,3 +38,61 @@ mixed_solve_internal <- function(y_in, Z_in = NULL, K_in = NULL, X_in = NULL, me
     .Call(`_fmrilss_mixed_solve_internal`, y_in, Z_in, K_in, X_in, method, bounds, SE, return_Hinv)
 }
 
+#' Mixed Model Workspace for Optimized Computation
+#' 
+#' Stores precomputed matrices and decompositions that can be reused
+#' across multiple voxels to avoid repeated expensive computations.
+NULL
+
+#' Fast analytical REML estimation for single variance component
+#' 
+#' For a single variance component model, the REML estimate of λ = σe²/σu²
+#' has a closed-form solution that can be computed efficiently.
+#' 
+#' @param omega Transformed response vector Q'y
+#' @param theta Transformed eigenvalues 
+#' @param tol Convergence tolerance for Newton iterations
+#' @param max_iter Maximum Newton iterations
+#' @return Estimated variance ratio λ
+NULL
+
+#' Convert R list back to MixedWorkspace
+NULL
+
+#' Precompute workspace for mixed model optimization
+#' 
+#' Performs all the expensive computations that don't depend on the response
+#' vector y, so they can be reused across multiple voxels.
+#' 
+#' @param X Fixed effects design matrix (n × p)
+#' @param Z Random effects design matrix (n × q) 
+#' @param K Kinship/covariance matrix for random effects (q × q)
+#' @return MixedWorkspace object containing precomputed matrices
+mixed_precompute_workspace <- function(X, Z, K) {
+    .Call(`_fmrilss_mixed_precompute_workspace`, X, Z, K)
+}
+
+#' Fast single-voxel mixed model estimation using precomputed workspace
+#' 
+#' @param y Response vector for single voxel
+#' @param ws_list Precomputed workspace (as R list)
+#' @param compute_se Whether to compute standard errors
+#' @return List with beta, u, Vu, Ve, and optionally standard errors
+mixed_single_voxel_cpp <- function(y, ws_list, compute_se = FALSE) {
+    .Call(`_fmrilss_mixed_single_voxel_cpp`, y, ws_list, compute_se)
+}
+
+#' Optimized multi-voxel mixed model estimation
+#' 
+#' Uses precomputed workspace and parallel processing to efficiently
+#' estimate mixed models across many voxels.
+#' 
+#' @param Y Response matrix (n × V) where V is number of voxels
+#' @param ws_list Precomputed workspace (as R list)
+#' @param compute_se Whether to compute standard errors
+#' @param n_threads Number of OpenMP threads (0 = auto)
+#' @return List with matrices of estimates across voxels
+mixed_multi_voxel_cpp <- function(Y, ws_list, compute_se = FALSE, n_threads = 0L) {
+    .Call(`_fmrilss_mixed_multi_voxel_cpp`, Y, ws_list, compute_se, n_threads)
+}
+

@@ -93,6 +93,46 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// mixed_precompute_workspace
+List mixed_precompute_workspace(const arma::mat& X, const arma::mat& Z, const arma::mat& K);
+RcppExport SEXP _fmrilss_mixed_precompute_workspace(SEXP XSEXP, SEXP ZSEXP, SEXP KSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Z(ZSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type K(KSEXP);
+    rcpp_result_gen = Rcpp::wrap(mixed_precompute_workspace(X, Z, K));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mixed_single_voxel_cpp
+List mixed_single_voxel_cpp(const arma::vec& y, const List& ws_list, bool compute_se);
+RcppExport SEXP _fmrilss_mixed_single_voxel_cpp(SEXP ySEXP, SEXP ws_listSEXP, SEXP compute_seSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
+    Rcpp::traits::input_parameter< const List& >::type ws_list(ws_listSEXP);
+    Rcpp::traits::input_parameter< bool >::type compute_se(compute_seSEXP);
+    rcpp_result_gen = Rcpp::wrap(mixed_single_voxel_cpp(y, ws_list, compute_se));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mixed_multi_voxel_cpp
+List mixed_multi_voxel_cpp(const arma::mat& Y, const List& ws_list, bool compute_se, int n_threads);
+RcppExport SEXP _fmrilss_mixed_multi_voxel_cpp(SEXP YSEXP, SEXP ws_listSEXP, SEXP compute_seSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< const List& >::type ws_list(ws_listSEXP);
+    Rcpp::traits::input_parameter< bool >::type compute_se(compute_seSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(mixed_multi_voxel_cpp(Y, ws_list, compute_se, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_compute_residuals_cpp", (DL_FUNC) &_fmrilss_compute_residuals_cpp, 3},
@@ -101,6 +141,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_lss_beta_cpp", (DL_FUNC) &_fmrilss_lss_beta_cpp, 2},
     {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 4},
     {"_fmrilss_mixed_solve_internal", (DL_FUNC) &_fmrilss_mixed_solve_internal, 8},
+    {"_fmrilss_mixed_precompute_workspace", (DL_FUNC) &_fmrilss_mixed_precompute_workspace, 3},
+    {"_fmrilss_mixed_single_voxel_cpp", (DL_FUNC) &_fmrilss_mixed_single_voxel_cpp, 3},
+    {"_fmrilss_mixed_multi_voxel_cpp", (DL_FUNC) &_fmrilss_mixed_multi_voxel_cpp, 4},
     {NULL, NULL, 0}
 };
 
