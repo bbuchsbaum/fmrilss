@@ -61,28 +61,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// compute_residuals_optim
-List compute_residuals_optim(const arma::mat& X, const arma::mat& Y, const arma::mat& C);
-RcppExport SEXP _fmrilss_compute_residuals_optim(SEXP XSEXP, SEXP YSEXP, SEXP CSEXP) {
+// lss_fused_optim_cpp
+arma::mat lss_fused_optim_cpp(const arma::mat& X, const arma::mat& Y, const arma::mat& C, int block_size);
+RcppExport SEXP _fmrilss_lss_fused_optim_cpp(SEXP XSEXP, SEXP YSEXP, SEXP CSEXP, SEXP block_sizeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
     Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
     Rcpp::traits::input_parameter< const arma::mat& >::type C(CSEXP);
-    rcpp_result_gen = Rcpp::wrap(compute_residuals_optim(X, Y, C));
-    return rcpp_result_gen;
-END_RCPP
-}
-// lss_compute_optim
-arma::mat lss_compute_optim(const arma::mat& C, const arma::mat& Y);
-RcppExport SEXP _fmrilss_lss_compute_optim(SEXP CSEXP, SEXP YSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type C(CSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
-    rcpp_result_gen = Rcpp::wrap(lss_compute_optim(C, Y));
+    Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
+    rcpp_result_gen = Rcpp::wrap(lss_fused_optim_cpp(X, Y, C, block_size));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -92,8 +81,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_lss_compute_cpp", (DL_FUNC) &_fmrilss_lss_compute_cpp, 2},
     {"_fmrilss_project_confounds_cpp", (DL_FUNC) &_fmrilss_project_confounds_cpp, 3},
     {"_fmrilss_lss_beta_cpp", (DL_FUNC) &_fmrilss_lss_beta_cpp, 2},
-    {"_fmrilss_compute_residuals_optim", (DL_FUNC) &_fmrilss_compute_residuals_optim, 3},
-    {"_fmrilss_lss_compute_optim", (DL_FUNC) &_fmrilss_lss_compute_optim, 2},
+    {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 4},
     {NULL, NULL, 0}
 };
 

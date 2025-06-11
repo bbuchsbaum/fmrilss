@@ -17,11 +17,20 @@ lss_beta_cpp <- function(C_projected, Y_projected) {
     .Call(`_fmrilss_lss_beta_cpp`, C_projected, Y_projected)
 }
 
-compute_residuals_optim <- function(X, Y, C) {
-    .Call(`_fmrilss_compute_residuals_optim`, X, Y, C)
-}
-
-lss_compute_optim <- function(C, Y) {
-    .Call(`_fmrilss_lss_compute_optim`, C, Y)
+#' Fused Single-Pass LSS Solver (C++)
+#'
+#' This function computes Least Squares-Separate (LSS) beta estimates using
+#' a memory-efficient, single-pass algorithm. It fuses the projection and
+#' estimation steps, processing voxels in parallel blocks to maximize cache
+#' efficiency.
+#'
+#' @param X The nuisance regressor matrix (confounds).
+#' @param Y The data matrix (e.g., fMRI data).
+#' @param C The trial-wise design matrix.
+#' @param block_size The number of voxels to process in each parallel block.
+#' @return A matrix of LSS beta estimates.
+#' @keywords internal
+lss_fused_optim_cpp <- function(X, Y, C, block_size = 96L) {
+    .Call(`_fmrilss_lss_fused_optim_cpp`, X, Y, C, block_size)
 }
 

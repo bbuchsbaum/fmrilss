@@ -9,7 +9,8 @@ lss(
   X,
   Z = NULL,
   Nuisance = NULL,
-  method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive")
+  method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive"),
+  block_size = 96
 )
 }
 \arguments{
@@ -36,6 +37,9 @@ Options are:
   \item "cpp" - Standard C++ implementation
   \item "naive" - Simple loop-based R implementation (for testing)
 }}
+
+\item{block_size}{An integer specifying the voxel block size for parallel
+processing, only applicable when `method = "cpp_optimized"`. Defaults to 96.}
 }
 \value{
 A numeric matrix of size T × V containing the trial-wise beta estimates

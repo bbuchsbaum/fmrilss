@@ -23,6 +23,8 @@
 #'     \item "cpp" - Standard C++ implementation
 #'     \item "naive" - Simple loop-based R implementation (for testing)
 #'   }
+#' @param block_size An integer specifying the voxel block size for parallel
+#'   processing, only applicable when `method = "cpp_optimized"`. Defaults to 96.
 #'
 #' @return A numeric matrix of size T × V containing the trial-wise beta estimates
 #'
@@ -77,7 +79,8 @@
 #'
 #' @export
 lss <- function(Y, X, Z = NULL, Nuisance = NULL, 
-                method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive")) {
+                method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive"),
+                block_size = 96) {
   
   # Input validation
   if (!is.matrix(Y) || !is.numeric(Y)) {
@@ -121,7 +124,7 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   # Step 2: Run LSS analysis with the chosen method
   result <- switch(method,
     "r_optimized" = .lss_r_optimized(Y_clean, X_clean, Z),
-    "cpp_optimized" = .lss_cpp_optimized(Y_clean, X_clean, Z),
+    "cpp_optimized" = .lss_cpp_optimized(Y_clean, X_clean, Z, block_size = block_size),
     "r_vectorized" = .lss_r_vectorized(Y_clean, X_clean, Z),
     "cpp" = .lss_cpp(Y_clean, X_clean, Z),
     "naive" = .lss_naive(Y_clean, X_clean, Z),
@@ -169,8 +172,19 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   return(lss_optimized(Y, bdes))
 }
 
-.lss_cpp_optimized <- function(Y, X, Z) {
-  return(lss_cpp_optimized(Y, list(dmat_base = Z, dmat_ran = X)))
+.lss_cpp_optimized <- function(Y, X, Z, block_size = 96) {
+  # This now calls the new single-pass C++ function
+  
+  # Ensure Z (confounds) is a matrix, even if NULL or a vector
+  if (is.null(Z)) {
+    Z <- matrix(0, nrow = nrow(Y), ncol = 0)
+  } else if (!is.matrix(Z)) {
+    Z <- as.matrix(Z)
+  }
+  
+  # X = trial regressors, Z = confounds, Y = data
+  # The C++ function expects: X=confounds, Y=data, C=trials
+  lss_fused_optim_cpp(X = Z, Y = Y, C = X, block_size = block_size)
 }
 
 .lss_r_vectorized <- function(Y, X, Z) {

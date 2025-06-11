@@ -19,7 +19,10 @@ LinkingTo:
     Rcpp,
     RcppArmadillo
 Suggests: 
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
 SystemRequirements: C++11
 RoxygenNote: 7.3.2.9000
 Config/testthat/edition: 3
