@@ -32,22 +32,32 @@ colnames(Z) <- paste0("Confound", 1:n_confounds)
 
 
 # --- 2. Run Benchmark ---
-# We will compare the original C++ implementation against the new,
-# highly optimized C++ version.
-cat("--- Benchmarking LSS Implementations ---\n")
+# We will compare LSS methods against each other and against LSA
+cat("--- Benchmarking LSS vs LSA Implementations ---\n")
 print(paste("Dimensions: Voxel x Scans x Trials =", n_voxels, "x", n_scans, "x", n_trials))
 
 # Use bench::mark to get detailed and reliable performance metrics
 benchmark_results <- bench::mark(
   `lss_cpp` = fmrilss::lss(Y, X, Z, method = "cpp"),
   `lss_cpp_optimized` = fmrilss::lss(Y, X, Z, method = "cpp_optimized"),
-  iterations = 10,
-  check = TRUE # Ensure results are identical
+  `lsa_r` = fmrilss::lsa(Y, X, Z, method = "r"),
+  iterations = 5,
+  check = FALSE # LSS and LSA produce different results, so don't check for equality
 )
 
 # --- 3. Display Results ---
 cat("\n--- Benchmark Results ---\n")
 print(benchmark_results)
+
+# --- 4. Quick Comparison of Results ---
+cat("\n--- Quick Results Comparison ---\n")
+lss_result <- fmrilss::lss(Y, X, Z, method = "cpp_optimized")
+lsa_result <- fmrilss::lsa(Y, X, Z, method = "r")
+
+cat("LSS result dimensions:", paste(dim(lss_result), collapse = " x "), "\n")
+cat("LSA result dimensions:", paste(dim(lsa_result), collapse = " x "), "\n")
+cat("Results are identical:", identical(lss_result, lsa_result), "\n")
+cat("Mean absolute difference:", mean(abs(lss_result - lsa_result)), "\n")
 
 # Optional: Plot the results for a visual comparison
 # library(ggplot2)

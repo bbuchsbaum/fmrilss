@@ -75,6 +75,24 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// mixed_solve_internal
+List mixed_solve_internal(NumericVector y_in, Nullable<NumericMatrix> Z_in, Nullable<NumericMatrix> K_in, Nullable<NumericMatrix> X_in, std::string method, NumericVector bounds, bool SE, bool return_Hinv);
+RcppExport SEXP _fmrilss_mixed_solve_internal(SEXP y_inSEXP, SEXP Z_inSEXP, SEXP K_inSEXP, SEXP X_inSEXP, SEXP methodSEXP, SEXP boundsSEXP, SEXP SESEXP, SEXP return_HinvSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type y_in(y_inSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericMatrix> >::type Z_in(Z_inSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericMatrix> >::type K_in(K_inSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericMatrix> >::type X_in(X_inSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type bounds(boundsSEXP);
+    Rcpp::traits::input_parameter< bool >::type SE(SESEXP);
+    Rcpp::traits::input_parameter< bool >::type return_Hinv(return_HinvSEXP);
+    rcpp_result_gen = Rcpp::wrap(mixed_solve_internal(y_in, Z_in, K_in, X_in, method, bounds, SE, return_Hinv));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_compute_residuals_cpp", (DL_FUNC) &_fmrilss_compute_residuals_cpp, 3},
@@ -82,6 +100,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_project_confounds_cpp", (DL_FUNC) &_fmrilss_project_confounds_cpp, 3},
     {"_fmrilss_lss_beta_cpp", (DL_FUNC) &_fmrilss_lss_beta_cpp, 2},
     {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 4},
+    {"_fmrilss_mixed_solve_internal", (DL_FUNC) &_fmrilss_mixed_solve_internal, 8},
     {NULL, NULL, 0}
 };
 

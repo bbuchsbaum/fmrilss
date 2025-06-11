@@ -12,19 +12,11 @@ License: GPL-3
 Encoding: UTF-8
 LazyData: true
 Depends: R (>= 3.5.0)
-Imports: 
-    MASS,
-    Rcpp (>= 0.12.0),
-    roptim
-LinkingTo: 
-    Rcpp,
-    RcppArmadillo,
-    roptim
-Suggests: 
-    testthat (>= 3.0.0),
-    knitr,
-    rmarkdown
+Imports: MASS, Rcpp (>= 0.12.0)
+LinkingTo: Rcpp, RcppArmadillo
+Suggests: testthat (>= 3.0.0), knitr, rmarkdown
 VignetteBuilder: knitr
 SystemRequirements: C++11
 RoxygenNote: 7.3.2.9000
 Config/testthat/edition: 3
+Built: R 4.3.2; aarch64-apple-darwin20; 2025-06-11 08:38:47 UTC; unix
