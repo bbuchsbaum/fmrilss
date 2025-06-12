@@ -75,6 +75,35 @@ BEGIN_RCPP
 END_RCPP
 }
 
+// lss_engine_vox_hrf
+SEXP lss_engine_vox_hrf(const arma::mat& Y, const arma::mat& coeffs,
+                        const arma::mat& basis_kernels,
+                        const arma::uvec& onset_idx,
+                        const arma::vec& durations,
+                        const arma::mat& nuisance,
+                        int chunk_size, bool verbose);
+RcppExport SEXP _fmrilss_lss_engine_vox_hrf(SEXP YSEXP, SEXP coeffsSEXP,
+        SEXP basis_kernelsSEXP, SEXP onset_idxSEXP, SEXP durationsSEXP,
+        SEXP nuisanceSEXP, SEXP chunk_sizeSEXP, SEXP verboseSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type coeffs(coeffsSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type basis_kernels(basis_kernelsSEXP);
+    Rcpp::traits::input_parameter< const arma::uvec& >::type onset_idx(onset_idxSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type durations(durationsSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type nuisance(nuisanceSEXP);
+    Rcpp::traits::input_parameter< int >::type chunk_size(chunk_sizeSEXP);
+    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
+    rcpp_result_gen = Rcpp::wrap(lss_engine_vox_hrf(Y, coeffs, basis_kernels,
+                                                   onset_idx, durations,
+                                                   nuisance, chunk_size,
+                                                   verbose));
+    return rcpp_result_gen;
+END_RCPP
+}
+
 // lss_fused_optim_cpp
 arma::mat lss_fused_optim_cpp(const arma::mat& X, const arma::mat& Y, const arma::mat& C, int block_size);
 RcppExport SEXP _fmrilss_lss_fused_optim_cpp(SEXP XSEXP, SEXP YSEXP, SEXP CSEXP, SEXP block_sizeSEXP) {
@@ -154,6 +183,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_project_confounds_cpp", (DL_FUNC) &_fmrilss_project_confounds_cpp, 3},
     {"_fmrilss_lss_beta_cpp", (DL_FUNC) &_fmrilss_lss_beta_cpp, 2},
     {"_fmrilss_estimate_hrf_cpp", (DL_FUNC) &_fmrilss_estimate_hrf_cpp, 2},
+    {"_fmrilss_lss_engine_vox_hrf", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf, 8},
     {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 4},
     {"_fmrilss_mixed_solve_internal", (DL_FUNC) &_fmrilss_mixed_solve_internal, 8},
     {"_fmrilss_mixed_precompute_workspace", (DL_FUNC) &_fmrilss_mixed_precompute_workspace, 3},

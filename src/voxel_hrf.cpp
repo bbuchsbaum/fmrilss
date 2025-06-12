@@ -9,3 +9,16 @@ arma::mat estimate_hrf_cpp(const arma::mat& X, const arma::mat& Y) {
   // not square.
   return arma::solve(X, Y);
 }
+
+// Placeholder engine for lss_with_hrf
+// [[Rcpp::export]]
+SEXP lss_engine_vox_hrf(const arma::mat& Y,
+                        const arma::mat& coeffs,
+                        const arma::mat& basis_kernels,
+                        const arma::uvec& onset_idx,
+                        const arma::vec& durations,
+                        const arma::mat& nuisance,
+                        const int chunk_size,
+                        bool verbose) {
+  Rcpp::stop("lss_engine_vox_hrf not implemented yet");
+}
