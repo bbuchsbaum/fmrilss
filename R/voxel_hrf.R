@@ -58,8 +58,10 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL) {
 
   coef_mat <- estimate_hrf_cpp(X_full, Y)
 
+  coef_basis <- coef_mat[seq_len(ncol(X_basis)), , drop = FALSE]
+
   result <- list(
-    coefficients = coef_mat,
+    coefficients = coef_basis,
     basis = basis,
     conditions = unique(as.character(events$condition))
   )
