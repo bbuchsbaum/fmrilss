@@ -79,8 +79,14 @@ For a given trial, the model includes:</p>
 <li>A regressor for the <strong>trial of interest</strong>.</li>
 <li>A single regressor for <strong>all other trials</strong>
 combined.</li>
-<li>Any other <strong>fixed effects</strong> or nuisance covariates
-(e.g., intercept, motion parameters).</li>
+<li>
+<strong>Experimental regressors</strong> that we want to model and
+estimate, but not trial-wise (e.g., intercept, condition effects, block
+effects).</li>
+<li>
+<strong>Nuisance regressors</strong> that we want to remove from the
+data before analysis (e.g., motion parameters, physiological
+noise).</li>
 </ol>
 <p>This process is repeated for every trial, yielding a unique beta
 estimate for each one.</p>
@@ -98,11 +104,14 @@ function, which has a clean and modern interface:</p>
 <li>
 <code>X</code>: The trial design matrix (timepoints x trials).</li>
 <li>
-<code>Z</code>: A matrix of fixed effects (e.g., intercept, trends).
-Defaults to an intercept if <code>NULL</code>.</li>
+<code>Z</code>: A matrix of experimental regressors we want to model
+and get beta estimates for, but not trial-wise (e.g., intercept,
+condition effects, block effects). Defaults to an intercept if
+<code>NULL</code>.</li>
 <li>
 <code>Nuisance</code>: A matrix of nuisance regressors to be
-projected out before analysis.</li>
+projected out before analysis (e.g., motion parameters, physiological
+noise).</li>
 <li>
 <code>method</code>: The computational backend to use. Options range
 from a simple <code>naive</code> R loop to a highly optimized and
@@ -135,9 +144,11 @@ running the analysis.</p>
 <strong>Trial Matrix (<code>X</code>)</strong>: A matrix where each
 column represents the predicted BOLD response for a single trial.</li>
 <li>
-<strong>Fixed Effects (<code>Z</code>)</strong>: A matrix for
-regressors that are constant across all trial-specific models, like an
-intercept or a linear trend.</li>
+<strong>Experimental Regressors (<code>Z</code>)</strong>: A matrix
+for experimental regressors that we want to model and get beta estimates
+for, but not trial-wise. These might include condition effects, block
+effects, or other experimental factors that vary across the session but
+not trial-by-trial.</li>
 <li>
 <strong>Nuisance Matrix</strong>: Regressors we want to remove from
 the data before modeling, such as motion parameters or physiological
@@ -151,7 +162,8 @@ noise.</li>
 <span>  <span class="va">X</span><span class="op">[</span><span class="va">onsets</span><span class="op">[</span><span class="va">i</span><span class="op">]</span><span class="op">:</span><span class="op">(</span><span class="va">onsets</span><span class="op">[</span><span class="va">i</span><span class="op">]</span> <span class="op">+</span> <span class="fl">5</span><span class="op">)</span>, <span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">1</span></span>
 <span><span class="op">}</span></span>
 <span></span>
-<span><span class="co"># Fixed effects matrix (Z) - intercept and a linear trend</span></span>
+<span><span class="co"># Experimental regressors (Z) - intercept and condition effects</span></span>
+<span><span class="co"># These are regressors we want to model and get estimates for, but not trial-wise</span></span>
 <span><span class="va">Z</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>Intercept <span class="op">=</span> <span class="fl">1</span>, LinearTrend <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="va">n_timepoints</span>, center <span class="op">=</span> <span class="cn">TRUE</span>, scale <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Nuisance regressors - e.g., 6 motion parameters</span></span>
@@ -192,12 +204,13 @@ intercept.</p>
 <span><span class="co">#&gt; [1] 12 25</span></span></code></pre></div>
 </div>
 <div class="section level4">
-<h4 id="including-fixed-effects-and-nuisance-regressors">Including Fixed Effects and Nuisance Regressors<a class="anchor" aria-label="anchor" href="#including-fixed-effects-and-nuisance-regressors"></a>
+<h4 id="including-experimental-regressors-and-nuisance-regressors">Including Experimental Regressors and Nuisance Regressors<a class="anchor" aria-label="anchor" href="#including-experimental-regressors-and-nuisance-regressors"></a>
 </h4>
 <p>For a more realistic analysis, we include our <code>Z</code> and
 <code>Nuisance</code> matrices. The nuisance regressors are projected
 out of both <code>Y</code> and <code>X</code> before the trial-wise GLMs
-are estimated.</p>
+are estimated, while the experimental regressors in <code>Z</code> are
+included in every trial-wise GLM to get their beta estimates.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">beta_full</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span><span class="op">)</span></span>
 <span><span class="co"># The output dimensions remain the same</span></span>

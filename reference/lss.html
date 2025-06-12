@@ -72,9 +72,10 @@ Each column represents the design for one trial</p></dd>
 
 
 <dt id="arg-z">Z<a class="anchor" aria-label="anchor" href="#arg-z"></a></dt>
-<dd><p>A numeric matrix of size n × F representing fixed effects to include
-in all models (e.g., intercept, run effects). If NULL, an intercept-only
-design is used. Defaults to NULL</p></dd>
+<dd><p>A numeric matrix of size n × F representing experimental regressors
+to include in all trial-wise models. These are regressors we want to model
+and get beta estimates for, but not trial-wise (e.g., intercept, condition
+effects, block effects). If NULL, an intercept-only design is used. Defaults to NULL</p></dd>
 
 
 <dt id="arg-nuisance">Nuisance<a class="anchor" aria-label="anchor" href="#arg-nuisance"></a></dt>
@@ -100,13 +101,15 @@ processing, only applicable when `method = "cpp_optimized"`. Defaults to 96.</p>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A numeric matrix of size T × V containing the trial-wise beta estimates</p>
+    <p>A numeric matrix of size T × V containing the trial-wise beta estimates.
+  Note: Currently only returns estimates for the trial regressors (X). Beta
+  estimates for the experimental regressors (Z) are computed but not returned.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>The LSS approach fits a separate GLM for each trial, where each model includes:</p><ul><li><p>The trial of interest (from column i of X)</p></li>
 <li><p>All other trials combined (sum of all other columns of X)</p></li>
-<li><p>Fixed effects (Z matrix)</p></li>
+<li><p>Experimental regressors (Z matrix) - these are modeled to get beta estimates but not trial-wise</p></li>
 </ul><p>If Nuisance regressors are provided, they are first projected out from both
 Y and X using standard linear regression residualization.</p>
     </div>
@@ -143,9 +146,9 @@ classification analyses. NeuroImage, 59(3), 2636-2643.</p>
 <span class="r-in"><span><span class="co"># Run LSS analysis</span></span></span>
 <span class="r-in"><span><span class="va">beta_estimates</span> <span class="op">&lt;-</span> <span class="fu">lss</span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># With fixed effects (intercept + linear trend)</span></span></span>
+<span class="r-in"><span><span class="co"># With experimental regressors (intercept + condition effects)</span></span></span>
 <span class="r-in"><span><span class="va">Z</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="va">n_timepoints</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">beta_estimates_with_fixed</span> <span class="op">&lt;-</span> <span class="fu">lss</span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">beta_estimates_with_regressors</span> <span class="op">&lt;-</span> <span class="fu">lss</span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># With nuisance regression (motion parameters)</span></span></span>
 <span class="r-in"><span><span class="va">Nuisance</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_timepoints</span> <span class="op">*</span> <span class="fl">6</span><span class="op">)</span>, <span class="va">n_timepoints</span>, <span class="fl">6</span><span class="op">)</span></span></span>
