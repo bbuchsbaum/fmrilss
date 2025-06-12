@@ -30,4 +30,5 @@
 #' @aliases fmrilss
 #' @useDynLib fmrilss, .registration=TRUE
 #' @importFrom Rcpp sourceCpp
-NULL 
+#' @importFrom stats complete.cases median sd var
+NULL

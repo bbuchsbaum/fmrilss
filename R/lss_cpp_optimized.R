@@ -12,10 +12,10 @@ lss_cpp_optimized <- function(Y, bdes) {
   }
   
   # Step 1: Project confounds from data
-  pres <- compute_residuals_optim(X_confounds, Y, bdes$dmat_ran)
-  
+  pres <- project_confounds_cpp(X_confounds, Y, bdes$dmat_ran)
+
   # Step 2: Compute beta estimates
-  betas <- lss_compute_optim(pres$Q_dmat_ran, pres$residual_data)
+  betas <- lss_beta_cpp(pres$Q_dmat_ran, pres$residual_data)
   
   return(betas)
 } 
