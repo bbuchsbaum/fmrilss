@@ -1,12 +1,14 @@
 #' VoxelHRF object
 #'
-#' S3 class returned by \code{estimate_voxel_hrf} containing voxel-wise HRF basis coefficients.
+#' Simple list-based S3 class returned by \code{estimate_voxel_hrf} containing
+#' voxel-wise HRF basis coefficients and related metadata.
 #' @name VoxelHRF
 NULL
 
 #' LSSBeta object
 #'
-#' S3 class returned by \code{lss_with_hrf} containing trial-wise beta estimates.
+#' Simple list-based S3 class returned by \code{lss_with_hrf} containing
+#' trial-wise beta estimates.
 #' @name LSSBeta
 NULL
 
@@ -23,6 +25,20 @@ NULL
 #'   \item{coefficients}{Matrix of HRF basis coefficients.}
 #'   \item{basis}{The HRF basis object used.}
 #'   \item{conditions}{Character vector of modeled conditions.}
+#'
+#' @examples
+#' if (requireNamespace("fmrihrf", quietly = TRUE)) {
+#'   set.seed(1)
+#'   Y <- matrix(rnorm(100), 50, 2)
+#'   events <- data.frame(onset = c(5, 25), duration = 1,
+#'                        condition = "A")
+#'   basis <- fmrihrf::HRF_GAMMA()
+#'   X <- fmrihrf::regressor_set(events, basis, n = nrow(Y))$X
+#'   coef <- matrix(rnorm(ncol(X) * ncol(Y)), ncol(X), ncol(Y))
+#'   Y <- X %*% coef + Y * 0.1
+#'   est <- estimate_voxel_hrf(Y, events, basis)
+#'   str(est)
+#' }
 #' @export
 estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL) {
   # Input validation
@@ -84,6 +100,21 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL) {
 #'   temporary directory is used.
 #'
 #' @return An object of class \link{LSSBeta}.
+#'
+#' @examples
+#' if (requireNamespace("fmrihrf", quietly = TRUE)) {
+#'   set.seed(1)
+#'   Y <- matrix(rnorm(100), 50, 2)
+#'   events <- data.frame(onset = c(5, 25), duration = 1,
+#'                        condition = "A")
+#'   basis <- fmrihrf::HRF_GAMMA()
+#'   X <- fmrihrf::regressor_set(events, basis, n = nrow(Y))$X
+#'   coef <- matrix(rnorm(ncol(X) * ncol(Y)), ncol(X), ncol(Y))
+#'   Y <- X %*% coef + Y * 0.1
+#'   est <- estimate_voxel_hrf(Y, events, basis)
+#'   betas <- lss_with_hrf(Y, events, est, verbose = FALSE, chunk_size = 1)
+#'   betas$betas[1:2, ]
+#' }
 #' @export
 lss_with_hrf <- function(Y, events, hrf_estimates, nuisance_regs = NULL,
                          engine = "C++", chunk_size = 5000, verbose = TRUE,
