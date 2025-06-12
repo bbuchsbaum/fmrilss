@@ -85,5 +85,45 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL) {
 #' @export
 lss_with_hrf <- function(Y, events, hrf_estimates, nuisance_regs = NULL,
                          engine = "C++", chunk_size = 5000, verbose = TRUE) {
-  stop("lss_with_hrf not yet implemented")
+  engine <- match.arg(engine, c("C++", "R"))
+
+  if (!is.matrix(Y) || !is.numeric(Y)) {
+    stop("Y must be a numeric matrix")
+  }
+
+  required_cols <- c("onset", "duration", "condition")
+  if (!is.data.frame(events) || !all(required_cols %in% names(events))) {
+    stop("events must be a data.frame with columns onset, duration, condition")
+  }
+
+  if (!inherits(hrf_estimates, "VoxelHRF") ||
+      !is.matrix(hrf_estimates$coefficients)) {
+    stop("hrf_estimates must be a VoxelHRF object with coefficient matrix")
+  }
+
+  if (!is.null(nuisance_regs)) {
+    if (!is.matrix(nuisance_regs) || !is.numeric(nuisance_regs) ||
+        nrow(nuisance_regs) != nrow(Y)) {
+      stop("nuisance_regs must be a numeric matrix with same number of rows as Y")
+    }
+  }
+
+  if (!is.numeric(chunk_size) || length(chunk_size) != 1 || chunk_size <= 0) {
+    stop("chunk_size must be a positive integer")
+  }
+
+  onsets <- as.numeric(events$onset)
+  durations <- as.numeric(events$duration)
+  conditions <- as.character(events$condition)
+
+  fine_dt <- 0.1
+  max_time <- max(onsets + durations) + fmrihrf::hrf_length(hrf_estimates$basis)
+  fine_grid <- seq(0, max_time, by = fine_dt)
+  hrf_basis_kernels <- fmrihrf::evaluate_hrf_basis(hrf_estimates$basis, fine_grid)
+
+  onset_idx <- as.integer(round(onsets / fine_dt)) + 1L
+
+  lss_engine_vox_hrf(Y, hrf_estimates$coefficients, hrf_basis_kernels,
+                     onset_idx, durations, nuisance_regs,
+                     as.integer(chunk_size), verbose)
 }

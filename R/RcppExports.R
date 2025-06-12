@@ -21,6 +21,12 @@ estimate_hrf_cpp <- function(X, Y) {
     .Call(`_fmrilss_estimate_hrf_cpp`, X, Y)
 }
 
+lss_engine_vox_hrf <- function(Y, coeffs, basis_kernels, onset_idx, durations,
+                               nuisance, chunk_size = 5000L, verbose = TRUE) {
+    .Call(`_fmrilss_lss_engine_vox_hrf`, Y, coeffs, basis_kernels, onset_idx,
+          durations, nuisance, chunk_size, verbose)
+}
+
 #' Fused Single-Pass LSS Solver (C++)
 #'
 #' This function computes Least Squares-Separate (LSS) beta estimates using
