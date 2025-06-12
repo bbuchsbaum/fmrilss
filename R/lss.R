@@ -107,6 +107,9 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
     colnames(Z) <- "Intercept"
   }
   
+  # Check for zero or near-zero regressors
+  .check_zero_regressors(X)
+  
   # Step 1: Project out nuisance regressors if provided
   if (!is.null(Nuisance)) {
     # Create full nuisance design matrix
@@ -160,6 +163,27 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   list(Y_residual = Y_residual, X_residual = X_residual)
 }
 
+# Helper function to check for zero or near-zero regressors
+.check_zero_regressors <- function(X, eps = 1e-12) {
+  trial_names <- if (!is.null(colnames(X))) colnames(X) else paste0("Trial_", 1:ncol(X))
+  
+  # Check each trial regressor
+  for (i in 1:ncol(X)) {
+    regressor_norm <- sqrt(sum(X[, i]^2))
+    regressor_var <- var(X[, i])
+    
+    # Check for exactly zero regressor first
+    if (regressor_norm < eps) {
+      warning(sprintf("Trial regressor '%s' appears to be zero (norm = %g). This may cause numerical issues or NaN results.",
+                     trial_names[i], regressor_norm))
+    } else if (regressor_var < eps && regressor_norm >= eps) {
+      # Non-zero but constant (or nearly constant) regressor
+      warning(sprintf("Trial regressor '%s' has very low variance (%g) and may cause numerical instability.",
+                     trial_names[i], regressor_var))
+    }
+  }
+}
+
 # Implementation functions (these will call the existing optimized functions)
 .lss_r_optimized <- function(Y, X, Z) {
   # Create design list for compatibility with existing function
@@ -169,7 +193,7 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
     dmat_fixed = NULL,
     fixed_ind = NULL
   )
-  return(lss_optimized(Y, bdes))
+  return(lss_optimized(Y, bdes, use_cpp = FALSE))
 }
 
 .lss_cpp_optimized <- function(Y, X, Z, block_size = 96) {
