@@ -76,15 +76,18 @@ END_RCPP
 }
 
 // lss_engine_vox_hrf
-arma::mat lss_engine_vox_hrf(const arma::mat& Y, const arma::mat& coeffs,
+void lss_engine_vox_hrf(const arma::mat& Y, const arma::mat& coeffs,
                         const arma::mat& basis_kernels,
                         const arma::uvec& onset_idx,
                         const arma::vec& durations,
                         const arma::mat& nuisance,
+                        SEXP betas_ptr,
+                        Rcpp::Function progress,
                         int chunk_size, bool verbose);
 RcppExport SEXP _fmrilss_lss_engine_vox_hrf(SEXP YSEXP, SEXP coeffsSEXP,
         SEXP basis_kernelsSEXP, SEXP onset_idxSEXP, SEXP durationsSEXP,
-        SEXP nuisanceSEXP, SEXP chunk_sizeSEXP, SEXP verboseSEXP) {
+        SEXP nuisanceSEXP, SEXP betas_ptrSEXP, SEXP progressSEXP,
+        SEXP chunk_sizeSEXP, SEXP verboseSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -94,13 +97,15 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::uvec& >::type onset_idx(onset_idxSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type durations(durationsSEXP);
     Rcpp::traits::input_parameter< const arma::mat& >::type nuisance(nuisanceSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type betas_ptr(betas_ptrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type progress(progressSEXP);
     Rcpp::traits::input_parameter< int >::type chunk_size(chunk_sizeSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    rcpp_result_gen = Rcpp::wrap(lss_engine_vox_hrf(Y, coeffs, basis_kernels,
-                                                   onset_idx, durations,
-                                                   nuisance, chunk_size,
-                                                   verbose));
-    return rcpp_result_gen;
+    lss_engine_vox_hrf(Y, coeffs, basis_kernels,
+                       onset_idx, durations, nuisance,
+                       betas_ptr, progress, chunk_size,
+                       verbose);
+    return R_NilValue;
 END_RCPP
 }
 

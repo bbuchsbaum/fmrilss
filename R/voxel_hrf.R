@@ -80,11 +80,14 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL) {
 #' @param engine Computational engine. Currently only "C++" placeholder.
 #' @param chunk_size Number of voxels to process per batch.
 #' @param verbose Logical; display progress bar.
+#' @param backing_dir Directory for bigmemory backing files. If NULL, a
+#'   temporary directory is used.
 #'
 #' @return An object of class \link{LSSBeta}.
 #' @export
 lss_with_hrf <- function(Y, events, hrf_estimates, nuisance_regs = NULL,
-                         engine = "C++", chunk_size = 5000, verbose = TRUE) {
+                         engine = "C++", chunk_size = 5000, verbose = TRUE,
+                         backing_dir = NULL) {
   engine <- match.arg(engine, c("C++", "R"))
 
   if (!is.matrix(Y) || !is.numeric(Y)) {
@@ -123,7 +126,30 @@ lss_with_hrf <- function(Y, events, hrf_estimates, nuisance_regs = NULL,
 
   onset_idx <- as.integer(round(onsets / fine_dt)) + 1L
 
+  if (is.null(backing_dir)) {
+    backing_dir <- tempdir()
+  }
+  bfile <- tempfile("betas", tmpdir = backing_dir, fileext = ".bin")
+  descfile <- tempfile("betas", tmpdir = backing_dir, fileext = ".desc")
+  betas <- bigmemory::filebacked.big.matrix(
+    nrow = length(onsets), ncol = ncol(Y), type = "double",
+    backingfile = basename(bfile), descriptorfile = basename(descfile),
+    backingpath = dirname(bfile)
+  )
+
+  pb <- NULL
+  update_progress <- function(step) {}
+  if (verbose) {
+    pb <- progress::progress_bar$new(total = ncol(Y))
+    update_progress <- function(step) pb$tick(step)
+  }
+
   lss_engine_vox_hrf(Y, hrf_estimates$coefficients, hrf_basis_kernels,
                      onset_idx, durations, nuisance_regs,
+                     betas@address, update_progress,
                      as.integer(chunk_size), verbose)
+
+  result <- list(betas = betas)
+  class(result) <- "LSSBeta"
+  result
 }

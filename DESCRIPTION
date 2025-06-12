@@ -20,11 +20,13 @@ LinkingTo:
     Rcpp,
     RcppArmadillo,
     roptim
-Suggests: 
+Suggests:
     testthat (>= 3.0.0),
     knitr,
     rmarkdown,
-    pkgdown
+    pkgdown,
+    bigmemory,
+    progress
 VignetteBuilder: knitr
 SystemRequirements: C++11
 RoxygenNote: 7.3.2.9000
