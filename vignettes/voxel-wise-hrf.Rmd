@@ -1,0 +1,97 @@
+---
+title: "Voxel-wise HRF Modeling"
+author: "Your Name"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Voxel-wise HRF Modeling}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Overview
+
+This vignette demonstrates voxel-wise HRF estimation and LSS analysis using
+`fmrilss`. The workflow has two stages:
+
+1. estimate HRF basis coefficients for each voxel.
+2. compute trial-wise betas using those HRFs.
+
+We will simulate a small dataset to show the process.
+
+## 1. Simulate Data
+
+```{r simulate}
+library(fmrilss)
+library(fmrihrf)
+
+set.seed(123)
+n_time <- 120
+events <- data.frame(
+  onset = c(10, 40, 70, 100),
+  duration = 1,
+  condition = "A"
+)
+
+basis <- fmrihrf::HRF_FIR(length = 8)
+X_basis <- fmrihrf::regressor_set(events, basis = basis, n = n_time)$X
+n_vox <- 3
+true_coef <- matrix(rnorm(ncol(X_basis) * n_vox, 0, 1), ncol(X_basis), n_vox)
+Y <- X_basis %*% true_coef + matrix(rnorm(n_time * n_vox, 0, 0.1), n_time, n_vox)
+```
+
+## 2. Estimate Voxel-wise HRFs
+
+```{r estimate-hrf}
+hrf_est <- estimate_voxel_hrf(Y, events, basis)
+hrf_est
+```
+
+## 3. Inspect HRF Shapes
+
+```{r hrf-plots}
+time_pts <- seq(0, fmrihrf::hrf_length(basis), by = 1)
+hrf_kernels <- apply(hrf_est$coefficients, 2, function(co) {
+  fmrihrf::hrf_from_coefficients(basis, co)
+})
+matplot(time_pts, hrf_kernels, type = "l", lty = 1,
+        xlab = "Time", ylab = "Amplitude",
+        main = "Estimated HRFs")
+legend("topright", legend = paste0("Voxel ", 1:n_vox),
+       col = 1:n_vox, lty = 1)
+
+# Time-to-peak for each voxel
+ttp <- apply(hrf_kernels, 2, function(h) {
+  (which.max(h) - 1)
+})
+barplot(ttp, names.arg = paste0("V", 1:n_vox),
+        ylab = "Time to peak (TR)", main = "HRF Time-to-Peak")
+```
+
+## 4. Run LSS Using Voxel-wise HRFs
+
+```{r lss-run}
+lss_res <- lss_with_hrf(Y, events, hrf_est, verbose = FALSE, chunk_size = n_vox)
+betas <- as.matrix(lss_res$betas[])
+head(betas)
+```
+
+## 5. Analyze Trial Betas
+
+```{r beta-analysis}
+matplot(betas, type = "l", lty = 1,
+        xlab = "Trial", ylab = "Beta",
+        main = "Trial-wise Betas by Voxel")
+legend("topright", legend = paste0("Voxel ", 1:n_vox),
+       col = 1:n_vox, lty = 1)
+```
+
+This simple example shows how voxel-wise HRF modeling can be
+integrated into an LSS analysis pipeline.
