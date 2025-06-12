@@ -1,0 +1,238 @@
+{
+  "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
+  "@type": "SoftwareSourceCode",
+  "identifier": "fmrilss",
+  "name": "fmrilss",
+  "version": "0.1.0",
+  "description": "Implements efficient least squares separate (LSS) analysis for functional magnetic resonance imaging (fMRI) data. LSS is used to estimate trial-by-trial activation patterns in event-related fMRI designs. The package provides both R and C++ implementations for computational efficiency.",
+  "title": "Least Squares Separate (LSS) Analysis for fMRI Data",
+  "keywords": [
+    "fMRI",
+    "neuroimaging",
+    "least-squares-separate",
+    "LSS",
+    "multivariate-pattern-analysis",
+    "MVPA",
+    "trial-estimation",
+    "brain-imaging",
+    "statistical-modeling",
+    "R-package",
+    "C++",
+    "parallel-computing"
+  ],
+  "license": "https://spdx.org/licenses/GPL-3.0",
+  "url": "https://bbuchsbaum.github.io/fmrilss/",
+  "codeRepository": "https://github.com/bbuchsbaum/fmrilss",
+  "issueTracker": "https://github.com/bbuchsbaum/fmrilss/issues",
+  "programmingLanguage": [
+    {
+      "@type": "ComputerLanguage",
+      "name": "R",
+      "version": ">= 3.5.0",
+      "url": "https://r-project.org"
+    },
+    {
+      "@type": "ComputerLanguage", 
+      "name": "C++",
+      "version": "C++11"
+    }
+  ],
+  "operatingSystem": [
+    "Linux",
+    "Windows", 
+    "macOS"
+  ],
+  "softwareRequirements": [
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "R",
+      "name": "R",
+      "version": ">= 3.5.0"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "Rcpp",
+      "name": "Rcpp",
+      "version": ">= 0.12.0",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "CRAN"
+      }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "MASS",
+      "name": "MASS",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "CRAN"
+      }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "roptim",
+      "name": "roptim",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "CRAN"
+      }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "RcppArmadillo",
+      "name": "RcppArmadillo",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "CRAN"
+      }
+    }
+  ],
+  "runtimePlatform": "R",
+  "provider": {
+    "@id": "https://cran.r-project.org",
+    "@type": "Organization",
+    "name": "Comprehensive R Archive Network (CRAN)",
+    "url": "https://cran.r-project.org"
+  },
+  "author": [
+    {
+      "@type": "Person",
+      "givenName": "Brad",
+      "familyName": "Buchsbaum",
+      "email": "brad.buchsbaum@gmail.com"
+    }
+  ],
+  "maintainer": [
+    {
+      "@type": "Person", 
+      "givenName": "Brad",
+      "familyName": "Buchsbaum",
+      "email": "brad.buchsbaum@gmail.com"
+    }
+  ],
+  "softwareSuggestions": [
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "testthat",
+      "name": "testthat",
+      "version": ">= 3.0.0",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "CRAN"
+      }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "knitr",
+      "name": "knitr",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization", 
+        "name": "CRAN"
+      }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "rmarkdown",
+      "name": "rmarkdown",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "CRAN"
+      }
+    }
+  ],
+  "softwareHelp": [
+    {
+      "@type": "WebSite",
+      "name": "fmrilss documentation",
+      "url": "https://bbuchsbaum.github.io/fmrilss/"
+    }
+  ],
+  "readme": "https://github.com/bbuchsbaum/fmrilss/blob/main/README.md",
+  "fileSize": "0KB",
+  "applicationCategory": "Science",
+  "isPartOf": "https://cran.r-project.org/",
+  "citation": [
+    {
+      "@type": "ScholarlyArticle",
+      "name": "Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses",
+      "author": [
+        {
+          "@type": "Person",
+          "givenName": "Jeanette A.",
+          "familyName": "Mumford"
+        },
+        {
+          "@type": "Person",
+          "givenName": "Benjamin O.",
+          "familyName": "Turner"
+        },
+        {
+          "@type": "Person", 
+          "givenName": "F. Gregory",
+          "familyName": "Ashby"
+        },
+        {
+          "@type": "Person",
+          "givenName": "Russell A.",
+          "familyName": "Poldrack"
+        }
+      ],
+      "datePublished": "2012",
+      "isPartOf": {
+        "@type": "PublicationIssue",
+        "isPartOf": {
+          "@type": "PublicationVolume",
+          "volumeNumber": "59",
+          "isPartOf": {
+            "@type": "Periodical",
+            "name": "NeuroImage"
+          }
+        },
+        "issueNumber": "3"
+      },
+      "pageStart": "2636",
+      "pageEnd": "2643",
+      "identifier": {
+        "@type": "PropertyValue",
+        "propertyID": "DOI",
+        "value": "10.1016/j.neuroimage.2011.08.076"
+      }
+    }
+  ],
+  "developmentStatus": "active",
+  "funding": "",
+  "issueTracker": "https://github.com/bbuchsbaum/fmrilss/issues",
+  "relatedLink": [
+    "https://github.com/bbuchsbaum/fmrilss",
+    "https://bbuchsbaum.github.io/fmrilss/"
+  ],
+  "releaseNotes": "https://github.com/bbuchsbaum/fmrilss/releases",
+  "contIntegration": "https://github.com/bbuchsbaum/fmrilss/actions",
+  "buildInstructions": "https://github.com/bbuchsbaum/fmrilss/blob/main/README.md#installation",
+  "hasSourceCode": "https://github.com/bbuchsbaum/fmrilss",
+  "dateCreated": "2024",
+  "dateModified": "2024-06-12",
+  "featureList": [
+    "Multiple LSS implementations (R naive, R vectorized, R optimized, C++, C++ optimized)",
+    "OpenMP parallel processing support",
+    "Nuisance regressor projection",
+    "Zero regressor detection and warnings",
+    "Flexible interface with Y, X, Z, Nuisance parameters",
+    "CRAN-compliant build system",
+    "Comprehensive test suite",
+    "Mixed-effects model utilities"
+  ],
+  "targetProduct": {
+    "@type": "SoftwareLibrary",
+    "name": "fmrilss",
+    "operatingSystem": ["Linux", "Windows", "macOS"],
+    "applicationCategory": "Science"
+  }
+} 

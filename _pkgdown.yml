@@ -1,0 +1,59 @@
+url: https://bbuchsbaum.github.io/fmrilss/
+template:
+  bootstrap: 5
+
+home:
+  title: "fmrilss: Least Squares Separate (LSS) Analysis for fMRI Data"
+  description: >
+    Efficient implementation of LSS analysis for fMRI data with multiple 
+    backends including optimized C++ and R implementations.
+
+reference:
+  - title: "Main LSS Functions"
+    desc: "Core functions for performing LSS analysis"
+    contents:
+    - lss
+    - lss_naive
+    - lss_optimized
+    - lss_cpp_optimized
+    - lss_beta_cpp
+  
+  - title: "Mixed Effects Models"
+    desc: "Mixed effects modeling utilities"
+    contents:
+    - mixed_solve
+    - mixed_solve_optimized
+    - mixed_solve_cpp
+    - mixed_precompute
+    - benchmark_mixed_solve
+  
+  - title: "Additional Functions"
+    desc: "Utility and helper functions"
+    contents:
+    - lsa
+    - project_confounds
+    - project_confounds_cpp
+    - get_data_matrix
+  
+  - title: "C++ Internal Functions"
+    desc: "Low-level C++ functions (advanced users)"
+    contents:
+    - mixed_multi_voxel_cpp
+    - mixed_precompute_workspace
+    - mixed_single_voxel_cpp
+  
+  - title: "Package Information"
+    desc: "Package documentation"
+    contents:
+    - fmrilss-package
+
+navbar:
+  structure:
+    left:  [home, reference, articles, tutorials, news]
+    right: [search, github]
+  components:
+    github:
+      icon: fab-github
+      href: https://github.com/bbuchsbaum/fmrilss
+      aria-label: "GitHub repository"
+

@@ -3,3 +3,5 @@ bench
 ..Rcheck
 .git
 .gitignore
+codemeta.json
+.github
