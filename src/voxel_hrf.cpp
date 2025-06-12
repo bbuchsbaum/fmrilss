@@ -4,6 +4,9 @@
 // [[Rcpp::plugins(openmp)]]
 #endif
 // [[Rcpp::depends(RcppArmadillo)]]
+// [[Rcpp::depends(bigmemory)]]
+#include <bigmemory/BigMatrix.h>
+#include <bigmemory/MatrixAccessor.hpp>
 
 // forward declarations from lss.cpp
 Rcpp::List compute_residuals_cpp(const arma::mat& X, const arma::mat& Y,
@@ -40,21 +43,24 @@ static arma::mat build_trial_matrix(const arma::vec& hrf_kernel,
 }
 
 // [[Rcpp::export]]
-arma::mat lss_engine_vox_hrf(const arma::mat& Y,
-                             const arma::mat& coeffs,
-                             const arma::mat& basis_kernels,
-                             const arma::uvec& onset_idx,
-                             const arma::vec& durations,
-                             const arma::mat& nuisance,
-                             const int chunk_size,
-                             bool verbose) {
+void lss_engine_vox_hrf(const arma::mat& Y,
+                        const arma::mat& coeffs,
+                        const arma::mat& basis_kernels,
+                        const arma::uvec& onset_idx,
+                        const arma::vec& durations,
+                        const arma::mat& nuisance,
+                        SEXP betas_ptr,
+                        Rcpp::Function progress,
+                        const int chunk_size,
+                        bool verbose) {
   const unsigned int n_time = Y.n_rows;
   const unsigned int V = Y.n_cols;
   const unsigned int step = 10;              // 1 / 0.1 (fine_dt)
   const arma::uvec tr_idx = arma::regspace<arma::uvec>(0, step, basis_kernels.n_rows - 1);
   const unsigned int n_trials = onset_idx.n_elem;
 
-  arma::mat betas(n_trials, V, arma::fill::zeros);
+  Rcpp::XPtr<BigMatrix> bm_ptr(betas_ptr);
+  MatrixAccessor<double> bm_acc(*bm_ptr);
 
   for (unsigned int start = 0; start < V; start += chunk_size) {
     unsigned int end = std::min(start + (unsigned int)chunk_size, V) - 1;
@@ -77,9 +83,17 @@ arma::mat lss_engine_vox_hrf(const arma::mat& Y,
         chunk_out.col(idx) = beta_local;
       }
     }
-    betas.cols(start, end) = chunk_out;
+
+    for (unsigned int idx = 0; idx < chunkV; ++idx) {
+      unsigned int v = start + idx;
+      for (unsigned int t = 0; t < n_trials; ++t) {
+        bm_acc[v][t] = chunk_out(t, idx);
+      }
+    }
+
+    if (verbose) progress(chunkV);
   }
 
-  return betas;
+  return;
 }
 
