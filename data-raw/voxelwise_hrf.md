@@ -138,7 +138,7 @@ The test suite will be comprehensive and modular:
 
 **8. Next Steps**
 
-1.  **Branch:** Create a `feature/voxel-hrf` branch.
+
 2.  **Stubbing:** Implement the R function stubs for `estimate_voxel_hrf` and `lss_with_hrf` with input validation.
 3.  **C++ Implementation:**
     *   Develop the C++ kernel for `estimate_voxel_hrf`.
@@ -156,12 +156,11 @@ This plan provides a clear, robust, and efficient path to implementing a powerfu
 
 **Ticket S1-T1: Project Setup & API Definition**
 
-*   **Description:** Initialize the development environment. Create a new feature branch `feature/voxel-hrf`. Create placeholder files for new R functions (`R/voxel_hrf.R`) and C++ code (`src/voxel_hrf.cpp`). Define the S3 class structures for `VoxelHRF` and `LSSBeta` objects.
+*   **Description:**  Create placeholder files for new R functions (`R/voxel_hrf.R`) and C++ code (`src/voxel_hrf.cpp`). Define the S3 class structures for `VoxelHRF` and `LSSBeta` objects.
 *   **AC:**
-    1.  The `feature/voxel-hrf` branch exists in the repository.
-    2.  `R/voxel_hrf.R` is created and contains the R function stubs for `estimate_voxel_hrf()` and `lss_with_hrf()`.
-    3.  `src/voxel_hrf.cpp` is created.
-    4.  Initial S3 class definitions are documented (e.g., using roxygen2 `@return` tags).
+    1.  `R/voxel_hrf.R` is created and contains the R function stubs for `estimate_voxel_hrf()` and `lss_with_hrf()`.
+    2.  `src/voxel_hrf.cpp` is created.
+    3.  Initial S3 class definitions are documented (e.g., using roxygen2 `@return` tags).
 
 **Ticket S1-T2: Implement R-side Logic for `estimate_voxel_hrf`**
 
