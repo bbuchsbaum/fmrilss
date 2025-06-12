@@ -17,6 +17,10 @@ lss_beta_cpp <- function(C_projected, Y_projected) {
     .Call(`_fmrilss_lss_beta_cpp`, C_projected, Y_projected)
 }
 
+estimate_hrf_cpp <- function(X, Y) {
+    .Call(`_fmrilss_estimate_hrf_cpp`, X, Y)
+}
+
 #' Fused Single-Pass LSS Solver (C++)
 #'
 #' This function computes Least Squares-Separate (LSS) beta estimates using

@@ -52,6 +52,7 @@ END_RCPP
 // lss_beta_cpp
 arma::mat lss_beta_cpp(const arma::mat& C_projected, const arma::mat& Y_projected);
 RcppExport SEXP _fmrilss_lss_beta_cpp(SEXP C_projectedSEXP, SEXP Y_projectedSEXP) {
+    {"_fmrilss_estimate_hrf_cpp", (DL_FUNC) &_fmrilss_estimate_hrf_cpp, 2},
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -61,6 +62,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// estimate_hrf_cpp
+arma::mat estimate_hrf_cpp(const arma::mat& X, const arma::mat& Y);
+RcppExport SEXP _fmrilss_estimate_hrf_cpp(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(estimate_hrf_cpp(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
+
 // lss_fused_optim_cpp
 arma::mat lss_fused_optim_cpp(const arma::mat& X, const arma::mat& Y, const arma::mat& C, int block_size);
 RcppExport SEXP _fmrilss_lss_fused_optim_cpp(SEXP XSEXP, SEXP YSEXP, SEXP CSEXP, SEXP block_sizeSEXP) {
@@ -139,6 +153,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_lss_compute_cpp", (DL_FUNC) &_fmrilss_lss_compute_cpp, 2},
     {"_fmrilss_project_confounds_cpp", (DL_FUNC) &_fmrilss_project_confounds_cpp, 3},
     {"_fmrilss_lss_beta_cpp", (DL_FUNC) &_fmrilss_lss_beta_cpp, 2},
+    {"_fmrilss_estimate_hrf_cpp", (DL_FUNC) &_fmrilss_estimate_hrf_cpp, 2},
     {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 4},
     {"_fmrilss_mixed_solve_internal", (DL_FUNC) &_fmrilss_mixed_solve_internal, 8},
     {"_fmrilss_mixed_precompute_workspace", (DL_FUNC) &_fmrilss_mixed_precompute_workspace, 3},
