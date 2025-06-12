@@ -42,6 +42,8 @@ mixed_solve_internal <- function(y_in, Z_in = NULL, K_in = NULL, X_in = NULL, me
 #' 
 #' Stores precomputed matrices and decompositions that can be reused
 #' across multiple voxels to avoid repeated expensive computations.
+#' 
+#' @name MixedWorkspace
 NULL
 
 #' Fast analytical REML estimation for single variance component
@@ -54,9 +56,11 @@ NULL
 #' @param tol Convergence tolerance for Newton iterations
 #' @param max_iter Maximum Newton iterations
 #' @return Estimated variance ratio λ
+#' @name fast_reml_lambda
 NULL
 
 #' Convert R list back to MixedWorkspace
+#' @name list_to_workspace
 NULL
 
 #' Precompute workspace for mixed model optimization

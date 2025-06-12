@@ -6,7 +6,7 @@
 #' @param X Fixed effects design matrix
 #' @param Z Random effects design matrix
 #' @param K Kinship matrix (optional, defaults to identity)
-#' @param Y Response matrix (n \u00d7 V)
+#' @param Y Response matrix (n x V)
 #' @param n_reps Number of repetitions for benchmarking
 #' @return Data frame with timing results
 #' @examples

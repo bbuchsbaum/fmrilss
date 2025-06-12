@@ -5,3 +5,5 @@ bench
 .gitignore
 codemeta.json
 .github
+_pkgdown.yml
+docs

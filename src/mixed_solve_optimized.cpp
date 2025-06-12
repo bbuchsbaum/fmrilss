@@ -15,6 +15,8 @@ using namespace arma;
 //' 
 //' Stores precomputed matrices and decompositions that can be reused
 //' across multiple voxels to avoid repeated expensive computations.
+//' 
+//' @name MixedWorkspace
 struct MixedWorkspace {
   mat Q;           // n × (n-p) matrix from QR of nuisance regressors
   mat U;           // Eigenvectors from spectral decomposition  
@@ -42,6 +44,7 @@ struct MixedWorkspace {
 //' @param tol Convergence tolerance for Newton iterations
 //' @param max_iter Maximum Newton iterations
 //' @return Estimated variance ratio λ
+//' @name fast_reml_lambda
 double fast_reml_lambda(const vec& omega, const vec& theta, 
                        double tol = 1e-8, int max_iter = 10) {
   
@@ -196,6 +199,7 @@ List mixed_precompute_workspace(const arma::mat& X,
 }
 
 //' Convert R list back to MixedWorkspace
+//' @name list_to_workspace
 MixedWorkspace list_to_workspace(const List& ws_list) {
   MixedWorkspace ws;
   ws.Q = as<mat>(ws_list["Q"]);
