@@ -20,9 +20,10 @@ and V is the number of voxels/variables}
 \item{X}{A numeric matrix of size n × T where T is the number of trials.
 Each column represents the design for one trial}
 
-\item{Z}{A numeric matrix of size n × F representing fixed effects to include
-in all models (e.g., intercept, run effects). If NULL, an intercept-only
-design is used. Defaults to NULL}
+\item{Z}{A numeric matrix of size n × F representing experimental regressors
+to include in all trial-wise models. These are regressors we want to model
+and get beta estimates for, but not trial-wise (e.g., intercept, condition
+effects, block effects). If NULL, an intercept-only design is used. Defaults to NULL}
 
 \item{Nuisance}{A numeric matrix of size n × N representing nuisance regressors
 to be projected out before LSS analysis (e.g., motion parameters, physiological
@@ -42,7 +43,9 @@ Options are:
 processing, only applicable when `method = "cpp_optimized"`. Defaults to 96.}
 }
 \value{
-A numeric matrix of size T × V containing the trial-wise beta estimates
+A numeric matrix of size T × V containing the trial-wise beta estimates.
+  Note: Currently only returns estimates for the trial regressors (X). Beta
+  estimates for the experimental regressors (Z) are computed but not returned.
 }
 \description{
 Computes trial-wise beta estimates using the Least Squares Separate approach
@@ -54,7 +57,7 @@ The LSS approach fits a separate GLM for each trial, where each model includes:
 \itemize{
   \item The trial of interest (from column i of X)
   \item All other trials combined (sum of all other columns of X) 
-  \item Fixed effects (Z matrix)
+  \item Experimental regressors (Z matrix) - these are modeled to get beta estimates but not trial-wise
 }
 
 If Nuisance regressors are provided, they are first projected out from both
@@ -85,9 +88,9 @@ for(i in 1:n_trials) {
 # Run LSS analysis
 beta_estimates <- lss(Y, X)
 
-# With fixed effects (intercept + linear trend)
+# With experimental regressors (intercept + condition effects)
 Z <- cbind(1, scale(1:n_timepoints))
-beta_estimates_with_fixed <- lss(Y, X, Z = Z)
+beta_estimates_with_regressors <- lss(Y, X, Z = Z)
 
 # With nuisance regression (motion parameters)
 Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)

@@ -29,7 +29,7 @@ devtools::install_github("bbuchsbaum/fmrilss")
 
 ## Usage
 
-The primary function is `lss()`, which takes your data `Y`, trial design `X`, fixed effects `Z`, and optional nuisance regressors.
+The primary function is `lss()`, which takes your data `Y`, trial design `X`, experimental regressors `Z`, and optional nuisance regressors.
 
 ```r
 library(fmrilss)
@@ -48,7 +48,9 @@ for(i in 1:n_trials) {
 }
 colnames(X) <- paste0("Trial_", 1:n_trials)
 
-# Fixed effects (Z): intercept and linear trend
+# Experimental regressors (Z): intercept and condition-specific effects
+# These are experimental regressors we want to model and get beta estimates for,
+# but not trial-wise (e.g., condition differences, block effects)
 Z <- cbind(Intercept = 1, LinearTrend = scale(1:n_timepoints, center = TRUE, scale = FALSE))
 
 # Nuisance regressors: e.g., 6 motion parameters
@@ -70,10 +72,10 @@ colnames(Y) <- paste0("Voxel_", 1:n_voxels)
 # If Z is NULL, an intercept is automatically added.
 beta_estimates <- lss(Y, X)
 
-# Example 2: LSS with custom fixed effects (intercept + trend)
+# Example 2: LSS with experimental regressors (intercept + condition effects)
 beta_fixed <- lss(Y, X, Z = Z)
 
-# Example 3: LSS with fixed effects and nuisance regression
+# Example 3: LSS with experimental regressors and nuisance regression
 beta_clean <- lss(Y, X, Z = Z, Nuisance = Nuisance)
 
 # Example 4: Use the super-fast, parallelized C++ implementation
