@@ -95,7 +95,7 @@ benchmark_mixed_solve <- function(X, Z, K = NULL, Y, n_reps = 5) {
   times_standard <- replicate(n_reps, {
     start_time <- Sys.time()
     for (v in 1:min(10, n_voxels)) {  # Limit to 10 voxels for standard version
-      result <- mixed_solve(y = Y[, v], Z = Z, K = K, X = X)
+      result <- mixed_solve(Y[, v], X = X, Z = Z, K = K)
     }
     as.numeric(difftime(Sys.time(), start_time, units = "secs"))
   })
@@ -112,10 +112,10 @@ benchmark_mixed_solve <- function(X, Z, K = NULL, Y, n_reps = 5) {
   results <- data.frame(
     method = c("standard", "optimized"),
     mean_time = c(mean(times_standard), mean(times_optimized)),
-    median_time = c(median(times_standard), median(times_optimized)),
+    median_time = c(stats::median(times_standard), stats::median(times_optimized)),
     min_time = c(min(times_standard), min(times_optimized)),
     max_time = c(max(times_standard), max(times_optimized)),
-    sd_time = c(sd(times_standard), sd(times_optimized))
+    sd_time = c(stats::sd(times_standard), stats::sd(times_optimized))
   )
   
   # Speedup calculation (per voxel basis)

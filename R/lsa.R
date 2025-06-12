@@ -87,7 +87,7 @@ lsa <- function(Y, X, Z = NULL, Nuisance = NULL,
     combined_data <- cbind(Y, X, Z)
   }
   
-  complete_rows <- complete.cases(combined_data)
+  complete_rows <- stats::complete.cases(combined_data)
   if (!all(complete_rows)) {
     Y <- Y[complete_rows, , drop = FALSE]
     X <- X[complete_rows, , drop = FALSE]
