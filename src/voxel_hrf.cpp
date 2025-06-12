@@ -1,11 +1,11 @@
 #include <RcppArmadillo.h>
 // [[Rcpp::depends(RcppArmadillo)]]
 
-// Placeholder C++ function for voxel-wise HRF estimation
-// This will be expanded in later sprints.
-
 // [[Rcpp::export]]
 arma::mat estimate_hrf_cpp(const arma::mat& X, const arma::mat& Y) {
-  arma::mat out(X.n_cols, Y.n_cols, arma::fill::zeros);
-  return out;
+  // Solve the multi-response linear model X * B = Y for B.
+  // This uses Armadillo's solve which will automatically
+  // choose the appropriate least squares solver when X is
+  // not square.
+  return arma::solve(X, Y);
 }
