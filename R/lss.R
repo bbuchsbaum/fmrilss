@@ -170,7 +170,7 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   # Check each trial regressor
   for (i in 1:ncol(X)) {
     regressor_norm <- sqrt(sum(X[, i]^2))
-    regressor_var <- var(X[, i])
+    regressor_var <- stats::var(X[, i])
     
     # Check for exactly zero regressor first
     if (regressor_norm < eps) {
