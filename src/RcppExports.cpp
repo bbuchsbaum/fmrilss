@@ -52,7 +52,6 @@ END_RCPP
 // lss_beta_cpp
 arma::mat lss_beta_cpp(const arma::mat& C_projected, const arma::mat& Y_projected);
 RcppExport SEXP _fmrilss_lss_beta_cpp(SEXP C_projectedSEXP, SEXP Y_projectedSEXP) {
-    {"_fmrilss_estimate_hrf_cpp", (DL_FUNC) &_fmrilss_estimate_hrf_cpp, 2},
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -62,53 +61,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// estimate_hrf_cpp
-arma::mat estimate_hrf_cpp(const arma::mat& X, const arma::mat& Y);
-RcppExport SEXP _fmrilss_estimate_hrf_cpp(SEXP XSEXP, SEXP YSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
-    rcpp_result_gen = Rcpp::wrap(estimate_hrf_cpp(X, Y));
-    return rcpp_result_gen;
-END_RCPP
-}
-
-// lss_engine_vox_hrf
-void lss_engine_vox_hrf(const arma::mat& Y, const arma::mat& coeffs,
-                        const arma::mat& basis_kernels,
-                        const arma::uvec& onset_idx,
-                        const arma::vec& durations,
-                        const arma::mat& nuisance,
-                        SEXP betas_ptr,
-                        Rcpp::Function progress,
-                        int chunk_size, bool verbose);
-RcppExport SEXP _fmrilss_lss_engine_vox_hrf(SEXP YSEXP, SEXP coeffsSEXP,
-        SEXP basis_kernelsSEXP, SEXP onset_idxSEXP, SEXP durationsSEXP,
-        SEXP nuisanceSEXP, SEXP betas_ptrSEXP, SEXP progressSEXP,
-        SEXP chunk_sizeSEXP, SEXP verboseSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type coeffs(coeffsSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type basis_kernels(basis_kernelsSEXP);
-    Rcpp::traits::input_parameter< const arma::uvec& >::type onset_idx(onset_idxSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type durations(durationsSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type nuisance(nuisanceSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type betas_ptr(betas_ptrSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Function >::type progress(progressSEXP);
-    Rcpp::traits::input_parameter< int >::type chunk_size(chunk_sizeSEXP);
-    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    lss_engine_vox_hrf(Y, coeffs, basis_kernels,
-                       onset_idx, durations, nuisance,
-                       betas_ptr, progress, chunk_size,
-                       verbose);
-    return R_NilValue;
-END_RCPP
-}
-
 // lss_fused_optim_cpp
 arma::mat lss_fused_optim_cpp(const arma::mat& X, const arma::mat& Y, const arma::mat& C, int block_size);
 RcppExport SEXP _fmrilss_lss_fused_optim_cpp(SEXP XSEXP, SEXP YSEXP, SEXP CSEXP, SEXP block_sizeSEXP) {
@@ -181,19 +133,50 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// estimate_hrf_cpp
+arma::mat estimate_hrf_cpp(const arma::mat& X, const arma::mat& Y);
+RcppExport SEXP _fmrilss_estimate_hrf_cpp(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(estimate_hrf_cpp(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// lss_engine_vox_hrf
+void lss_engine_vox_hrf(const arma::mat& Y, const arma::mat& coeffs, const arma::mat& basis_kernels, const arma::uvec& onset_idx, const arma::vec& durations, const arma::mat& nuisance, SEXP betas_ptr, Rcpp::Function progress, const int chunk_size, bool verbose);
+RcppExport SEXP _fmrilss_lss_engine_vox_hrf(SEXP YSEXP, SEXP coeffsSEXP, SEXP basis_kernelsSEXP, SEXP onset_idxSEXP, SEXP durationsSEXP, SEXP nuisanceSEXP, SEXP betas_ptrSEXP, SEXP progressSEXP, SEXP chunk_sizeSEXP, SEXP verboseSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type coeffs(coeffsSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type basis_kernels(basis_kernelsSEXP);
+    Rcpp::traits::input_parameter< const arma::uvec& >::type onset_idx(onset_idxSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type durations(durationsSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type nuisance(nuisanceSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type betas_ptr(betas_ptrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Function >::type progress(progressSEXP);
+    Rcpp::traits::input_parameter< const int >::type chunk_size(chunk_sizeSEXP);
+    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
+    lss_engine_vox_hrf(Y, coeffs, basis_kernels, onset_idx, durations, nuisance, betas_ptr, progress, chunk_size, verbose);
+    return R_NilValue;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_compute_residuals_cpp", (DL_FUNC) &_fmrilss_compute_residuals_cpp, 3},
     {"_fmrilss_lss_compute_cpp", (DL_FUNC) &_fmrilss_lss_compute_cpp, 2},
     {"_fmrilss_project_confounds_cpp", (DL_FUNC) &_fmrilss_project_confounds_cpp, 3},
     {"_fmrilss_lss_beta_cpp", (DL_FUNC) &_fmrilss_lss_beta_cpp, 2},
-    {"_fmrilss_estimate_hrf_cpp", (DL_FUNC) &_fmrilss_estimate_hrf_cpp, 2},
-    {"_fmrilss_lss_engine_vox_hrf", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf, 8},
     {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 4},
     {"_fmrilss_mixed_solve_internal", (DL_FUNC) &_fmrilss_mixed_solve_internal, 8},
     {"_fmrilss_mixed_precompute_workspace", (DL_FUNC) &_fmrilss_mixed_precompute_workspace, 3},
     {"_fmrilss_mixed_single_voxel_cpp", (DL_FUNC) &_fmrilss_mixed_single_voxel_cpp, 3},
     {"_fmrilss_mixed_multi_voxel_cpp", (DL_FUNC) &_fmrilss_mixed_multi_voxel_cpp, 4},
+    {"_fmrilss_estimate_hrf_cpp", (DL_FUNC) &_fmrilss_estimate_hrf_cpp, 2},
+    {"_fmrilss_lss_engine_vox_hrf", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf, 10},
     {NULL, NULL, 0}
 };
 

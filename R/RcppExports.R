@@ -17,17 +17,6 @@ lss_beta_cpp <- function(C_projected, Y_projected) {
     .Call(`_fmrilss_lss_beta_cpp`, C_projected, Y_projected)
 }
 
-estimate_hrf_cpp <- function(X, Y) {
-    .Call(`_fmrilss_estimate_hrf_cpp`, X, Y)
-}
-
-lss_engine_vox_hrf <- function(Y, coeffs, basis_kernels, onset_idx, durations,
-                               nuisance, betas_ptr, progress, chunk_size = 5000L,
-                               verbose = TRUE) {
-    .Call(`_fmrilss_lss_engine_vox_hrf`, Y, coeffs, basis_kernels, onset_idx,
-          durations, nuisance, betas_ptr, progress, chunk_size, verbose)
-}
-
 #' Fused Single-Pass LSS Solver (C++)
 #'
 #' This function computes Least Squares-Separate (LSS) beta estimates using
@@ -109,5 +98,13 @@ mixed_single_voxel_cpp <- function(y, ws_list, compute_se = FALSE) {
 #' @return List with matrices of estimates across voxels
 mixed_multi_voxel_cpp <- function(Y, ws_list, compute_se = FALSE, n_threads = 0L) {
     .Call(`_fmrilss_mixed_multi_voxel_cpp`, Y, ws_list, compute_se, n_threads)
+}
+
+estimate_hrf_cpp <- function(X, Y) {
+    .Call(`_fmrilss_estimate_hrf_cpp`, X, Y)
+}
+
+lss_engine_vox_hrf <- function(Y, coeffs, basis_kernels, onset_idx, durations, nuisance, betas_ptr, progress, chunk_size, verbose) {
+    invisible(.Call(`_fmrilss_lss_engine_vox_hrf`, Y, coeffs, basis_kernels, onset_idx, durations, nuisance, betas_ptr, progress, chunk_size, verbose))
 }
 

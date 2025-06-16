@@ -19,13 +19,14 @@ Imports:
 LinkingTo: 
     Rcpp,
     RcppArmadillo,
-    roptim
+    roptim,
+    bigmemory,
+    BH
 Suggests:
     testthat (>= 3.0.0),
     knitr,
     rmarkdown,
     pkgdown,
-    bigmemory,
     progress
 VignetteBuilder: knitr
 SystemRequirements: C++11
