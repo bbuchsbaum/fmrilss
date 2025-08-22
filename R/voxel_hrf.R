@@ -65,7 +65,20 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL) {
   }
 
   # Construct HRF regressor matrix using fmrihrf
-  X_basis <- fmrihrf::regressor_set(events, basis = basis, n = nrow(Y))$X
+  # Create sampling frame and time grid
+  sframe <- fmrihrf::sampling_frame(blocklens = nrow(Y), TR = 1)
+  times <- fmrihrf::samples(sframe, global = TRUE)
+  
+  # Build regressor set with correct API
+  rset <- fmrihrf::regressor_set(
+    onsets = events$onset,
+    fac = factor(seq_len(nrow(events))),
+    hrf = basis,
+    duration = events$duration,
+    span = if (!is.null(attr(basis, "span"))) attr(basis, "span") else 30
+  )
+  X_basis <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")
+  if (inherits(X_basis, "Matrix")) X_basis <- as.matrix(X_basis)
 
   X_full <- X_basis
   if (!is.null(nuisance_regs)) {
@@ -151,9 +164,26 @@ lss_with_hrf <- function(Y, events, hrf_estimates, nuisance_regs = NULL,
   conditions <- as.character(events$condition)
 
   fine_dt <- 0.1
-  max_time <- max(onsets + durations) + fmrihrf::hrf_length(hrf_estimates$basis)
+  # Get HRF span from the basis object attribute
+  hrf_span <- if (!is.null(attr(hrf_estimates$basis, "span"))) {
+    attr(hrf_estimates$basis, "span") 
+  } else {
+    30
+  }
+  max_time <- max(onsets + durations) + hrf_span
   fine_grid <- seq(0, max_time, by = fine_dt)
-  hrf_basis_kernels <- fmrihrf::evaluate_hrf_basis(hrf_estimates$basis, fine_grid)
+  # Evaluate HRF at fine grid points
+  hrf_func <- hrf_estimates$basis
+  if (is.function(hrf_func)) {
+    hrf_basis_kernels <- hrf_func(fine_grid)
+  } else {
+    # For HRF objects, create a simple regressor and evaluate
+    r <- fmrihrf::regressor(onsets = 0, hrf = hrf_func, duration = 0, span = hrf_span)
+    hrf_basis_kernels <- fmrihrf::evaluate(r, fine_grid, precision = fine_dt, method = "conv")
+  }
+  if (inherits(hrf_basis_kernels, "Matrix")) {
+    hrf_basis_kernels <- as.matrix(hrf_basis_kernels)
+  }
 
   onset_idx <- as.integer(round(onsets / fine_dt)) + 1L
 

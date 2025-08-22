@@ -12,8 +12,16 @@ test_that("estimate_voxel_hrf recovers known coefficients", {
     duration = c(1, 1, 1),
     condition = c("A", "A", "A")
   )
-  basis <- fmrihrf::HRF_FIR(length = 10)
-  X_basis <- fmrihrf::regressor_set(events, basis = basis, n = n_time)$X
+  basis <- fmrihrf::hrf_fir_generator(nbasis = 10)
+  # Build regressor set with proper API
+  sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = 1)
+  times <- fmrihrf::samples(sframe, global = TRUE)
+  rset <- fmrihrf::regressor_set(onsets = events$onset, 
+                                 fac = factor(1:nrow(events)),
+                                 hrf = basis,
+                                 duration = 0,
+                                 span = 30)
+  X_basis <- fmrihrf::evaluate(rset, grid = times)
   n_vox <- 3
   true_coef <- matrix(rnorm(ncol(X_basis) * n_vox), ncol(X_basis), n_vox)
   Y <- X_basis %*% true_coef
@@ -28,7 +36,7 @@ test_that("estimate_voxel_hrf input validation", {
 
   Y <- matrix(rnorm(20), 10, 2)
   events <- data.frame(onset = 1, duration = 1, condition = "A")
-  basis <- fmrihrf::HRF_FIR(length = 5)
+  basis <- fmrihrf::hrf_fir_generator(nbasis = 5)
 
   expect_error(estimate_voxel_hrf("no", events, basis),
                "Y must be a numeric matrix")
@@ -54,8 +62,16 @@ test_that("lss_with_hrf recovers trial betas", {
     duration = c(1, 1, 1),
     condition = "A"
   )
-  basis <- fmrihrf::HRF_FIR(length = 1)
-  X_basis <- fmrihrf::regressor_set(events, basis = basis, n = n_time)$X
+  basis <- fmrihrf::hrf_fir_generator(nbasis = 1)
+  # Build regressor set with proper API
+  sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = 1)
+  times <- fmrihrf::samples(sframe, global = TRUE)
+  rset <- fmrihrf::regressor_set(onsets = events$onset, 
+                                 fac = factor(1:nrow(events)),
+                                 hrf = basis,
+                                 duration = 0,
+                                 span = 30)
+  X_basis <- fmrihrf::evaluate(rset, grid = times)
   n_vox <- 2
   hcoef <- runif(n_vox, 0.5, 1.5)
   true_beta <- matrix(rnorm(ncol(X_basis) * n_vox), ncol(X_basis), n_vox)
@@ -81,8 +97,16 @@ test_that("lss_with_hrf equivalent to lss when HRF identical", {
   set.seed(2)
   n_time <- 50
   events <- data.frame(onset = c(5, 25, 40), duration = 1, condition = "A")
-  basis <- fmrihrf::HRF_FIR(length = 1)
-  X_basis <- fmrihrf::regressor_set(events, basis = basis, n = n_time)$X
+  basis <- fmrihrf::hrf_fir_generator(nbasis = 1)
+  # Build regressor set with proper API
+  sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = 1)
+  times <- fmrihrf::samples(sframe, global = TRUE)
+  rset <- fmrihrf::regressor_set(onsets = events$onset, 
+                                 fac = factor(1:nrow(events)),
+                                 hrf = basis,
+                                 duration = 0,
+                                 span = 30)
+  X_basis <- fmrihrf::evaluate(rset, grid = times)
   n_vox <- 3
   coef_shared <- rep(1, n_vox)
   betas <- matrix(rnorm(ncol(X_basis) * n_vox), ncol(X_basis), n_vox)
@@ -109,16 +133,26 @@ test_that("lss_with_hrf basis aliasing", {
   set.seed(3)
   n_time <- 80
   events <- data.frame(onset = c(10, 40), duration = 1, condition = "A")
-  basis_true <- fmrihrf::HRF_BSPLINE(length = 8)
-  basis_fit <- fmrihrf::HRF_FIR(length = 8)
+  basis_true <- fmrihrf::hrf_bspline_generator(nbasis = 8)
+  basis_fit <- fmrihrf::hrf_fir_generator(nbasis = 8)
 
-  X_basis_true <- fmrihrf::regressor_set(events, basis = basis_true, n = n_time)$X
-  hcoef <- rnorm(ncol(X_basis_true))
+  # Build regressor set with proper API
+  sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = 1)
+  times <- fmrihrf::samples(sframe, global = TRUE)
+  rset_true <- fmrihrf::regressor_set(onsets = events$onset, 
+                                      fac = factor(1:nrow(events)),
+                                      hrf = basis_true,
+                                      duration = 0,
+                                      span = 30)
+  X_basis_true <- fmrihrf::evaluate(rset_true, grid = times)
+  # Generate coefficients for the HRF basis (not per trial)
+  n_basis <- fmrihrf::nbasis(basis_true)
+  hcoef <- rnorm(n_basis)
   hrf_kernel <- fmrihrf::hrf_from_coefficients(basis_true, hcoef)
   C <- fmrihrf::convolve_design(events$onset, events$duration, hrf_kernel, n_time)
   beta <- rnorm(ncol(C))
   Y <- C %*% beta
-  hrf_est <- list(coefficients = matrix(hcoef, ncol(X_basis_true), 1),
+  hrf_est <- list(coefficients = matrix(hcoef, n_basis, 1),
                   basis = basis_fit,
                   conditions = "A")
   class(hrf_est) <- "VoxelHRF"

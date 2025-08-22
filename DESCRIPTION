@@ -27,7 +27,8 @@ Suggests:
     knitr,
     rmarkdown,
     pkgdown,
-    progress
+    progress,
+    fmrihrf (>= 0.1.0)
 VignetteBuilder: knitr
 SystemRequirements: C++11
 RoxygenNote: 7.3.2.9000

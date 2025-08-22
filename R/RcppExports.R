@@ -100,6 +100,42 @@ mixed_multi_voxel_cpp <- function(Y, ws_list, compute_se = FALSE, n_threads = 0L
     .Call(`_fmrilss_mixed_multi_voxel_cpp`, Y, ws_list, compute_se, n_threads)
 }
 
+oasis_precompute_design <- function(X_trials, N_nuis) {
+    .Call(`_fmrilss_oasis_precompute_design`, X_trials, N_nuis)
+}
+
+oasis_AtY_SY_blocked <- function(A, s_all, Q, Y, block_cols = 4096L) {
+    .Call(`_fmrilss_oasis_AtY_SY_blocked`, A, s_all, Q, Y, block_cols)
+}
+
+oasis_betas_closed_form <- function(N_Y, S_Y, d, alpha, s, ridge_x = 0.0, ridge_b = 0.0, denom_eps = 1e-12) {
+    .Call(`_fmrilss_oasis_betas_closed_form`, N_Y, S_Y, d, alpha, s, ridge_x, ridge_b, denom_eps)
+}
+
+oasis_betas_gammas <- function(N_Y, S_Y, d, alpha, s, ridge_x = 0.0, ridge_b = 0.0, denom_eps = 1e-12) {
+    .Call(`_fmrilss_oasis_betas_gammas`, N_Y, S_Y, d, alpha, s, ridge_x, ridge_b, denom_eps)
+}
+
+oasisk_precompute_design <- function(X_trials, N_nuis, K) {
+    .Call(`_fmrilss_oasisk_precompute_design`, X_trials, N_nuis, K)
+}
+
+oasisk_products <- function(A, S, Q, Y, block_cols = 4096L) {
+    .Call(`_fmrilss_oasisk_products`, A, S, Q, Y, block_cols)
+}
+
+oasisk_betas <- function(D, C, E, N1, SY, ridge_x = 0.0, ridge_b = 0.0, diag_eps = 1e-10) {
+    .Call(`_fmrilss_oasisk_betas`, D, C, E, N1, SY, ridge_x, ridge_b, diag_eps)
+}
+
+oasisk_compute_RY_norm2 <- function(Q, Y) {
+    .Call(`_fmrilss_oasisk_compute_RY_norm2`, Q, Y)
+}
+
+oasisk_betas_se <- function(D, C, E, N1, SY, RY_norm2, ridge_x = 0.0, ridge_b = 0.0) {
+    .Call(`_fmrilss_oasisk_betas_se`, D, C, E, N1, SY, RY_norm2, ridge_x, ridge_b)
+}
+
 estimate_hrf_cpp <- function(X, Y) {
     .Call(`_fmrilss_estimate_hrf_cpp`, X, Y)
 }

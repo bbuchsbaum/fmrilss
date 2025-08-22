@@ -133,6 +133,145 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// oasis_precompute_design
+Rcpp::List oasis_precompute_design(const arma::mat& X_trials, const arma::mat& N_nuis);
+RcppExport SEXP _fmrilss_oasis_precompute_design(SEXP X_trialsSEXP, SEXP N_nuisSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X_trials(X_trialsSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type N_nuis(N_nuisSEXP);
+    rcpp_result_gen = Rcpp::wrap(oasis_precompute_design(X_trials, N_nuis));
+    return rcpp_result_gen;
+END_RCPP
+}
+// oasis_AtY_SY_blocked
+Rcpp::List oasis_AtY_SY_blocked(const arma::mat& A, const arma::vec& s_all, const arma::mat& Q, const arma::mat& Y, const int block_cols);
+RcppExport SEXP _fmrilss_oasis_AtY_SY_blocked(SEXP ASEXP, SEXP s_allSEXP, SEXP QSEXP, SEXP YSEXP, SEXP block_colsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type A(ASEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type s_all(s_allSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Q(QSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< const int >::type block_cols(block_colsSEXP);
+    rcpp_result_gen = Rcpp::wrap(oasis_AtY_SY_blocked(A, s_all, Q, Y, block_cols));
+    return rcpp_result_gen;
+END_RCPP
+}
+// oasis_betas_closed_form
+arma::mat oasis_betas_closed_form(const arma::mat& N_Y, const arma::rowvec& S_Y, const arma::vec& d, const arma::vec& alpha, const arma::vec& s, const double ridge_x, const double ridge_b, const double denom_eps);
+RcppExport SEXP _fmrilss_oasis_betas_closed_form(SEXP N_YSEXP, SEXP S_YSEXP, SEXP dSEXP, SEXP alphaSEXP, SEXP sSEXP, SEXP ridge_xSEXP, SEXP ridge_bSEXP, SEXP denom_epsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type N_Y(N_YSEXP);
+    Rcpp::traits::input_parameter< const arma::rowvec& >::type S_Y(S_YSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type d(dSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type s(sSEXP);
+    Rcpp::traits::input_parameter< const double >::type ridge_x(ridge_xSEXP);
+    Rcpp::traits::input_parameter< const double >::type ridge_b(ridge_bSEXP);
+    Rcpp::traits::input_parameter< const double >::type denom_eps(denom_epsSEXP);
+    rcpp_result_gen = Rcpp::wrap(oasis_betas_closed_form(N_Y, S_Y, d, alpha, s, ridge_x, ridge_b, denom_eps));
+    return rcpp_result_gen;
+END_RCPP
+}
+// oasis_betas_gammas
+Rcpp::List oasis_betas_gammas(const arma::mat& N_Y, const arma::rowvec& S_Y, const arma::vec& d, const arma::vec& alpha, const arma::vec& s, const double ridge_x, const double ridge_b, const double denom_eps);
+RcppExport SEXP _fmrilss_oasis_betas_gammas(SEXP N_YSEXP, SEXP S_YSEXP, SEXP dSEXP, SEXP alphaSEXP, SEXP sSEXP, SEXP ridge_xSEXP, SEXP ridge_bSEXP, SEXP denom_epsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type N_Y(N_YSEXP);
+    Rcpp::traits::input_parameter< const arma::rowvec& >::type S_Y(S_YSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type d(dSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type s(sSEXP);
+    Rcpp::traits::input_parameter< const double >::type ridge_x(ridge_xSEXP);
+    Rcpp::traits::input_parameter< const double >::type ridge_b(ridge_bSEXP);
+    Rcpp::traits::input_parameter< const double >::type denom_eps(denom_epsSEXP);
+    rcpp_result_gen = Rcpp::wrap(oasis_betas_gammas(N_Y, S_Y, d, alpha, s, ridge_x, ridge_b, denom_eps));
+    return rcpp_result_gen;
+END_RCPP
+}
+// oasisk_precompute_design
+Rcpp::List oasisk_precompute_design(const arma::mat& X_trials, const arma::mat& N_nuis, const int K);
+RcppExport SEXP _fmrilss_oasisk_precompute_design(SEXP X_trialsSEXP, SEXP N_nuisSEXP, SEXP KSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X_trials(X_trialsSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type N_nuis(N_nuisSEXP);
+    Rcpp::traits::input_parameter< const int >::type K(KSEXP);
+    rcpp_result_gen = Rcpp::wrap(oasisk_precompute_design(X_trials, N_nuis, K));
+    return rcpp_result_gen;
+END_RCPP
+}
+// oasisk_products
+Rcpp::List oasisk_products(const arma::mat& A, const arma::mat& S, const arma::mat& Q, const arma::mat& Y, const int block_cols);
+RcppExport SEXP _fmrilss_oasisk_products(SEXP ASEXP, SEXP SSEXP, SEXP QSEXP, SEXP YSEXP, SEXP block_colsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type A(ASEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type S(SSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Q(QSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< const int >::type block_cols(block_colsSEXP);
+    rcpp_result_gen = Rcpp::wrap(oasisk_products(A, S, Q, Y, block_cols));
+    return rcpp_result_gen;
+END_RCPP
+}
+// oasisk_betas
+arma::mat oasisk_betas(const arma::cube& D, const arma::cube& C, const arma::cube& E, const arma::mat& N1, const arma::mat& SY, const double ridge_x, const double ridge_b, const double diag_eps);
+RcppExport SEXP _fmrilss_oasisk_betas(SEXP DSEXP, SEXP CSEXP, SEXP ESEXP, SEXP N1SEXP, SEXP SYSEXP, SEXP ridge_xSEXP, SEXP ridge_bSEXP, SEXP diag_epsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::cube& >::type D(DSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type C(CSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type E(ESEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type N1(N1SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type SY(SYSEXP);
+    Rcpp::traits::input_parameter< const double >::type ridge_x(ridge_xSEXP);
+    Rcpp::traits::input_parameter< const double >::type ridge_b(ridge_bSEXP);
+    Rcpp::traits::input_parameter< const double >::type diag_eps(diag_epsSEXP);
+    rcpp_result_gen = Rcpp::wrap(oasisk_betas(D, C, E, N1, SY, ridge_x, ridge_b, diag_eps));
+    return rcpp_result_gen;
+END_RCPP
+}
+// oasisk_compute_RY_norm2
+arma::vec oasisk_compute_RY_norm2(const arma::mat& Q, const arma::mat& Y);
+RcppExport SEXP _fmrilss_oasisk_compute_RY_norm2(SEXP QSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type Q(QSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(oasisk_compute_RY_norm2(Q, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// oasisk_betas_se
+Rcpp::List oasisk_betas_se(const arma::cube& D, const arma::cube& C, const arma::cube& E, const arma::mat& N1, const arma::mat& SY, const arma::vec& RY_norm2, double ridge_x, double ridge_b);
+RcppExport SEXP _fmrilss_oasisk_betas_se(SEXP DSEXP, SEXP CSEXP, SEXP ESEXP, SEXP N1SEXP, SEXP SYSEXP, SEXP RY_norm2SEXP, SEXP ridge_xSEXP, SEXP ridge_bSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::cube& >::type D(DSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type C(CSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type E(ESEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type N1(N1SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type SY(SYSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type RY_norm2(RY_norm2SEXP);
+    Rcpp::traits::input_parameter< double >::type ridge_x(ridge_xSEXP);
+    Rcpp::traits::input_parameter< double >::type ridge_b(ridge_bSEXP);
+    rcpp_result_gen = Rcpp::wrap(oasisk_betas_se(D, C, E, N1, SY, RY_norm2, ridge_x, ridge_b));
+    return rcpp_result_gen;
+END_RCPP
+}
 // estimate_hrf_cpp
 arma::mat estimate_hrf_cpp(const arma::mat& X, const arma::mat& Y);
 RcppExport SEXP _fmrilss_estimate_hrf_cpp(SEXP XSEXP, SEXP YSEXP) {
@@ -175,6 +314,15 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_mixed_precompute_workspace", (DL_FUNC) &_fmrilss_mixed_precompute_workspace, 3},
     {"_fmrilss_mixed_single_voxel_cpp", (DL_FUNC) &_fmrilss_mixed_single_voxel_cpp, 3},
     {"_fmrilss_mixed_multi_voxel_cpp", (DL_FUNC) &_fmrilss_mixed_multi_voxel_cpp, 4},
+    {"_fmrilss_oasis_precompute_design", (DL_FUNC) &_fmrilss_oasis_precompute_design, 2},
+    {"_fmrilss_oasis_AtY_SY_blocked", (DL_FUNC) &_fmrilss_oasis_AtY_SY_blocked, 5},
+    {"_fmrilss_oasis_betas_closed_form", (DL_FUNC) &_fmrilss_oasis_betas_closed_form, 8},
+    {"_fmrilss_oasis_betas_gammas", (DL_FUNC) &_fmrilss_oasis_betas_gammas, 8},
+    {"_fmrilss_oasisk_precompute_design", (DL_FUNC) &_fmrilss_oasisk_precompute_design, 3},
+    {"_fmrilss_oasisk_products", (DL_FUNC) &_fmrilss_oasisk_products, 5},
+    {"_fmrilss_oasisk_betas", (DL_FUNC) &_fmrilss_oasisk_betas, 8},
+    {"_fmrilss_oasisk_compute_RY_norm2", (DL_FUNC) &_fmrilss_oasisk_compute_RY_norm2, 2},
+    {"_fmrilss_oasisk_betas_se", (DL_FUNC) &_fmrilss_oasisk_betas_se, 8},
     {"_fmrilss_estimate_hrf_cpp", (DL_FUNC) &_fmrilss_estimate_hrf_cpp, 2},
     {"_fmrilss_lss_engine_vox_hrf", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf, 10},
     {NULL, NULL, 0}

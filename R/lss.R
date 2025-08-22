@@ -23,9 +23,11 @@
 #'     \item "r_vectorized" - Standard R vectorized implementation  
 #'     \item "cpp" - Standard C++ implementation
 #'     \item "naive" - Simple loop-based R implementation (for testing)
+#'     \item "oasis" - OASIS method with HRF support and ridge regularization
 #'   }
 #' @param block_size An integer specifying the voxel block size for parallel
 #'   processing, only applicable when `method = "cpp_optimized"`. Defaults to 96.
+#' @param oasis A list of options for the OASIS method. See Details for available options.
 #'
 #' @return A numeric matrix of size T × V containing the trial-wise beta estimates.
 #'   Note: Currently only returns estimates for the trial regressors (X). Beta
@@ -41,6 +43,17 @@
 #' 
 #' If Nuisance regressors are provided, they are first projected out from both
 #' Y and X using standard linear regression residualization.
+#' 
+#' When using method="oasis", the following options are available in the oasis list:
+#' \itemize{
+#'   \item design_spec: List for building designs from events using fmrihrf
+#'   \item K: Explicit basis dimension (auto-detected if not provided)
+#'   \item ridge_mode: "absolute" (default) or "fractional"
+#'   \item ridge_x, ridge_b: Ridge values for trial and aggregator regressors
+#'   \item return_se: Return standard errors (default FALSE)
+#'   \item return_diag: Return design diagnostics (default FALSE)
+#'   \item block_cols: Voxel block size (default 4096)
+#' }
 #'
 #' @references
 #' Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
@@ -82,18 +95,12 @@
 #'
 #' @export
 lss <- function(Y, X, Z = NULL, Nuisance = NULL, 
-                method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive"),
-                block_size = 96) {
+                method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive", "oasis"),
+                block_size = 96, oasis = list()) {
   
   # Input validation
   if (!is.matrix(Y) || !is.numeric(Y)) {
     stop("Y must be a numeric matrix")
-  }
-  if (!is.matrix(X) || !is.numeric(X)) {
-    stop("X must be a numeric matrix")
-  }
-  if (nrow(Y) != nrow(X)) {
-    stop("Y and X must have the same number of rows (timepoints)")
   }
   if (!is.null(Z) && (!is.matrix(Z) || !is.numeric(Z) || nrow(Z) != nrow(Y))) {
     stop("Z must be a numeric matrix with the same number of rows as Y")
@@ -103,6 +110,24 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   }
   
   method <- match.arg(method)
+  
+  # Handle OASIS method separately (it has different X requirements)
+  if (method == "oasis") {
+    # Allow X to be NULL for OASIS if design_spec is provided
+    if (is.null(X) && is.null(oasis$design_spec)) {
+      stop("For method='oasis', either X or oasis$design_spec must be provided")
+    }
+    # OASIS handles its own validation and dispatch
+    return(.lss_oasis(Y, X, Z, Nuisance, oasis))
+  }
+  
+  # For non-OASIS methods, X is required
+  if (!is.matrix(X) || !is.numeric(X)) {
+    stop("X must be a numeric matrix")
+  }
+  if (nrow(Y) != nrow(X)) {
+    stop("Y and X must have the same number of rows (timepoints)")
+  }
   
   # Set up default experimental regressors (intercept) if not provided
   if (is.null(Z)) {
