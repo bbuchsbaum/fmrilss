@@ -9,8 +9,9 @@ lss(
   X,
   Z = NULL,
   Nuisance = NULL,
-  method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive"),
-  block_size = 96
+  method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive", "oasis"),
+  block_size = 96,
+  oasis = list()
 )
 }
 \arguments{
@@ -37,10 +38,13 @@ Options are:
   \item "r_vectorized" - Standard R vectorized implementation  
   \item "cpp" - Standard C++ implementation
   \item "naive" - Simple loop-based R implementation (for testing)
+  \item "oasis" - OASIS method with HRF support and ridge regularization
 }}
 
 \item{block_size}{An integer specifying the voxel block size for parallel
 processing, only applicable when `method = "cpp_optimized"`. Defaults to 96.}
+
+\item{oasis}{A list of options for the OASIS method. See Details for available options.}
 }
 \value{
 A numeric matrix of size T × V containing the trial-wise beta estimates.
@@ -62,6 +66,17 @@ The LSS approach fits a separate GLM for each trial, where each model includes:
 
 If Nuisance regressors are provided, they are first projected out from both
 Y and X using standard linear regression residualization.
+
+When using method="oasis", the following options are available in the oasis list:
+\itemize{
+  \item design_spec: List for building designs from events using fmrihrf
+  \item K: Explicit basis dimension (auto-detected if not provided)
+  \item ridge_mode: "absolute" (default) or "fractional"
+  \item ridge_x, ridge_b: Ridge values for trial and aggregator regressors
+  \item return_se: Return standard errors (default FALSE)
+  \item return_diag: Return design diagnostics (default FALSE)
+  \item block_cols: Voxel block size (default 4096)
+}
 }
 \examples{
 # Generate example data

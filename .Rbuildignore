@@ -8,3 +8,5 @@ codemeta.json
 _pkgdown.yml
 docs
 repomix-output.xml
+^doc$
+^Meta$

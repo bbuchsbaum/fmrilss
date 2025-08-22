@@ -1,26 +1,10 @@
----
-title: "Voxel-wise HRF Modeling with fmrilss"
-output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Voxel-wise HRF Modeling with fmrilss}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
----
-
-```{r, include = FALSE}
+## ----include = FALSE----------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-```
 
-This vignette demonstrates how to use `fmrilss` to perform LSS analysis with voxel-wise HRF modeling.
-
-## 1. Generate Example Data
-
-First, let's create some simulated fMRI data with known HRF variations across voxels.
-
-```{r simulate}
+## ----simulate-----------------------------------------------------------------
 library(fmrilss)
 set.seed(123)
 
@@ -62,13 +46,8 @@ for (trial in 1:n_trials) {
 
 # Add noise
 Y <- Y + matrix(rnorm(n_time * n_vox, sd = 0.2), n_time, n_vox)
-```
 
-## 2. Standard LSS Analysis
-
-First, let's run a standard LSS analysis assuming the same HRF for all voxels:
-
-```{r standard-lss}
+## ----standard-lss-------------------------------------------------------------
 # Create design matrix with convolved events
 X <- matrix(0, n_time, n_trials)
 for (trial in 1:n_trials) {
@@ -81,13 +60,8 @@ for (trial in 1:n_trials) {
 # Run standard LSS
 standard_betas <- lss(Y, X, method = "r_optimized")
 print(round(standard_betas, 2))
-```
 
-## 3. Voxel-wise HRF LSS Analysis
-
-Now let's use the voxel-wise HRF approach. For this example, we'll simulate having estimated voxel-specific HRF weights:
-
-```{r voxel-hrf-lss}
+## ----voxel-hrf-lss------------------------------------------------------------
 # Simulate estimated HRF coefficients (in real analysis, these would come from estimate_voxel_hrf)
 # Here we use the known voxel scalings with some estimation error
 coefficients <- matrix(c(0.8, 1.1, 1.4) + rnorm(3, sd = 0.1), nrow = 1, ncol = n_vox)
@@ -120,13 +94,8 @@ voxel_betas <- fmrilss:::lss_with_hrf_pure_r(
 )
 
 print(round(voxel_betas, 2))
-```
 
-## 4. Compare Results
-
-Let's compare the standard LSS and voxel-wise HRF LSS results:
-
-```{r compare}
+## ----compare------------------------------------------------------------------
 # Calculate correlation between estimated and true betas
 cor_standard <- cor(as.vector(standard_betas), as.vector(true_betas))
 cor_voxel <- cor(as.vector(voxel_betas), as.vector(true_betas))
@@ -148,19 +117,4 @@ plot(true_betas, voxel_betas,
      main = paste("Voxel-wise HRF LSS (r =", round(cor_voxel, 2), ")"),
      pch = 19, col = rep(1:n_vox, each = n_trials))
 abline(0, 1, lty = 2)
-```
 
-## Summary
-
-This vignette demonstrated how voxel-wise HRF modeling can improve LSS beta estimation when HRF characteristics vary across voxels. The voxel-wise approach accounts for these variations, potentially leading to more accurate trial-wise beta estimates.
-
-In practice, you would:
-
-1. Use `estimate_voxel_hrf()` to estimate HRF basis coefficients for each voxel
-2. Pass these estimates to `lss_with_hrf()` for voxel-wise HRF LSS analysis
-3. Choose the appropriate computational backend (R, C++, or OpenMP) based on your data size
-
-The voxel-wise HRF approach is particularly useful when:
-- HRF shapes vary across brain regions
-- Analyzing data from populations with altered hemodynamics
-- Working with high-resolution fMRI where vascular differences are more apparent

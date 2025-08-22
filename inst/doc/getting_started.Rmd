@@ -1,0 +1,142 @@
+---
+title: "Getting Started with fmrilss"
+author: "Your Name"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with fmrilss}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction to Least Squares Separate (LSS)
+
+The `fmrilss` package provides a fast and flexible implementation of the Least Squares Separate (LSS) modeling approach, first proposed by Mumford et al. (2012). LSS is a powerful method for analyzing event-related fMRI data, especially for studies involving multivariate pattern analysis (MVPA) or functional connectivity.
+
+The core idea of LSS is to estimate a separate GLM for each trial. For a given trial, the model includes:
+
+1.  A regressor for the **trial of interest**.
+2.  A single regressor for **all other trials** combined.
+3.  **Experimental regressors** that we want to model and estimate, but not trial-wise (e.g., intercept, condition effects, block effects).
+4.  **Nuisance regressors** that we want to remove from the data before analysis (e.g., motion parameters, physiological noise).
+
+This process is repeated for every trial, yielding a unique beta estimate for each one.
+
+## The `lss()` Function
+
+The main entry point to the package is the `lss()` function, which has a clean and modern interface:
+
+```r
+lss(Y, X, Z = NULL, Nuisance = NULL, method = "r_optimized")
+```
+
+-   `Y`: The data matrix (timepoints x voxels).
+-   `X`: The trial design matrix (timepoints x trials).
+-   `Z`: A matrix of experimental regressors we want to model and get beta estimates for, but not trial-wise (e.g., intercept, condition effects, block effects). Defaults to an intercept if `NULL`.
+-   `Nuisance`: A matrix of nuisance regressors to be projected out before analysis (e.g., motion parameters, physiological noise).
+-   `method`: The computational backend to use. Options range from a simple `naive` R loop to a highly optimized and parallelized `"cpp_optimized"` engine.
+
+## A Practical Example
+
+Let's walk through a complete example, from generating data to running the analysis.
+
+### 1. Load the Package and Prepare Data
+
+First, we load `fmrilss` and set up our parameters.
+
+```{r setup}
+library(fmrilss)
+
+set.seed(42)
+n_timepoints <- 150
+n_trials <- 12
+n_voxels <- 25
+```
+
+### 2. Create Design Matrices
+
+Next, we create the core components of our model.
+
+-   **Trial Matrix (`X`)**: A matrix where each column represents the predicted BOLD response for a single trial.
+-   **Experimental Regressors (`Z`)**: A matrix for experimental regressors that we want to model and get beta estimates for, but not trial-wise. These might include condition effects, block effects, or other experimental factors that vary across the session but not trial-by-trial.
+-   **Nuisance Matrix**: Regressors we want to remove from the data before modeling, such as motion parameters or physiological noise.
+
+```{r design}
+# Trial design matrix (X)
+X <- matrix(0, n_timepoints, n_trials)
+onsets <- seq(from = 10, to = n_timepoints - 12, length.out = n_trials)
+for(i in 1:n_trials) {
+  X[onsets[i]:(onsets[i] + 5), i] <- 1
+}
+
+# Experimental regressors (Z) - intercept and condition effects
+# These are regressors we want to model and get estimates for, but not trial-wise
+Z <- cbind(Intercept = 1, LinearTrend = scale(1:n_timepoints, center = TRUE, scale = FALSE))
+
+# Nuisance regressors - e.g., 6 motion parameters
+Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)
+```
+
+### 3. Simulate Data (`Y`)
+
+Now, we'll generate a synthetic data matrix `Y` that includes signals from our regressors plus some random noise.
+
+```{r data}
+# Simulate effects for each component
+true_trial_betas <- matrix(rnorm(n_trials * n_voxels, 0, 1.2), n_trials, n_voxels)
+true_fixed_effects <- matrix(rnorm(2 * n_voxels, c(5, -0.1), 0.5), 2, n_voxels)
+true_nuisance_effects <- matrix(rnorm(6 * n_voxels, 0, 2), 6, n_voxels)
+
+# Combine signals and add noise
+Y <- (Z %*% true_fixed_effects) + 
+     (X %*% true_trial_betas) +
+     (Nuisance %*% true_nuisance_effects) +
+     matrix(rnorm(n_timepoints * n_voxels, 0, 1), n_timepoints, n_voxels)
+```
+
+### 4. Run the LSS Analysis
+
+With our data prepared, we can now run the `lss` analysis.
+
+#### Basic Usage
+If you only provide the data `Y` and the trial matrix `X`, the function will automatically include an intercept.
+
+```{r lss_basic}
+beta_basic <- lss(Y, X)
+# The result is a trials-by-voxels matrix
+dim(beta_basic)
+```
+
+#### Including Experimental Regressors and Nuisance Regressors
+For a more realistic analysis, we include our `Z` and `Nuisance` matrices. The nuisance regressors are projected out of both `Y` and `X` before the trial-wise GLMs are estimated, while the experimental regressors in `Z` are included in every trial-wise GLM to get their beta estimates.
+
+```{r lss_advanced}
+beta_full <- lss(Y, X, Z = Z, Nuisance = Nuisance)
+# The output dimensions remain the same
+dim(beta_full)
+```
+
+### 5. Choosing a High-Performance Method
+
+While the default R implementation is well-optimized, the C++ backend offers a significant speedup, especially for large datasets. It is also parallelized with OpenMP to use multiple CPU cores. To use it, simply set `method = "cpp_optimized"`.
+
+```{r lss_cpp, eval=require("Rcpp") && require("RcppArmadillo")}
+# Run the same analysis with the high-performance C++ engine
+beta_fast <- lss(Y, X, Z = Z, Nuisance = Nuisance, method = "cpp_optimized")
+
+# The results are numerically identical to the R version
+all.equal(beta_full, beta_fast, tolerance = 1e-8)
+```
+
+This makes it easy to switch between a readable R implementation and a high-performance C++ engine without changing any other code.
+
+## References
+
+Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012). Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses. *NeuroImage*, 59(3), 2636-2643. 

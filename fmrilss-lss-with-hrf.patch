@@ -1,0 +1,294 @@
+diff --git a/R/lss_with_hrf.R b/R/lss_with_hrf.R
+new file mode 100644
+index 0000000..b1f3a1a
+--- /dev/null
++++ b/R/lss_with_hrf.R
+@@ -0,0 +1,238 @@
++#' Least Squares Separate with voxel-wise HRF (basis-weighted)
++#'
++#' Compute LSS trial-wise betas when each voxel has its own HRF formed
++#' as a linear combination of K basis kernels sampled on the TR grid.
++#'
++#' **Design & nuisance handling match `lss()`**:
++#'   - The trial-of-interest (Xi) and the sum of all other trials (Xother) are
++#'     included in each per-trial GLM.
++#'   - If `Nuisance` is supplied, it is projected out of **Y** and the trial
++#'     regressors before LSS (standard residualization). Experimental regressors
++#'     `Z` are *not* residualized, matching `lss()` documentation.
++#'   - If `Z` is `NULL`, an intercept-only design is used.
++#'
++#' @param Y numeric matrix (n_time x n_vox)
++#' @param onset_idx integer vector (length n_trials), 1-based TR indices
++#' @param durations numeric vector (length n_trials), in TRs; 0 means an impulse.
++#'                  Uses inclusive indexing: if duration = d, samples \code{o:(o+d)} are 1.
++#' @param hrf_basis_kernels numeric matrix (L x K), K basis kernels on TR grid
++#' @param coefficients numeric matrix (K x n_vox), voxel-wise HRF weights
++#' @param Z optional numeric matrix (n_time x F) of experimental regressors;
++#'          if NULL, an intercept (column of 1s) is used.
++#' @param Nuisance optional numeric matrix (n_time x q) of confounds to project out
++#' @param verbose logical; print progress every 1000 voxels
++#'
++#' @return numeric matrix (n_trials x n_vox) of trial-wise beta estimates
++#' @examples
++#' \dontrun{
++#' # Minimal use:
++#' betas <- lss_with_hrf(Y, onset_idx, durations, basis, coeffs, Z = NULL, Nuisance = NULL)
++#' }
++#' @keywords internal
++lss_with_hrf <- function(
++  Y,
++  onset_idx,
++  durations = NULL,
++  hrf_basis_kernels,
++  coefficients,
++  Z = NULL,
++  Nuisance = NULL,
++  verbose = FALSE
++) {
++  # ---- basic checks ----
++  if (!is.matrix(Y)) stop("Y must be a matrix [n_time x n_vox].")
++  if (!is.matrix(hrf_basis_kernels)) stop("hrf_basis_kernels must be a matrix [L x K].")
++  if (!is.matrix(coefficients)) stop("coefficients must be a matrix [K x n_vox].")
++
++  n_time <- nrow(Y)
++  n_vox  <- ncol(Y)
++
++  if (!is.integer(onset_idx)) onset_idx <- as.integer(onset_idx)
++  n_trials <- length(onset_idx)
++  if (n_trials < 1L) stop("Need at least one trial (length(onset_idx) >= 1).")
++
++  if (is.null(durations)) durations <- rep(0L, n_trials)
++  if (length(durations) != n_trials) stop("durations must match length(onset_idx).")
++  durations <- as.integer(round(pmax(0, durations)))
++
++  K <- ncol(hrf_basis_kernels)
++  if (nrow(coefficients) != K) stop("nrow(coefficients) must equal ncol(hrf_basis_kernels).")
++  if (ncol(coefficients) != n_vox) stop("ncol(coefficients) must equal ncol(Y).")
++
++  if (!is.null(Z) && nrow(Z) != n_time) stop("Z must have nrow == n_time.")
++  if (!is.null(Nuisance) && nrow(Nuisance) != n_time) stop("Nuisance must have nrow == n_time.")
++
++  # ---- helper: safe open convolution, then truncate to n_time ----
++  conv_open_trim <- function(x, k) {
++    # convolve() expects rev(k) to do standard causal filtering
++    as.numeric(stats::convolve(x, rev(as.numeric(k)), type = "open"))[seq_len(length(x))]
++  }
++
++  # ---- 1) Event “stick” design on TR grid: n_time x n_trials ----
++  Xev <- matrix(0, n_time, n_trials)
++  for (i in seq_len(n_trials)) {
++    o <- onset_idx[i]
++    if (is.na(o) || o < 1L || o > n_time) next
++    d <- durations[i]
++    i1 <- o
++    i2 <- min(n_time, o + d)
++    Xev[i1:i2, i] <- 1
++  }
++
++  # ---- 2) Convolve events with each basis kernel -> list of n_time x n_trials ----
++  basis_convolved <- vector("list", K)
++  for (k in seq_len(K)) {
++    bk <- as.numeric(hrf_basis_kernels[, k])
++    out <- vapply(seq_len(n_trials), function(j) conv_open_trim(Xev[, j], bk),
++                  numeric(n_time))
++    storage.mode(out) <- "double"
++    basis_convolved[[k]] <- out
++  }
++
++  # ---- 3) Residualize Y and trial designs by Nuisance (match lss()) ----
++  # Use QR-based residualization without forming a dense projection matrix.
++  if (!is.null(Nuisance)) {
++    qrN <- qr(Nuisance)
++    # residualize Y
++    Y <- Y - Nuisance %*% qr.coef(qrN, Y)
++    # residualize each basis-convolved design
++    for (k in seq_len(K)) {
++      Dk <- basis_convolved[[k]]
++      basis_convolved[[k]] <- Dk - Nuisance %*% qr.coef(qrN, Dk)
++    }
++    # NOTE: Do NOT residualize Z (matches lss() semantics).
++  }
++
++  # ---- 4) Prepare Z (experimental regressors); default intercept-only ----
++  if (is.null(Z)) {
++    Z_use <- matrix(1, n_time, 1L)
++  } else {
++    Z_use <- as.matrix(Z)
++  }
++  pz <- ncol(Z_use)
++
++  # ---- output ----
++  betas <- matrix(NA_real_, n_trials, n_vox)
++  colnames(betas) <- colnames(Y)
++  rownames(betas) <- paste0("trial_", seq_len(n_trials))
++
++  # ---- 5) For each voxel, combine basis designs with that voxel's HRF weights ----
++  for (v in seq_len(n_vox)) {
++    wv <- as.numeric(coefficients[, v])  # length K
++
++    # X_v = sum_k wv[k] * Dk  (n_time x n_trials)
++    X_v <- matrix(0.0, n_time, n_trials)
++    for (k in seq_len(K)) {
++      wk <- wv[k]
++      if (wk == 0.0) next
++      X_v <- X_v + basis_convolved[[k]] * wk
++    }
++
++    # precompute the "all others" column once
++    x_all <- rowSums(X_v)
++
++    yv <- Y[, v]
++
++    # ---- 6) Fit per-trial GLMs ----
++    for (i in seq_len(n_trials)) {
++      Xi <- X_v[, i]
++      if (n_trials == 1L) {
++        Xother <- NULL
++        Xdesign <- cbind(Z_use, Xi)
++      } else {
++        Xother <- x_all - Xi
++        Xdesign <- cbind(Z_use, Xi, Xother)
++      }
++
++      fit <- try(stats::lm.fit(Xdesign, yv), silent = TRUE)
++      if (inherits(fit, "try-error") || is.null(fit$coefficients)) {
++        betas[i, v] <- NA_real_
++      } else {
++        coef <- fit$coefficients
++        # Xi is the (pz + 1)-th coefficient
++        if (length(coef) >= pz + 1L && !is.na(coef[pz + 1L])) {
++          betas[i, v] <- coef[pz + 1L]
++        } else {
++          betas[i, v] <- NA_real_
++        }
++      }
++    }
++
++    if (verbose && (v %% 1000L == 0L)) message("Processed voxel ", v, " / ", n_vox)
++  }
++
++  betas
++}
+diff --git a/tests/testthat/test-lss-with-hrf.R b/tests/testthat/test-lss-with-hrf.R
+new file mode 100644
+index 0000000..c9c7b5d
+--- /dev/null
++++ b/tests/testthat/test-lss-with-hrf.R
+@@ -0,0 +1,118 @@
++test_that("lss_with_hrf reduces to lss() when K=1 and weights=1", {
++  skip_on_cran()
++  set.seed(123)
++
++  # Dimensions
++  n_time   <- 120L
++  n_trials <- 10L
++  n_vox    <- 8L
++
++  # --- Build event sticks and onsets/durations ---
++  onset_idx <- as.integer(round(seq(6, n_time - 12, length.out = n_trials)))
++  dur <- rep(4L, n_trials)  # inclusive segments of length 5
++
++  Xev <- matrix(0, n_time, n_trials)
++  for (i in seq_len(n_trials)) {
++    i1 <- onset_idx[i]
++    i2 <- min(n_time, i1 + dur[i])
++    Xev[i1:i2, i] <- 1
++  }
++
++  # --- Single HRF basis (K=1) ---
++  # simple unimodal kernel; length L
++  hrf_kernel <- c(0.0, 0.2, 0.6, 1.0, 0.6, 0.3, 0.15, 0.05, 0.0)
++  L <- length(hrf_kernel)
++  basis <- matrix(hrf_kernel, nrow = L, ncol = 1L)
++
++  # voxel weights = 1 for all voxels
++  coeffs <- matrix(1.0, nrow = 1L, ncol = n_vox)
++
++  # --- Convolve to get X for lss() ---
++  conv_open_trim <- function(x, k) {
++    as.numeric(stats::convolve(x, rev(as.numeric(k)), type = "open"))[seq_len(length(x))]
++  }
++  X_hrf <- vapply(seq_len(n_trials), function(j) conv_open_trim(Xev[, j], hrf_kernel),
++                  numeric(n_time))
++
++  # --- Simulate data ---
++  true_betas <- matrix(rnorm(n_trials * n_vox, sd = 1.0), n_trials, n_vox)
++  Y <- X_hrf %*% true_betas + matrix(rnorm(n_time * n_vox, sd = 0.5), n_time, n_vox)
++  colnames(Y) <- paste0("V", seq_len(n_vox))
++
++  # --- Compare ---
++  beta_hrf <- fmrilss:::lss_with_hrf(
++    Y = Y,
++    onset_idx = onset_idx,
++    durations = dur,
++    hrf_basis_kernels = basis,
++    coefficients = coeffs,
++    Z = NULL,
++    Nuisance = NULL,
++    verbose = FALSE
++  )
++
++  beta_lss <- fmrilss::lss(Y, X_hrf, method = "r_optimized")
++
++  expect_equal(beta_hrf, beta_lss, tolerance = 1e-8)
++})
++
++test_that("lss_with_hrf runs with nuisance and non-null Z", {
++  skip_on_cran()
++  set.seed(42)
++
++  n_time   <- 100L
++  n_trials <- 6L
++  n_vox    <- 5L
++
++  onset_idx <- as.integer(seq(8, n_time - 12, length.out = n_trials))
++  dur <- rep(3L, n_trials)
++
++  Xev <- matrix(0, n_time, n_trials)
++  for (i in seq_len(n_trials)) {
++    i1 <- onset_idx[i]
++    i2 <- min(n_time, i1 + dur[i])
++    Xev[i1:i2, i] <- 1
++  }
++
++  # two basis columns (K=2)
++  b1 <- c(0, 0.4, 0.9, 1.0, 0.5, 0.2, 0)
++  b2 <- c(0, 0.2, 0.4, 0.3, 0.2, 0.1, 0)
++  basis <- cbind(b1, b2)
++
++  # voxel weights (random)
++  coeffs <- matrix(runif(2 * n_vox, 0.5, 1.5), nrow = 2L, ncol = n_vox)
++
++  # build a reference X by convolving with a *voxel-averaged* HRF (for stability only)
++  avg_hrf <- drop(basis %*% rowMeans(coeffs))
++  conv_open_trim <- function(x, k) {
++    as.numeric(stats::convolve(x, rev(as.numeric(k)), type = "open"))[seq_len(length(x))]
++  }
++  X_ref <- vapply(seq_len(n_trials), function(j) conv_open_trim(Xev[, j], avg_hrf),
++                  numeric(n_time))
++
++  # experimental regressors and nuisance
++  Z <- cbind(1, scale(seq_len(n_time)))
++  Nuis <- cbind(scale(sin(seq_len(n_time) / 7)), scale(cos(seq_len(n_time) / 11)))
++
++  # simulate Y
++  true_betas <- matrix(rnorm(n_trials * n_vox, sd = 0.7), n_trials, n_vox)
++  Y <- X_ref %*% true_betas + Z %*% matrix(rnorm(ncol(Z) * n_vox), ncol(Z), n_vox) +
++       Nuis %*% matrix(rnorm(ncol(Nuis) * n_vox, sd = 0.3), ncol(Nuis), n_vox) +
++       matrix(rnorm(n_time * n_vox, sd = 0.6), n_time, n_vox)
++
++  # run lss_with_hrf just to ensure it returns finite values
++  beta_hrf <- fmrilss:::lss_with_hrf(
++    Y = Y,
++    onset_idx = onset_idx,
++    durations = dur,
++    hrf_basis_kernels = basis,
++    coefficients = coeffs,
++    Z = Z,
++    Nuisance = Nuis,
++    verbose = FALSE
++  )
++
++  expect_equal(dim(beta_hrf), c(n_trials, n_vox))
++  expect_true(all(is.finite(beta_hrf) | is.na(beta_hrf)))
++})

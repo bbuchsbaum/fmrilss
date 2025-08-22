@@ -1,0 +1,367 @@
+diff --git a/src/lss_vox_hrf_arma_omp.cpp b/src/lss_vox_hrf_arma_omp.cpp
+new file mode 100644
+index 0000000..a1b4c9e
+--- /dev/null
++++ b/src/lss_vox_hrf_arma_omp.cpp
+@@ -0,0 +1,252 @@
++#include <RcppArmadillo.h>
++#ifdef _OPENMP
++  #include <omp.h>
++#endif
++
++// [[Rcpp::depends(RcppArmadillo)]]
++using namespace Rcpp;
++
++// Convert an R list of matrices into a vector of Armadillo views (no copies).
++static std::vector<arma::Mat<double>> as_arma_list(const List& L, int expected_rows, int expected_cols) {
++  const int K = L.size();
++  std::vector<arma::Mat<double>> out;
++  out.reserve(K);
++  for (int k = 0; k < K; ++k) {
++    NumericMatrix Mk = as<NumericMatrix>(L[k]);
++    if (Mk.nrow() != expected_rows || Mk.ncol() != expected_cols) {
++      stop("basis_convolved[[%d]] has inconsistent dimensions: expected %d x %d, got %d x %d",
++           k + 1, expected_rows, expected_cols, Mk.nrow(), Mk.ncol());
++    }
++    arma::Mat<double> Vk(Mk.begin(), Mk.nrow(), Mk.ncol(), /*copy_aux_mem=*/false, /*strict=*/true);
++    out.push_back(Vk);
++  }
++  return out;
++}
++
++inline arma::vec ridge_normal_eq(const arma::mat& X, const arma::vec& y) {
++  const arma::mat XtX = X.t() * X;
++  double lam = 1e-8 * XtX.diag().max();
++  arma::mat A = XtX;
++  A.diag() += lam;
++  arma::vec b = X.t() * y;
++  // prefer symmetric positive definite solver if possible
++  arma::vec beta;
++  bool ok = arma::solve(beta, A, b, arma::solve_opts::likely_sympd + arma::solve_opts::equilibrate);
++  if (!ok) {
++    // fall back to generic solver
++    beta = arma::solve(A, b);
++  }
++  return beta;
++}
++
++inline arma::vec qr_coef(const arma::mat& X, const arma::vec& y) {
++  arma::mat Q, R;
++  // economical QR: X = Q (n x p) * R (p x p), with p <= n
++  arma::qr_econ(Q, R, X);
++  // Solve R * beta = Q' * y
++  arma::vec qty = Q.t() * y;
++  arma::vec beta;
++  bool ok = arma::solve(beta, arma::trimatu(R), qty, arma::solve_opts::fast);
++  if (!ok) {
++    // Rare: fallback to ridge-stabilized normal equations
++    beta = ridge_normal_eq(X, y);
++  }
++  return beta;
++}
++
++// Core engine using Armadillo (sequential)
++// [[Rcpp::export]]
++Rcpp::NumericMatrix lss_engine_vox_hrf_arma(
++    const Rcpp::NumericMatrix& Y,       // n_time x n_vox
++    const Rcpp::NumericMatrix& coeffs,  // K x n_vox
++    const Rcpp::List& basis_convolved,  // length K; each n_time x n_trials
++    const Rcpp::NumericMatrix& Z        // n_time x pz (>=1; intercept allowed)
++) {
++  const int n_time   = Y.nrow();
++  const int n_vox    = Y.ncol();
++  const int K        = coeffs.nrow();
++  const int n_trials = as<Rcpp::NumericMatrix>(basis_convolved[0]).ncol();
++  const int pz       = Z.ncol();
++
++  if (coeffs.ncol() != n_vox) stop("coeffs must be [K x n_vox] with n_vox matching Y");
++  if (pz < 1) stop("Z must have at least one column (e.g., intercept).");
++
++  // Armadillo views (no copies)
++  arma::Mat<double> Ya(const_cast<double*>(Y.begin()), n_time, n_vox, false, true);
++  arma::Mat<double> Ca(const_cast<double*>(coeffs.begin()), K, n_vox, false, true);
++  arma::Mat<double> Za(const_cast<double*>(Z.begin()), n_time, pz, false, true);
++  std::vector<arma::Mat<double>> Dk = as_arma_list(basis_convolved, n_time, n_trials);
++
++  Rcpp::NumericMatrix betas(n_trials, n_vox);
++  arma::Mat<double> Betas(betas.begin(), n_trials, n_vox, false, true);
++
++  for (int v = 0; v < n_vox; ++v) {
++    // Combine per-basis convolved designs using voxel weights
++    arma::mat Xv(n_time, n_trials, arma::fill::zeros);
++    for (int k = 0; k < K; ++k) {
++      const double w = Ca(k, v);
++      if (w == 0.0) continue;
++      Xv += w * Dk[k];
++    }
++    arma::vec xall = arma::sum(Xv, 1);     // row-wise sums (n_time x 1)
++    arma::vec yv   = Ya.col(v);            // voxel time series
++
++    for (int i = 0; i < n_trials; ++i) {
++      const bool have_other = (n_trials > 1);
++      const int p = pz + 1 + (have_other ? 1 : 0);
++      arma::mat Xd(n_time, p);
++      // Z
++      Xd.cols(0, pz - 1) = Za;
++      // Xi
++      Xd.col(pz) = Xv.col(i);
++      // Xother
++      if (have_other) Xd.col(pz + 1) = xall - Xv.col(i);
++
++      arma::vec beta = qr_coef(Xd, yv);
++      Betas(i, v) = beta(pz);  // coefficient of Xi
++    }
++  }
++
++  return betas;
++}
++
++// OpenMP-parallel engine using Armadillo (parallel over voxels)
++// [[Rcpp::export]]
++Rcpp::NumericMatrix lss_engine_vox_hrf_omp(
++    const Rcpp::NumericMatrix& Y,       // n_time x n_vox
++    const Rcpp::NumericMatrix& coeffs,  // K x n_vox
++    const Rcpp::List& basis_convolved,  // length K; each n_time x n_trials
++    const Rcpp::NumericMatrix& Z        // n_time x pz (>=1; intercept allowed)
++) {
++  const int n_time   = Y.nrow();
++  const int n_vox    = Y.ncol();
++  const int K        = coeffs.nrow();
++  const int n_trials = as<Rcpp::NumericMatrix>(basis_convolved[0]).ncol();
++  const int pz       = Z.ncol();
++
++  if (coeffs.ncol() != n_vox) stop("coeffs must be [K x n_vox] with n_vox matching Y");
++  if (pz < 1) stop("Z must have at least one column (e.g., intercept).");
++
++  arma::Mat<double> Ya(const_cast<double*>(Y.begin()), n_time, n_vox, false, true);
++  arma::Mat<double> Ca(const_cast<double*>(coeffs.begin()), K, n_vox, false, true);
++  arma::Mat<double> Za(const_cast<double*>(Z.begin()), n_time, pz, false, true);
++  std::vector<arma::Mat<double>> Dk = as_arma_list(basis_convolved, n_time, n_trials);
++
++  Rcpp::NumericMatrix betas(n_trials, n_vox);
++  arma::Mat<double> Betas(betas.begin(), n_trials, n_vox, false, true);
++
++  // Parallelize across voxels; each thread writes to distinct column of Betas
++  #ifdef _OPENMP
++  #pragma omp parallel for schedule(static)
++  #endif
++  for (int v = 0; v < n_vox; ++v) {
++    arma::mat Xv(n_time, n_trials, arma::fill::zeros);
++    for (int k = 0; k < K; ++k) {
++      const double w = Ca(k, v);
++      if (w == 0.0) continue;
++      Xv += w * Dk[k];
++    }
++    arma::vec xall = arma::sum(Xv, 1);
++    arma::vec yv   = Ya.col(v);
++
++    for (int i = 0; i < n_trials; ++i) {
++      const bool have_other = (n_trials > 1);
++      const int p = pz + 1 + (have_other ? 1 : 0);
++      arma::mat Xd(n_time, p);
++      Xd.cols(0, pz - 1) = Za;
++      Xd.col(pz) = Xv.col(i);
++      if (have_other) Xd.col(pz + 1) = xall - Xv.col(i);
++
++      arma::vec beta = qr_coef(Xd, yv);
++      Betas(i, v) = beta(pz);
++    }
++  }
++
++  return betas;
++}
+diff --git a/R/lss_with_hrf.R b/R/lss_with_hrf.R
+index 9f2d5a3..d41a6ac 100644
+--- a/R/lss_with_hrf.R
++++ b/R/lss_with_hrf.R
+@@ -23,11 +23,14 @@
+ #' @param Nuisance optional numeric matrix (n_time x q) of confounds to project out
+ #' @param verbose logical; print progress every 1000 voxels
+ #'
+ #' @return numeric matrix (n_trials x n_vox) of trial-wise beta estimates
+-#' @param method character: "r" (default, pure R) or "cpp" (C++ backend). If "cpp"
+-#'   is requested but not available, falls back to "r".
++#' @param method character: one of "r" (default, pure R), "cpp" (C++ + R qr),
++#'   "cpp_arma" (C++/Armadillo solver), or "cpp_omp" (OpenMP-parallel Armadillo).
++#'   If the requested method isn't available in the build, the function falls back
++#'   to a working alternative in the order: cpp_omp -> cpp_arma -> cpp -> r.
+ #' @examples
+ #' \dontrun{
+ #' # Minimal use (R backend):
+ #' betas <- lss_with_hrf(Y, onset_idx, durations, basis, coeffs, Z = NULL, Nuisance = NULL)
++#' # Faster backends:
++#' betas_cpp <- lss_with_hrf(Y, onset_idx, durations, basis, coeffs, method = "cpp_omp")
+ #' }
+ #' @keywords internal
+ lss_with_hrf <- function(
+   Y,
+   onset_idx,
+@@ -37,7 +40,7 @@
+   coefficients,
+   Z = NULL,
+   Nuisance = NULL,
+   verbose = FALSE,
+-  method = c("r", "cpp")
++  method = c("r", "cpp", "cpp_arma", "cpp_omp")
+ ) {
+   method <- match.arg(method)
+   # ---- basic checks ----
+@@ -109,17 +112,32 @@
+   rownames(betas) <- paste0("trial_", seq_len(n_trials))
+ 
+   # ---- optional: C++ backend ----
+-  if (method == "cpp") {
+-    # Check that compiled symbol exists; otherwise fall back
+-    have_cpp <- FALSE
+-    try({
+-      get("lss_engine_vox_hrf_cpp", envir = asNamespace("fmrilss"))
+-      have_cpp <- TRUE
+-    }, silent = TRUE)
+-
+-    if (have_cpp) {
+-      betas_cpp <- lss_engine_vox_hrf_cpp(
+-        Y = Y,
+-        coeffs = coefficients,
+-        basis_convolved = basis_convolved,
+-        Z = Z_use
+-      )
+-      dimnames(betas_cpp) <- dimnames(betas)
+-      return(betas_cpp)
+-    }
++  ns <- asNamespace("fmrilss")
++  has_sym <- function(s) exists(s, envir = ns, inherits = FALSE)
++
++  try_cpp <- function(sym) {
++    do.call(sym, list(Y = Y, coeffs = coefficients,
++                      basis_convolved = basis_convolved, Z = Z_use),
++            envir = ns)
++  }
++
++  if (method %in% c("cpp_omp", "cpp_arma", "cpp")) {
++    # Priority order depending on requested method
++    order_syms <- switch(method,
++      cpp_omp  = c("lss_engine_vox_hrf_omp", "lss_engine_vox_hrf_arma", "lss_engine_vox_hrf_cpp"),
++      cpp_arma = c("lss_engine_vox_hrf_arma", "lss_engine_vox_hrf_cpp"),
++      cpp      = c("lss_engine_vox_hrf_cpp"),
++      character()
++    )
++
++    for (sym in order_syms) {
++      if (has_sym(sym)) {
++        betas_cpp <- try(try_cpp(sym), silent = TRUE)
++        if (!inherits(betas_cpp, "try-error")) {
++          dimnames(betas_cpp) <- dimnames(betas)
++          return(betas_cpp)
++        }
++      }
++    }
++    # fallthrough to R backend if none available
+   }
+ 
+   # ---- 5) For each voxel, combine basis designs with that voxel's HRF weights ----
+diff --git a/tests/testthat/test-lss-with-hrf-backends.R b/tests/testthat/test-lss-with-hrf-backends.R
+new file mode 100644
+index 0000000..47f9a3d
+--- /dev/null
++++ b/tests/testthat/test-lss-with-hrf-backends.R
+@@ -0,0 +1,85 @@
++test_that("cpp_arma and cpp_omp backends match R backend", {
++  skip_on_cran()
++  set.seed(11)
++
++  n_time <- 120L; n_trials <- 9L; n_vox <- 7L
++  onset_idx <- as.integer(seq(6, n_time - 14, length.out = n_trials))
++  dur <- rep(3L, n_trials)
++
++  Xev <- matrix(0, n_time, n_trials)
++  for (i in seq_len(n_trials)) {
++    i1 <- onset_idx[i]; i2 <- min(n_time, i1 + dur[i]); Xev[i1:i2, i] <- 1
++  }
++
++  b1 <- c(0, 0.3, 0.9, 1.0, 0.6, 0.2, 0)
++  b2 <- c(0, 0.15, 0.5, 0.45, 0.25, 0.1, 0)
++  b3 <- c(0, 0.2, 0.4, 0.35, 0.2, 0.08, 0)
++  basis <- cbind(b1, b2, b3)
++  coeffs <- matrix(runif(3 * n_vox, 0.5, 1.5), nrow = 3L, ncol = n_vox)
++
++  avg_hrf <- drop(basis %*% rowMeans(coeffs))
++  conv_open_trim <- function(x, k) {
++    as.numeric(stats::convolve(x, rev(as.numeric(k)), type = "open"))[seq_len(length(x))]
++  }
++  X_ref <- vapply(seq_len(n_trials), function(j) conv_open_trim(Xev[, j], avg_hrf),
++                  numeric(n_time))
++
++  Z <- cbind(1, scale(seq_len(n_time)))
++  Nuis <- cbind(scale(sin(seq_len(n_time) / 7)), scale(cos(seq_len(n_time) / 13)))
++
++  true_betas <- matrix(rnorm(n_trials * n_vox, sd = 0.6), n_trials, n_vox)
++  Y <- X_ref %*% true_betas +
++       Z %*% matrix(rnorm(ncol(Z) * n_vox), ncol(Z), n_vox) +
++       Nuis %*% matrix(rnorm(ncol(Nuis) * n_vox, sd = 0.2), ncol(Nuis), n_vox) +
++       matrix(rnorm(n_time * n_vox, sd = 0.5), n_time, n_vox)
++
++  beta_r <- fmrilss:::lss_with_hrf(
++    Y = Y, onset_idx = onset_idx, durations = dur,
++    hrf_basis_kernels = basis, coefficients = coeffs,
++    Z = Z, Nuisance = Nuis, method = "r"
++  )
++
++  # Skip if symbols don't exist
++  syms <- getNamespaceExports("fmrilss")
++
++  if ("lss_engine_vox_hrf_arma" %in% syms) {
++    beta_arma <- fmrilss:::lss_with_hrf(
++      Y = Y, onset_idx = onset_idx, durations = dur,
++      hrf_basis_kernels = basis, coefficients = coeffs,
++      Z = Z, Nuisance = Nuis, method = "cpp_arma"
++    )
++    expect_equal(beta_arma, beta_r, tolerance = 1e-8)
++  } else {
++    skip("cpp_arma backend not available in this build")
++  }
++
++  if ("lss_engine_vox_hrf_omp" %in% syms) {
++    beta_omp <- fmrilss:::lss_with_hrf(
++      Y = Y, onset_idx = onset_idx, durations = dur,
++      hrf_basis_kernels = basis, coefficients = coeffs,
++      Z = Z, Nuisance = Nuis, method = "cpp_omp"
++    )
++    expect_equal(beta_omp, beta_r, tolerance = 1e-8)
++  } else {
++    skip("cpp_omp backend not available in this build")
++  }
++})
+diff --git a/DESCRIPTION b/DESCRIPTION
+index 2c2bc70..9c3e4a1 100644
+--- a/DESCRIPTION
++++ b/DESCRIPTION
+@@ -1,12 +1,16 @@
+ Package: fmrilss
+ Type: Package
+ Title: Fast Least Squares Separate (LSS) for fMRI
+ Version: 0.2.0
+ Authors@R: c(person("Ben", "Buchsbaum", role = c("aut", "cre"),
+                     email = "ben.buchsbaum@gmail.com"))
+ Description: High-performance LSS estimators for trial-wise fMRI analysis.
+-Imports: Rcpp
+-LinkingTo: Rcpp
++Imports: Rcpp
++LinkingTo: Rcpp, RcppArmadillo
+ Suggests: testthat
+ License: MIT + file LICENSE
+ Encoding: UTF-8
++SystemRequirements: C++11, OpenMP (optional)
+ LazyData: true
+ RoxygenNote: 7.3.1
+diff --git a/NAMESPACE b/NAMESPACE
+index 6ee0a9e..e1a27a9 100644
+--- a/NAMESPACE
++++ b/NAMESPACE
+@@ -1,4 +1,6 @@
+ useDynLib(fmrilss, .registration = TRUE)
+ importFrom(Rcpp, sourceCpp)
++importFrom(RcppArmadillo, )
++
+ # Exported functions
+ export(lss)
+ export(lss2)

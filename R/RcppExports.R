@@ -60,14 +60,14 @@ NULL
 
 #' Fast analytical REML estimation for single variance component
 #' 
-#' For a single variance component model, the REML estimate of λ = σe²/σu²
+#' For a single variance component model, the REML estimate of \eqn{\lambda = \sigma_e^2/\sigma_u^2}
 #' has a closed-form solution that can be computed efficiently.
 #' 
 #' @param omega Transformed response vector Q'y
 #' @param theta Transformed eigenvalues 
 #' @param tol Convergence tolerance for Newton iterations
 #' @param max_iter Maximum Newton iterations
-#' @return Estimated variance ratio λ
+#' @return Estimated variance ratio \eqn{\lambda}
 #' @name fast_reml_lambda
 NULL
 

@@ -250,7 +250,7 @@
   # For each trial j and voxel v:
   #   SSE_jv = ||RY||^2 - 2*(β*n1 + γ*n2) + β^2*d + γ^2*e + 2βγ*c
   #   sigma2_jv = SSE_jv / dof
-  #   Var(β) = sigma2_jv * (G^{-1})_{11}, where G = [[d+λx, c],[c, e+λb]]
+  #   Var(beta) = sigma2_jv * (G^{-1})_{11}, where G = [[d+lambda_x, c],[c, e+lambda_b]]
   N <- nrow(B)
   V <- ncol(B)
   se <- matrix(NA_real_, N, V)

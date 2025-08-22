@@ -13,9 +13,9 @@
 \item{max_iter}{Maximum Newton iterations}
 }
 \value{
-Estimated variance ratio λ
+Estimated variance ratio \eqn{\lambda}
 }
 \description{
-For a single variance component model, the REML estimate of λ = σe²/σu²
+For a single variance component model, the REML estimate of \eqn{\lambda = \sigma_e^2/\sigma_u^2}
 has a closed-form solution that can be computed efficiently.
 }

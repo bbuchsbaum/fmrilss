@@ -1,3 +1,6 @@
 docs
 repomix-output.xml
 src/*.o
+/doc/
+/Meta/
+..Rcheck/

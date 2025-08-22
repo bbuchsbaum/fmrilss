@@ -16,7 +16,7 @@ NULL
 #'
 #' Fits a GLM to estimate HRF basis coefficients for every voxel.
 #'
-#' @param Y Numeric matrix of BOLD data (time \times voxels).
+#' @param Y Numeric matrix of BOLD data (time x voxels).
 #' @param events Data frame with \code{onset}, \code{duration} and \code{condition} columns.
 #' @param basis HRF object from the \code{fmrihrf} package.
 #' @param nuisance_regs Optional numeric matrix of nuisance regressors.
@@ -32,8 +32,14 @@ NULL
 #'   Y <- matrix(rnorm(100), 50, 2)
 #'   events <- data.frame(onset = c(5, 25), duration = 1,
 #'                        condition = "A")
-#'   basis <- fmrihrf::HRF_GAMMA()
-#'   X <- fmrihrf::regressor_set(events, basis, n = nrow(Y))$X
+#'   basis <- fmrihrf::hrf_gamma()
+#'   sframe <- fmrihrf::sampling_frame(blocklens = nrow(Y), TR = 1)
+#'   times <- fmrihrf::samples(sframe, global = TRUE)
+#'   rset <- fmrihrf::regressor_set(onsets = events$onset, 
+#'                                  fac = factor(1:nrow(events)),
+#'                                  hrf = basis, duration = events$duration,
+#'                                  span = 30)
+#'   X <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")
 #'   coef <- matrix(rnorm(ncol(X) * ncol(Y)), ncol(X), ncol(Y))
 #'   Y <- X %*% coef + Y * 0.1
 #'   est <- estimate_voxel_hrf(Y, events, basis)
@@ -102,7 +108,7 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL) {
 #'
 #' Computes trial-wise beta estimates using voxel-specific HRFs.
 #'
-#' @param Y Numeric matrix of BOLD data (time \times voxels).
+#' @param Y Numeric matrix of BOLD data (time x voxels).
 #' @param events Data frame with \code{onset}, \code{duration} and \code{condition} columns.
 #' @param hrf_estimates A \link{VoxelHRF} object returned by \code{estimate_voxel_hrf}.
 #' @param nuisance_regs Optional numeric matrix of nuisance regressors.
@@ -122,8 +128,14 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL) {
 #'   Y <- matrix(rnorm(100), 50, 2)
 #'   events <- data.frame(onset = c(5, 25), duration = 1,
 #'                        condition = "A")
-#'   basis <- fmrihrf::HRF_GAMMA()
-#'   X <- fmrihrf::regressor_set(events, basis, n = nrow(Y))$X
+#'   basis <- fmrihrf::hrf_gamma()
+#'   sframe <- fmrihrf::sampling_frame(blocklens = nrow(Y), TR = 1)
+#'   times <- fmrihrf::samples(sframe, global = TRUE)
+#'   rset <- fmrihrf::regressor_set(onsets = events$onset, 
+#'                                  fac = factor(1:nrow(events)),
+#'                                  hrf = basis, duration = events$duration,
+#'                                  span = 30)
+#'   X <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")
 #'   coef <- matrix(rnorm(ncol(X) * ncol(Y)), ncol(X), ncol(Y))
 #'   Y <- X %*% coef + Y * 0.1
 #'   est <- estimate_voxel_hrf(Y, events, basis)
