@@ -21,8 +21,9 @@
 #'          if NULL, an intercept (column of 1s) is used.
 #' @param Nuisance optional numeric matrix (n_time x q) of confounds to project out
 #' @param verbose logical; print progress every 1000 voxels
-#' @param method character: "r" (default, pure R) or "cpp" (C++ backend). If "cpp"
-#'   is requested but not available, falls back to "r".
+#' @param method character: "r" (default, pure R), "cpp" (C++ backend), 
+#'   "cpp_arma" (Armadillo backend), or "cpp_omp" (OpenMP parallel backend).
+#'   Falls back automatically: cpp_omp -> cpp_arma -> cpp -> r.
 #'
 #' @return numeric matrix (n_trials x n_vox) of trial-wise beta estimates
 #' @examples
@@ -42,7 +43,7 @@ lss_with_hrf_pure_r <- function(
   Z = NULL,
   Nuisance = NULL,
   verbose = FALSE,
-  method = c("r", "cpp")
+  method = c("r", "cpp", "cpp_arma", "cpp_omp")
 ) {
   method <- match.arg(method)
   # ---- basic checks ----
@@ -122,25 +123,55 @@ lss_with_hrf_pure_r <- function(
   colnames(betas) <- colnames(Y)
   rownames(betas) <- paste0("trial_", seq_len(n_trials))
 
-  # ---- optional: C++ backend ----
-  if (method == "cpp") {
-    # Check that compiled symbol exists; otherwise fall back
-    have_cpp <- FALSE
-    try({
-      get("lss_engine_vox_hrf_cpp", envir = asNamespace("fmrilss"))
-      have_cpp <- TRUE
-    }, silent = TRUE)
-
-    if (have_cpp) {
-      # Use the Rcpp-generated wrapper function
-      betas_cpp <- fmrilss:::lss_engine_vox_hrf_cpp(
-        Y, coefficients, basis_convolved, Z_use
+  # ---- optional: C++/Armadillo/OpenMP backends ----
+  if (method != "r") {
+    # Fallback chain: cpp_omp -> cpp_arma -> cpp -> r
+    methods_to_try <- switch(method,
+      cpp_omp = c("cpp_omp", "cpp_arma", "cpp", "r"),
+      cpp_arma = c("cpp_arma", "cpp", "r"),
+      cpp = c("cpp", "r"),
+      "r"
+    )
+    
+    for (try_method in methods_to_try) {
+      if (try_method == "r") break  # Will use R implementation below
+      
+      backend_fn <- switch(try_method,
+        cpp_omp = "lss_engine_vox_hrf_omp",
+        cpp_arma = "lss_engine_vox_hrf_arma",
+        cpp = "lss_engine_vox_hrf_cpp"
       )
-      dimnames(betas_cpp) <- dimnames(betas)
-      return(betas_cpp)
-    } else {
-      if (verbose) message("C++ backend not available, falling back to R")
+      
+      have_backend <- FALSE
+      try({
+        get(backend_fn, envir = asNamespace("fmrilss"))
+        have_backend <- TRUE
+      }, silent = TRUE)
+      
+      if (have_backend) {
+        if (verbose && try_method != method) {
+          message("Using ", try_method, " backend (", method, " not available)")
+        }
+        
+        # Call the appropriate backend
+        betas_cpp <- switch(try_method,
+          cpp_omp = fmrilss:::lss_engine_vox_hrf_omp(
+            Y, coefficients, basis_convolved, Z_use
+          ),
+          cpp_arma = fmrilss:::lss_engine_vox_hrf_arma(
+            Y, coefficients, basis_convolved, Z_use
+          ),
+          cpp = fmrilss:::lss_engine_vox_hrf_cpp(
+            Y, coefficients, basis_convolved, Z_use
+          )
+        )
+        
+        dimnames(betas_cpp) <- dimnames(betas)
+        return(betas_cpp)
+      }
     }
+    
+    if (verbose) message("All C++ backends unavailable, falling back to R")
   }
 
   # ---- 5) For each voxel, combine basis designs with that voxel's HRF weights ----
