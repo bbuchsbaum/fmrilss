@@ -34,6 +34,10 @@ lss_fused_optim_cpp <- function(X, Y, C, block_size = 96L) {
     .Call(`_fmrilss_lss_fused_optim_cpp`, X, Y, C, block_size)
 }
 
+lss_engine_vox_hrf_cpp <- function(Y, coeffs, basis_convolved, Z) {
+    .Call(`_fmrilss_lss_engine_vox_hrf_cpp`, Y, coeffs, basis_convolved, Z)
+}
+
 mixed_solve_internal <- function(y_in, Z_in = NULL, K_in = NULL, X_in = NULL, method = "REML", bounds = as.numeric( c(1e-9, 1e9)), SE = FALSE, return_Hinv = FALSE) {
     .Call(`_fmrilss_mixed_solve_internal`, y_in, Z_in, K_in, X_in, method, bounds, SE, return_Hinv)
 }

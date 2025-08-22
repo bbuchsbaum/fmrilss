@@ -75,6 +75,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// lss_engine_vox_hrf_cpp
+NumericMatrix lss_engine_vox_hrf_cpp(const NumericMatrix& Y, const NumericMatrix& coeffs, const List& basis_convolved, const NumericMatrix& Z);
+RcppExport SEXP _fmrilss_lss_engine_vox_hrf_cpp(SEXP YSEXP, SEXP coeffsSEXP, SEXP basis_convolvedSEXP, SEXP ZSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type coeffs(coeffsSEXP);
+    Rcpp::traits::input_parameter< const List& >::type basis_convolved(basis_convolvedSEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type Z(ZSEXP);
+    rcpp_result_gen = Rcpp::wrap(lss_engine_vox_hrf_cpp(Y, coeffs, basis_convolved, Z));
+    return rcpp_result_gen;
+END_RCPP
+}
 // mixed_solve_internal
 List mixed_solve_internal(NumericVector y_in, Nullable<NumericMatrix> Z_in, Nullable<NumericMatrix> K_in, Nullable<NumericMatrix> X_in, std::string method, NumericVector bounds, bool SE, bool return_Hinv);
 RcppExport SEXP _fmrilss_mixed_solve_internal(SEXP y_inSEXP, SEXP Z_inSEXP, SEXP K_inSEXP, SEXP X_inSEXP, SEXP methodSEXP, SEXP boundsSEXP, SEXP SESEXP, SEXP return_HinvSEXP) {
@@ -310,6 +324,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_project_confounds_cpp", (DL_FUNC) &_fmrilss_project_confounds_cpp, 3},
     {"_fmrilss_lss_beta_cpp", (DL_FUNC) &_fmrilss_lss_beta_cpp, 2},
     {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 4},
+    {"_fmrilss_lss_engine_vox_hrf_cpp", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf_cpp, 4},
     {"_fmrilss_mixed_solve_internal", (DL_FUNC) &_fmrilss_mixed_solve_internal, 8},
     {"_fmrilss_mixed_precompute_workspace", (DL_FUNC) &_fmrilss_mixed_precompute_workspace, 3},
     {"_fmrilss_mixed_single_voxel_cpp", (DL_FUNC) &_fmrilss_mixed_single_voxel_cpp, 3},

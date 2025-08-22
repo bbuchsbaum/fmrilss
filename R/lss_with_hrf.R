@@ -21,12 +21,16 @@
 #'          if NULL, an intercept (column of 1s) is used.
 #' @param Nuisance optional numeric matrix (n_time x q) of confounds to project out
 #' @param verbose logical; print progress every 1000 voxels
+#' @param method character: "r" (default, pure R) or "cpp" (C++ backend). If "cpp"
+#'   is requested but not available, falls back to "r".
 #'
 #' @return numeric matrix (n_trials x n_vox) of trial-wise beta estimates
 #' @examples
 #' \dontrun{
-#' # Minimal use:
-#' betas <- lss_with_hrf(Y, onset_idx, durations, basis, coeffs, Z = NULL, Nuisance = NULL)
+#' # Minimal use (R backend):
+#' betas <- lss_with_hrf_pure_r(Y, onset_idx, durations, basis, coeffs, Z = NULL, Nuisance = NULL)
+#' # Or with C++ backend:
+#' betas <- lss_with_hrf_pure_r(Y, onset_idx, durations, basis, coeffs, method = "cpp")
 #' }
 #' @keywords internal
 lss_with_hrf_pure_r <- function(
@@ -37,8 +41,10 @@ lss_with_hrf_pure_r <- function(
   coefficients,
   Z = NULL,
   Nuisance = NULL,
-  verbose = FALSE
+  verbose = FALSE,
+  method = c("r", "cpp")
 ) {
+  method <- match.arg(method)
   # ---- basic checks ----
   if (!is.matrix(Y)) stop("Y must be a matrix [n_time x n_vox].")
   if (!is.matrix(hrf_basis_kernels)) stop("hrf_basis_kernels must be a matrix [L x K].")
@@ -115,6 +121,27 @@ lss_with_hrf_pure_r <- function(
   betas <- matrix(NA_real_, n_trials, n_vox)
   colnames(betas) <- colnames(Y)
   rownames(betas) <- paste0("trial_", seq_len(n_trials))
+
+  # ---- optional: C++ backend ----
+  if (method == "cpp") {
+    # Check that compiled symbol exists; otherwise fall back
+    have_cpp <- FALSE
+    try({
+      get("lss_engine_vox_hrf_cpp", envir = asNamespace("fmrilss"))
+      have_cpp <- TRUE
+    }, silent = TRUE)
+
+    if (have_cpp) {
+      # Use the Rcpp-generated wrapper function
+      betas_cpp <- fmrilss:::lss_engine_vox_hrf_cpp(
+        Y, coefficients, basis_convolved, Z_use
+      )
+      dimnames(betas_cpp) <- dimnames(betas)
+      return(betas_cpp)
+    } else {
+      if (verbose) message("C++ backend not available, falling back to R")
+    }
+  }
 
   # ---- 5) For each voxel, combine basis designs with that voxel's HRF weights ----
   for (v in seq_len(n_vox)) {
