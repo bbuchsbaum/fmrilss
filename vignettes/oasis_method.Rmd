@@ -1,0 +1,608 @@
+---
+title: "The OASIS Method: Advanced LSS with HRF Flexibility"
+author: "fmrilss Development Team"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{The OASIS Method: Advanced LSS with HRF Flexibility}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 8,
+  fig.height = 6
+)
+```
+
+## Learning Objectives
+
+After completing this vignette, you will be able to:
+
+1. Understand the OASIS (Optimized Acquisition and Stimulus Sequencing) method
+2. Implement OASIS with various HRF models
+3. Apply ridge regularization for stable estimates
+4. Perform HRF grid search for optimal model selection
+5. Handle multi-basis HRFs and extract specific components
+6. Optimize OASIS for large-scale analyses
+
+## Prerequisites
+
+This vignette assumes familiarity with:
+- Basic LSS concepts (see `vignette("getting_started")`)
+- HRF models and basis functions
+- Ridge regression concepts
+- The `fmrihrf` package for HRF modeling
+
+```{r setup}
+library(fmrilss)
+library(fmrihrf)
+set.seed(42)
+```
+
+## Introduction to OASIS
+
+OASIS is an advanced implementation of LSS that provides:
+
+1. **Exact LSS computation** in a single batched pass
+2. **Flexible HRF modeling** with automatic basis handling
+3. **Ridge regularization** for numerical stability
+4. **Efficient computation** using closed-form solutions
+5. **Automatic design matrix construction** from event specifications
+
+The method is particularly powerful for:
+- Rapid event-related designs with overlapping HRFs
+- Experiments requiring HRF flexibility
+- Large datasets where computational efficiency matters
+- Designs with potential collinearity issues
+
+## 1. Basic OASIS Usage
+
+Let's start with a simple example demonstrating the core OASIS functionality:
+
+```{r basic-oasis}
+# Create synthetic data
+n_time <- 300
+n_voxels <- 100
+TR <- 1.0
+
+# Generate event onsets (rapid design)
+onsets <- seq(10, 280, by = 15)  # Events every 15 seconds
+n_trials <- length(onsets)
+
+# Create sampling frame
+sframe <- sampling_frame(blocklens = n_time, TR = TR)
+
+# Generate synthetic fMRI data
+Y <- matrix(rnorm(n_time * n_voxels), n_time, n_voxels)
+
+# Add signal to data
+true_betas <- matrix(rnorm(n_trials * n_voxels, mean = 1, sd = 0.5), 
+                     n_trials, n_voxels)
+
+# Create signal using canonical HRF
+dm <- design_matrix(
+  sframe = sframe,
+  conditions = list(
+    list(onsets = onsets, hrf = HRF_SPMG1, name = "task")
+  ),
+  tr_per_trial = TRUE
+)
+
+Y <- Y + dm$X %*% true_betas
+
+# Run OASIS
+beta_oasis <- lss(
+  Y = Y,
+  X = NULL,  # OASIS builds design internally
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(
+        onsets = onsets,
+        hrf = HRF_SPMG1,
+        span = 30  # HRF duration
+      )
+    )
+  )
+)
+
+cat("OASIS results:\n")
+cat("  Beta dimensions:", dim(beta_oasis), "\n")
+cat("  Mean beta:", round(mean(beta_oasis), 3), "\n")
+cat("  Beta SD:", round(sd(beta_oasis), 3), "\n")
+```
+
+## 2. Ridge Regularization
+
+OASIS supports two types of ridge regularization to handle collinear designs:
+
+### Absolute Ridge
+
+```{r absolute-ridge}
+# Absolute ridge: fixed penalty values
+beta_ridge_abs <- lss(
+  Y = Y,
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(onsets = onsets, hrf = HRF_SPMG1, span = 30)
+    ),
+    ridge_mode = "absolute",
+    ridge_x = 0.1,  # Penalty on trial regressor
+    ridge_b = 0.1   # Penalty on aggregator regressor
+  )
+)
+
+# Compare with unregularized
+cat("Comparison with unregularized:\n")
+cat("  Correlation:", round(cor(as.vector(beta_oasis), 
+                               as.vector(beta_ridge_abs)), 3), "\n")
+cat("  Mean absolute difference:", 
+    round(mean(abs(beta_oasis - beta_ridge_abs)), 4), "\n")
+```
+
+### Fractional Ridge
+
+```{r fractional-ridge}
+# Fractional ridge: penalty as fraction of design energy
+beta_ridge_frac <- lss(
+  Y = Y,
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(onsets = onsets, hrf = HRF_SPMG1, span = 30)
+    ),
+    ridge_mode = "fractional",
+    ridge_x = 0.05,  # 5% of mean design energy
+    ridge_b = 0.05   # 5% of mean aggregator energy
+  )
+)
+
+# Ridge typically reduces variance in estimates
+var_unreg <- apply(beta_oasis, 2, var)
+var_ridge <- apply(beta_ridge_frac, 2, var)
+
+cat("\nVariance reduction with ridge:\n")
+cat("  Mean variance (unregularized):", round(mean(var_unreg), 4), "\n")
+cat("  Mean variance (ridge):", round(mean(var_ridge), 4), "\n")
+cat("  Reduction:", round((1 - mean(var_ridge)/mean(var_unreg)) * 100, 1), "%\n")
+```
+
+## 3. Multi-Basis HRFs
+
+OASIS automatically handles multi-basis HRFs, returning separate estimates for each basis function:
+
+```{r multi-basis}
+# Use SPMG3: canonical + temporal derivative + dispersion derivative
+beta_spmg3 <- lss(
+  Y = Y,
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(
+        onsets = onsets,
+        hrf = HRF_SPMG3,  # 3 basis functions
+        span = 30
+      )
+    )
+  )
+)
+
+# SPMG3 returns 3x more rows (one per basis per trial)
+cat("Multi-basis results:\n")
+cat("  Beta dimensions:", dim(beta_spmg3), "\n")
+cat("  Rows per trial:", nrow(beta_spmg3) / n_trials, "\n")
+
+# Extract components
+canonical_betas <- beta_spmg3[seq(1, nrow(beta_spmg3), by = 3), ]
+temporal_betas <- beta_spmg3[seq(2, nrow(beta_spmg3), by = 3), ]
+dispersion_betas <- beta_spmg3[seq(3, nrow(beta_spmg3), by = 3), ]
+
+# Analyze contributions
+cat("\nBasis function contributions:\n")
+cat("  Canonical mean |beta|:", round(mean(abs(canonical_betas)), 3), "\n")
+cat("  Temporal deriv mean |beta|:", round(mean(abs(temporal_betas)), 3), "\n")
+cat("  Dispersion deriv mean |beta|:", round(mean(abs(dispersion_betas)), 3), "\n")
+
+# Visualize first voxel
+par(mfrow = c(1, 3))
+plot(canonical_betas[, 1], type = "b", main = "Canonical", 
+     ylab = "Beta", xlab = "Trial")
+plot(temporal_betas[, 1], type = "b", main = "Temporal Derivative",
+     ylab = "Beta", xlab = "Trial")
+plot(dispersion_betas[, 1], type = "b", main = "Dispersion Derivative",
+     ylab = "Beta", xlab = "Trial")
+```
+
+## 4. FIR Basis for Non-Parametric HRF
+
+The Finite Impulse Response (FIR) basis provides a non-parametric approach:
+
+```{r fir-basis}
+# Create FIR basis with 15 time bins
+fir_hrf <- hrf_fir_generator(nbasis = 15, span = 30)
+
+beta_fir <- lss(
+  Y = Y,
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(
+        onsets = onsets,
+        hrf = fir_hrf,
+        span = 30
+      )
+    ),
+    ridge_mode = "fractional",
+    ridge_x = 0.02,  # Small ridge for FIR stability
+    ridge_b = 0.02
+  )
+)
+
+cat("FIR basis results:\n")
+cat("  Beta dimensions:", dim(beta_fir), "\n")
+cat("  Time bins per trial:", nrow(beta_fir) / n_trials, "\n")
+
+# Reconstruct HRF shape for first trial, first voxel
+fir_coefs <- beta_fir[1:15, 1]
+time_points <- seq(0, 29, by = 2)
+
+plot(time_points, fir_coefs, type = "b",
+     main = "Reconstructed HRF from FIR basis",
+     xlab = "Time (seconds)", ylab = "Response",
+     col = "blue", pch = 19)
+
+# Add canonical HRF for comparison
+canonical <- evaluate(HRF_SPMG1, time_points)
+lines(time_points, canonical * mean(fir_coefs) / mean(canonical), 
+      col = "red", lty = 2)
+legend("topright", c("FIR", "Canonical"), col = c("blue", "red"), 
+       lty = c(1, 2), pch = c(19, NA))
+```
+
+## 5. HRF Grid Search
+
+For exploratory analyses, OASIS can be combined with HRF grid search:
+
+```{r hrf-grid-search}
+# Source HRF recovery functions (from previous vignette)
+source("../R/oasis_hrf_recovery.R")
+
+# Create a grid of HRF models with varying parameters
+hrf_grid <- create_lwu_grid(
+  tau_range = c(4, 8),      # Peak time
+  sigma_range = c(2, 3.5),  # Width
+  rho_range = c(0.2, 0.5),  # Undershoot
+  n_tau = 3,
+  n_sigma = 2,
+  n_rho = 2
+)
+
+cat("Testing", length(hrf_grid$hrfs), "different HRF models\n\n")
+
+# Test each HRF and select best based on fit
+best_fit <- -Inf
+best_idx <- 1
+
+for (i in seq_along(hrf_grid$hrfs)) {
+  # Create HRF object
+  tau_val <- hrf_grid$parameters$tau[i]
+  sigma_val <- hrf_grid$parameters$sigma[i]
+  rho_val <- hrf_grid$parameters$rho[i]
+  
+  hrf_obj <- structure(
+    function(t) {
+      hrf_lwu(t, tau = tau_val, sigma = sigma_val, rho = rho_val, normalize = "height")
+    },
+    class = c("hrf", "function"),
+    span = 30
+  )
+  
+  # Fit OASIS with this HRF
+  beta_test <- lss(
+    Y = Y[, 1:10],  # Test on subset for speed
+    X = NULL,
+    method = "oasis",
+    oasis = list(
+      design_spec = list(
+        sframe = sframe,
+        cond = list(onsets = onsets, hrf = hrf_obj, span = 30)
+      ),
+      ridge_mode = "fractional",
+      ridge_x = 0.01,
+      ridge_b = 0.01
+    )
+  )
+  
+  # Calculate fit (simplified - residual sum of squares)
+  X_test <- design_matrix(
+    sframe = sframe,
+    conditions = list(list(onsets = onsets, hrf = hrf_obj)),
+    tr_per_trial = TRUE
+  )$X
+  
+  fitted <- X_test %*% beta_test
+  rss <- sum((Y[, 1:10] - fitted)^2)
+  
+  if (-rss > best_fit) {
+    best_fit <- -rss
+    best_idx <- i
+  }
+}
+
+cat("Best HRF parameters:\n")
+cat("  tau:", hrf_grid$parameters$tau[best_idx], "\n")
+cat("  sigma:", hrf_grid$parameters$sigma[best_idx], "\n")
+cat("  rho:", hrf_grid$parameters$rho[best_idx], "\n")
+```
+
+## 6. Multiple Conditions and Nuisance Regressors
+
+OASIS handles complex designs with multiple conditions:
+
+```{r multiple-conditions}
+# Create design with two conditions
+onsets_cond1 <- seq(10, 280, by = 30)
+onsets_cond2 <- seq(25, 280, by = 30)
+
+# Condition 1 as target, Condition 2 as nuisance
+beta_multi <- lss(
+  Y = Y,
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(
+        onsets = onsets_cond1,
+        hrf = HRF_SPMG1,
+        span = 30
+      ),
+      others = list(
+        list(onsets = onsets_cond2)  # Other conditions as nuisance
+      )
+    )
+  )
+)
+
+cat("Multi-condition OASIS:\n")
+cat("  Analyzing condition 1 trials:", length(onsets_cond1), "\n")
+cat("  Condition 2 included as nuisance\n")
+cat("  Beta dimensions:", dim(beta_multi), "\n")
+```
+
+## 7. Standard Errors and Diagnostics
+
+OASIS can return standard errors and diagnostic information:
+
+```{r standard-errors}
+# Request standard errors
+result_with_se <- lss(
+  Y = Y[, 1:10],  # Subset for demonstration
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(onsets = onsets[1:10], hrf = HRF_SPMG1, span = 30)
+    ),
+    return_se = TRUE,
+    return_diag = TRUE
+  )
+)
+
+cat("Results with diagnostics:\n")
+cat("  Beta dimensions:", dim(result_with_se$beta), "\n")
+cat("  SE dimensions:", dim(result_with_se$se), "\n")
+cat("  Mean SE:", round(mean(result_with_se$se), 4), "\n")
+
+# Calculate t-statistics
+t_stats <- result_with_se$beta / result_with_se$se
+cat("  Mean |t-statistic|:", round(mean(abs(t_stats)), 2), "\n")
+
+# Visualize SE across trials
+plot(rowMeans(result_with_se$se), type = "b",
+     main = "Standard Error Across Trials",
+     xlab = "Trial", ylab = "Mean SE",
+     col = "darkblue", pch = 19)
+```
+
+## 8. Performance Comparison
+
+Let's compare OASIS with other LSS methods:
+
+```{r performance-comparison}
+# Create medium-sized test data
+Y_test <- matrix(rnorm(300 * 500), 300, 500)
+
+# Standard LSS with pre-built design
+dm_standard <- design_matrix(
+  sframe = sframe,
+  conditions = list(list(onsets = onsets, hrf = HRF_SPMG1)),
+  tr_per_trial = TRUE
+)$X
+
+# Time different methods
+time_standard <- system.time({
+  beta_standard <- lss(Y_test, dm_standard, method = "r_optimized")
+})[3]
+
+time_oasis <- system.time({
+  beta_oasis_test <- lss(
+    Y = Y_test,
+    X = NULL,
+    method = "oasis",
+    oasis = list(
+      design_spec = list(
+        sframe = sframe,
+        cond = list(onsets = onsets, hrf = HRF_SPMG1, span = 30)
+      )
+    )
+  )
+})[3]
+
+cat("Performance comparison (500 voxels):\n")
+cat("  Standard LSS:", round(time_standard, 2), "seconds\n")
+cat("  OASIS:", round(time_oasis, 2), "seconds\n")
+cat("  Speedup:", round(time_standard / time_oasis, 1), "x\n")
+```
+
+## 9. Advanced: Custom HRF Functions
+
+OASIS works with custom HRF functions:
+
+```{r custom-hrf}
+# Create custom double-gamma HRF
+custom_hrf <- function(t, a1 = 6, a2 = 16, b1 = 1, b2 = 1, c = 1/6) {
+  # Double gamma function
+  dgamma(t, a1, b1) - c * dgamma(t, a2, b2)
+}
+
+# Wrap as HRF object
+custom_hrf_obj <- structure(
+  custom_hrf,
+  class = c("hrf", "function"),
+  span = 30
+)
+
+# Use with OASIS
+beta_custom <- lss(
+  Y = Y[, 1:10],
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(
+        onsets = onsets[1:10],
+        hrf = custom_hrf_obj,
+        span = 30
+      )
+    )
+  )
+)
+
+cat("Custom HRF results:\n")
+cat("  Beta dimensions:", dim(beta_custom), "\n")
+cat("  Mean beta:", round(mean(beta_custom), 3), "\n")
+```
+
+## 10. Best Practices and Tips
+
+### Choosing Ridge Parameters
+
+```{r ridge-selection}
+# Test different ridge values
+ridge_values <- c(0, 0.001, 0.01, 0.05, 0.1)
+ridge_results <- list()
+
+for (ridge in ridge_values) {
+  beta_r <- lss(
+    Y = Y[, 1:10],
+    X = NULL,
+    method = "oasis",
+    oasis = list(
+      design_spec = list(
+        sframe = sframe,
+        cond = list(onsets = onsets, hrf = HRF_SPMG1, span = 30)
+      ),
+      ridge_mode = "fractional",
+      ridge_x = ridge,
+      ridge_b = ridge
+    )
+  )
+  
+  ridge_results[[as.character(ridge)]] <- list(
+    mean_beta = mean(abs(beta_r)),
+    sd_beta = sd(beta_r),
+    condition_number = kappa(cor(beta_r))
+  )
+}
+
+# Display results
+cat("Ridge parameter selection:\n")
+for (r in names(ridge_results)) {
+  cat(sprintf("  Ridge = %s: mean|β| = %.3f, SD = %.3f, κ = %.1f\n",
+              r, ridge_results[[r]]$mean_beta,
+              ridge_results[[r]]$sd_beta,
+              ridge_results[[r]]$condition_number))
+}
+```
+
+### Memory-Efficient Processing
+
+```{r memory-efficient, eval=FALSE}
+# For very large datasets, use blocked processing
+block_size <- 1000
+n_blocks <- ceiling(ncol(Y) / block_size)
+
+# OASIS with blocked voxels
+oasis_config <- list(
+  design_spec = list(
+    sframe = sframe,
+    cond = list(onsets = onsets, hrf = HRF_SPMG1, span = 30)
+  ),
+  block_cols = block_size  # Process voxels in blocks
+)
+
+beta_blocked <- lss(Y, X = NULL, method = "oasis", oasis = oasis_config)
+```
+
+### Handling AR(1) Whitening
+
+```{r ar1-whitening}
+# OASIS with AR(1) prewhitening
+beta_whitened <- lss(
+  Y = Y[, 1:10],
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(onsets = onsets[1:10], hrf = HRF_SPMG1, span = 30)
+    ),
+    whiten = "ar1"  # Enable AR(1) whitening
+  )
+)
+
+cat("AR(1) whitening applied\n")
+cat("  Beta dimensions:", dim(beta_whitened), "\n")
+```
+
+## Summary
+
+The OASIS method provides:
+
+1. **Efficiency**: Fast, exact LSS computation in a single pass
+2. **Flexibility**: Supports any HRF model from `fmrihrf`
+3. **Stability**: Ridge regularization for collinear designs
+4. **Scalability**: Efficient for large datasets
+5. **Completeness**: Returns standard errors and diagnostics
+
+Key use cases:
+- Rapid event-related designs with overlapping HRFs
+- Exploratory analyses requiring HRF flexibility
+- Large-scale analyses where speed matters
+- Designs with potential numerical instabilities
+
+OASIS represents the state-of-the-art in LSS implementation, combining theoretical rigor with computational efficiency.
+
+## Further Reading
+
+- See `vignette("getting_started")` for LSS basics
+- See `vignette("voxel-wise-hrf")` for spatial HRF variation
+- Review the `examples/oasis_example.R` for additional demonstrations
+- Consult the OASIS paper (in preparation) for theoretical details

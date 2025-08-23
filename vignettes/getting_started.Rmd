@@ -1,6 +1,6 @@
 ---
 title: "Getting Started with fmrilss"
-author: "Your Name"
+author: "fmrilss Development Team"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
@@ -12,9 +12,29 @@ vignette: >
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
 )
 ```
+
+## Learning Objectives
+
+After completing this vignette, you will be able to:
+
+1. Understand the theoretical foundation of Least Squares Separate (LSS)
+2. Implement LSS analysis using the `fmrilss` package
+3. Choose appropriate computational backends for your data
+4. Compare LSS with standard GLM approaches (LSA)
+5. Handle nuisance regressors and experimental covariates
+6. Optimize performance for large datasets
+
+## Prerequisites
+
+This vignette assumes basic familiarity with:
+- fMRI analysis concepts (GLM, design matrices, HRF)
+- R programming and matrix operations
+- Basic statistics (linear regression)
 
 ## Introduction to Least Squares Separate (LSS)
 
@@ -136,6 +156,267 @@ all.equal(beta_full, beta_fast, tolerance = 1e-8)
 ```
 
 This makes it easy to switch between a readable R implementation and a high-performance C++ engine without changing any other code.
+
+## Comparing LSS with LSA (Least Squares All)
+
+While LSS estimates separate models for each trial, the traditional Least Squares All (LSA) approach estimates all trials simultaneously in a single model. Let's compare these approaches:
+
+```{r lsa-comparison}
+# LSA: Standard GLM with all trials in one model
+beta_lsa <- lsa(Y, X, Z = Z, Nuisance = Nuisance)
+
+# Compare dimensions
+cat("LSS beta dimensions:", dim(beta_full), "\n")
+cat("LSA beta dimensions:", dim(beta_lsa), "\n")
+
+# Compare variance in beta estimates
+var_lss <- apply(beta_full, 2, var)
+var_lsa <- apply(beta_lsa, 2, var)
+
+cat("\nMean variance across voxels:\n")
+cat("  LSS:", mean(var_lss), "\n")
+cat("  LSA:", mean(var_lsa), "\n")
+
+# Plot comparison
+par(mfrow = c(1, 2))
+hist(beta_full[, 1], main = "LSS: Beta distribution (Voxel 1)", 
+     xlab = "Beta values", col = "lightblue")
+hist(beta_lsa[, 1], main = "LSA: Beta distribution (Voxel 1)", 
+     xlab = "Beta values", col = "lightgreen")
+```
+
+### When to Use LSS vs LSA
+
+| Scenario | Recommended Method | Reason |
+|----------|-------------------|---------|
+| MVPA analysis | LSS | Reduces collinearity between trial estimates |
+| Rapid event-related designs | LSS | Better handles overlapping HRFs |
+| Block designs | LSA | Sufficient trial separation |
+| Connectivity analysis | LSS | Provides trial-specific connectivity estimates |
+| Group-level contrasts | LSA | More stable for averaging |
+
+## Introduction to OASIS Method
+
+The OASIS (Optimized Acquisition and Stimulus Sequencing) method is a powerful extension that provides:
+- Automatic HRF estimation
+- Ridge regularization for stability
+- Efficient computation for complex designs
+- Built-in support for multi-basis HRFs
+
+```{r oasis-intro}
+# Basic OASIS usage
+beta_oasis <- lss(
+  Y = Y,
+  X = NULL,  # OASIS builds design internally
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sampling_frame(blocklens = nrow(Y), TR = 1),
+      cond = list(
+        onsets = seq(10, 290, by = 30),  # Event onsets
+        hrf = HRF_SPMG1,  # HRF model
+        span = 30
+      )
+    ),
+    ridge_mode = "fractional",
+    ridge_x = 0.01,
+    ridge_b = 0.01
+  )
+)
+
+cat("OASIS beta dimensions:", dim(beta_oasis), "\n")
+```
+
+## Working with Different Backends
+
+The package provides multiple computational backends optimized for different scenarios:
+
+```{r backend-comparison, eval=FALSE}
+# Benchmark different methods
+library(microbenchmark)
+
+methods <- c("naive", "r_vectorized", "r_optimized", "cpp_optimized")
+timings <- list()
+
+for (m in methods) {
+  timings[[m]] <- system.time({
+    lss(Y, X, method = m)
+  })[3]
+}
+
+# Display timing comparison
+timing_df <- data.frame(
+  Method = methods,
+  Time = unlist(timings)
+)
+print(timing_df)
+
+# For large datasets, use parallel processing
+if (require("parallel")) {
+  n_cores <- detectCores() - 1
+  beta_parallel <- lss(Y, X, method = "r_optimized", parallel = TRUE, ncores = n_cores)
+}
+```
+
+## Handling Complex Experimental Designs
+
+### Multiple Conditions
+
+```{r multiple-conditions}
+# Create design with multiple conditions
+n_cond <- 3
+X_multi <- matrix(0, n_time, n_trials * n_cond)
+
+for (c in 1:n_cond) {
+  trial_idx <- ((c-1) * n_trials + 1):(c * n_trials)
+  for (i in 1:n_trials) {
+    onset <- 10 + (trial_idx[i] - 1) * 20
+    if (onset + 9 <= n_time) {
+      X_multi[onset:(onset + 9), trial_idx[i]] <- hrf
+    }
+  }
+}
+
+# Add condition labels as experimental regressors
+Z_cond <- matrix(0, n_time, n_cond)
+for (c in 1:n_cond) {
+  trial_idx <- ((c-1) * n_trials + 1):(c * n_trials)
+  Z_cond[, c] <- rowSums(X_multi[, trial_idx, drop = FALSE])
+}
+
+# Run LSS with condition regressors
+beta_multi <- lss(Y, X_multi, Z = Z_cond, method = "r_optimized")
+```
+
+### Parametric Modulations
+
+```{r parametric-modulation}
+# Add parametric modulator (e.g., reaction time, stimulus intensity)
+modulator <- rnorm(n_trials, mean = 0, sd = 1)
+
+# Create parametrically modulated design
+X_param <- X
+for (i in 1:n_trials) {
+  X_param[, i] <- X[, i] * modulator[i]
+}
+
+# Run LSS with parametric modulation
+beta_param <- lss(Y, X_param, Z = Z, method = "r_optimized")
+
+# Compare with unmodulated
+cor_unmod <- cor(as.vector(beta_full), as.vector(Y %*% t(X)))
+cor_param <- cor(as.vector(beta_param), as.vector(Y %*% t(X_param)))
+
+cat("Correlation with signal:\n")
+cat("  Unmodulated:", round(cor_unmod, 3), "\n")
+cat("  Parametric:", round(cor_param, 3), "\n")
+```
+
+## Performance Optimization Tips
+
+### 1. Memory Management
+
+```{r memory-tips, eval=FALSE}
+# For very large datasets, process in chunks
+chunk_size <- 1000
+n_chunks <- ceiling(ncol(Y) / chunk_size)
+
+beta_chunks <- list()
+for (chunk in 1:n_chunks) {
+  voxel_idx <- ((chunk - 1) * chunk_size + 1):min(chunk * chunk_size, ncol(Y))
+  beta_chunks[[chunk]] <- lss(Y[, voxel_idx], X, method = "cpp_optimized")
+}
+
+# Combine results
+beta_full <- do.call(cbind, beta_chunks)
+```
+
+### 2. Preprocessing for Speed
+
+```{r preprocessing}
+# Project out nuisance before LSS (when appropriate)
+Y_clean <- project_confounds(Y, Nuisance)
+
+# This can be faster than including Nuisance in each LSS iteration
+beta_preprocessed <- lss(Y_clean, X, Z = Z, method = "r_optimized")
+```
+
+### 3. Choose the Right Method
+
+```{r method-selection, eval=FALSE}
+# Decision tree for method selection
+n_voxels <- ncol(Y)
+n_timepoints <- nrow(Y)
+
+if (n_voxels < 100) {
+  method <- "r_optimized"  # Fast enough for small data
+} else if (n_voxels < 10000) {
+  method <- "cpp_optimized"  # C++ for medium data
+} else {
+  method <- "oasis"  # OASIS for large data
+}
+
+cat("Recommended method for", n_voxels, "voxels:", method, "\n")
+```
+
+## Troubleshooting Common Issues
+
+### Issue 1: Singular Design Matrix
+
+```{r troubleshoot-singular, eval=FALSE}
+# Check for collinearity
+cor_matrix <- cor(X)
+high_cor <- which(abs(cor_matrix) > 0.9 & cor_matrix != 1, arr.ind = TRUE)
+
+if (nrow(high_cor) > 0) {
+  warning("High correlation between regressors detected")
+  # Consider using ridge regression via OASIS
+  beta_ridge <- lss(Y, X, method = "oasis", 
+                    oasis = list(ridge_mode = "absolute", ridge_x = 0.1))
+}
+```
+
+### Issue 2: Memory Errors
+
+```{r troubleshoot-memory, eval=FALSE}
+# Monitor memory usage
+mem_required <- object.size(Y) * n_trials * 2  # Rough estimate
+mem_available <- memory.limit()  # Windows only
+
+if (mem_required > mem_available * 0.8) {
+  warning("May run out of memory. Consider chunking or using OASIS.")
+}
+```
+
+### Issue 3: Slow Performance
+
+```{r troubleshoot-speed, eval=FALSE}
+# Profile code to find bottlenecks
+Rprof("lss_profile.out")
+beta_slow <- lss(Y, X, method = "naive")
+Rprof(NULL)
+summaryRprof("lss_profile.out")
+```
+
+## Advanced Topics
+
+For more advanced usage, see:
+- `vignette("voxel-wise-hrf")` - Voxel-specific HRF modeling
+- `vignette("oasis_method")` - Complete OASIS documentation
+- `vignette("mixed_models")` - Mixed effects models with LSS
+
+## Summary
+
+This vignette covered:
+1. Basic LSS implementation and theory
+2. Comparison with LSA
+3. Introduction to OASIS method
+4. Different computational backends
+5. Complex experimental designs
+6. Performance optimization
+7. Troubleshooting
+
+The `fmrilss` package provides a comprehensive toolkit for trial-wise beta estimation with options ranging from simple to highly optimized implementations.
 
 ## References
 

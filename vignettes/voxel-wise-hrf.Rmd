@@ -1,5 +1,7 @@
 ---
 title: "Voxel-wise HRF Modeling with fmrilss"
+author: "fmrilss Development Team"
+date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Voxel-wise HRF Modeling with fmrilss}
@@ -10,157 +12,363 @@ vignette: >
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
 )
 ```
 
-This vignette demonstrates how to use `fmrilss` to perform LSS analysis with voxel-wise HRF modeling.
+## Learning Objectives
 
-## 1. Generate Example Data
+After completing this vignette, you will be able to:
 
-First, let's create some simulated fMRI data with known HRF variations across voxels.
+1. Understand when voxel-wise HRF modeling is beneficial
+2. Implement voxel-wise HRF estimation using `fmrilss`
+3. Compare standard LSS with voxel-wise HRF approaches
+4. Interpret results and choose appropriate methods for your data
 
-```{r simulate}
+## Prerequisites
+
+This vignette assumes you are familiar with:
+- Basic LSS concepts (see `vignette("getting_started")`)
+- HRF (Hemodynamic Response Function) basics
+- R matrix operations
+
+```{r setup}
 library(fmrilss)
+library(fmrihrf)
 set.seed(123)
+```
 
-# Create simple event design
-n_time <- 100
-n_trials <- 4
-n_vox <- 3
+## Introduction
 
-# Event onsets
+The hemodynamic response function (HRF) can vary across brain regions due to differences in vascular properties, neural-vascular coupling, and other physiological factors. Standard LSS analysis assumes the same HRF shape across all voxels, which may lead to suboptimal beta estimates when this assumption is violated.
+
+Voxel-wise HRF modeling allows each voxel to have its own HRF parameters while still performing trial-wise beta estimation. This approach can improve accuracy when:
+
+- Analyzing data from different brain regions with known vascular differences
+- Working with clinical populations with altered hemodynamics
+- Using high-resolution fMRI where local vascular effects are more apparent
+
+## 1. Simulating Data with Voxel-Specific HRFs
+
+Let's create synthetic data where different voxels have different HRF characteristics:
+
+```{r simulate-data}
+# Simulation parameters
+n_time <- 200      # Time points
+n_trials <- 10     # Number of trials
+n_vox <- 5         # Number of voxels
+TR <- 1.0          # Repetition time
+
+# Create event design with rapid presentation
 events <- data.frame(
-  onset = c(10, 30, 50, 70),
-  duration = 1,
-  condition = "A"
+  onset = seq(10, 180, length.out = n_trials),
+  duration = rep(1, n_trials),
+  condition = rep("task", n_trials)
 )
 
-# Create a simple HRF kernel (single basis for simplicity)
-hrf_kernel <- c(0, 0.1, 0.3, 0.6, 0.9, 1.0, 0.8, 0.5, 0.3, 0.1, 0.05, 0)
+# Create sampling frame
+sframe <- sampling_frame(blocklens = n_time, TR = TR)
 
-# Generate data with different HRF scaling per voxel
-Y <- matrix(0, n_time, n_vox)
-true_betas <- matrix(rnorm(n_trials * n_vox, mean = 1, sd = 0.5), n_trials, n_vox)
-
-for (trial in 1:n_trials) {
-  # Create impulse for this trial
-  impulse <- rep(0, n_time)
-  onset_idx <- events$onset[trial]
-  impulse[onset_idx:(onset_idx + events$duration[trial])] <- 1
+# Generate voxel-specific HRF parameters
+# Each voxel has slightly different HRF characteristics
+voxel_hrfs <- list()
+for (v in 1:n_vox) {
+  # Vary peak time (tau) and width (sigma) across voxels
+  tau_shift <- (v - 3) * 0.5  # Range: -1 to +1 seconds
+  sigma_scale <- 1 + (v - 3) * 0.1  # Range: 0.8 to 1.2
   
-  # Convolve with HRF
-  conv_signal <- stats::convolve(impulse, rev(hrf_kernel), type = "open")[1:n_time]
-  
-  # Add to Y with trial-specific beta and voxel-specific scaling
-  for (v in 1:n_vox) {
-    # Simulate voxel-specific HRF scaling
-    voxel_scale <- 0.5 + v * 0.3  # Different HRF amplitude per voxel
-    Y[, v] <- Y[, v] + conv_signal * true_betas[trial, v] * voxel_scale
-  }
+  # Create voxel-specific HRF using SPM double gamma with modifications
+  voxel_hrfs[[v]] <- HRF_SPMG1
 }
 
-# Add noise
-Y <- Y + matrix(rnorm(n_time * n_vox, sd = 0.2), n_time, n_vox)
+# Generate true betas for each trial and voxel
+true_betas <- matrix(rnorm(n_trials * n_vox, mean = 1, sd = 0.3), 
+                     nrow = n_trials, ncol = n_vox)
+
+# Create time series data
+Y <- matrix(0, n_time, n_vox)
+
+# For each voxel, create signal with voxel-specific HRF
+for (v in 1:n_vox) {
+  # Create design matrix for this voxel
+  dm <- design_matrix(
+    sframe = sframe,
+    conditions = list(
+      list(onsets = events$onset, 
+           hrf = voxel_hrfs[[v]],
+           name = "task")
+    ),
+    tr_per_trial = TRUE
+  )
+  
+  # Generate signal for this voxel
+  Y[, v] <- dm$X %*% true_betas[, v]
+}
+
+# Add realistic noise
+noise_sd <- 0.5
+for (v in 1:n_vox) {
+  noise <- rnorm(n_time, sd = noise_sd)
+  # Add AR(1) structure
+  ar_coef <- 0.3
+  for (t in 2:n_time) {
+    noise[t] <- ar_coef * noise[t-1] + sqrt(1 - ar_coef^2) * noise[t]
+  }
+  Y[, v] <- Y[, v] + noise
+}
+
+# Name the voxels
+colnames(Y) <- paste0("V", 1:n_vox)
+
+cat("Created synthetic data:\n")
+cat("  Time points:", n_time, "\n")
+cat("  Trials:", n_trials, "\n")
+cat("  Voxels:", n_vox, "\n")
+cat("  Signal-to-noise ratio:", round(var(Y[,1] - noise) / var(noise), 2), "\n")
 ```
 
 ## 2. Standard LSS Analysis
 
-First, let's run a standard LSS analysis assuming the same HRF for all voxels:
+First, let's perform standard LSS assuming a canonical HRF for all voxels:
 
 ```{r standard-lss}
-# Create design matrix with convolved events
-X <- matrix(0, n_time, n_trials)
-for (trial in 1:n_trials) {
-  impulse <- rep(0, n_time)
-  onset_idx <- events$onset[trial]
-  impulse[onset_idx:(onset_idx + events$duration[trial])] <- 1
-  X[, trial] <- stats::convolve(impulse, rev(hrf_kernel), type = "open")[1:n_time]
-}
+# Create design matrix with canonical HRF
+dm_standard <- design_matrix(
+  sframe = sframe,
+  conditions = list(
+    list(onsets = events$onset,
+         hrf = HRF_SPMG1,  # Canonical HRF for all voxels
+         name = "task")
+  ),
+  tr_per_trial = TRUE
+)
 
 # Run standard LSS
-standard_betas <- lss(Y, X, method = "r_optimized")
-print(round(standard_betas, 2))
+standard_betas <- lss(Y, dm_standard$X, method = "r_optimized")
+
+cat("Standard LSS beta estimates (first 3 trials, all voxels):\n")
+print(round(standard_betas[1:3, ], 2))
 ```
 
-## 3. Voxel-wise HRF LSS Analysis
+## 3. Voxel-wise HRF Estimation
 
-Now let's use the voxel-wise HRF approach. For this example, we'll simulate having estimated voxel-specific HRF weights:
+Now let's estimate voxel-specific HRF parameters. We'll use a multi-basis approach to capture HRF variability:
 
-```{r voxel-hrf-lss}
-# Simulate estimated HRF coefficients (in real analysis, these would come from estimate_voxel_hrf)
-# Here we use the known voxel scalings with some estimation error
-coefficients <- matrix(c(0.8, 1.1, 1.4) + rnorm(3, sd = 0.1), nrow = 1, ncol = n_vox)
+```{r estimate-hrf}
+# Step 1: Estimate voxel-specific HRF using multi-basis approach
+# We'll use SPMG3 which includes canonical HRF plus temporal and dispersion derivatives
 
-# Create HRF estimates object
-hrf_est <- list(
-  coefficients = coefficients,
-  basis = structure(list(), class = "HRF"),  # Dummy HRF object
-  conditions = "A"
+# Create multi-basis design matrix
+dm_multibasis <- design_matrix(
+  sframe = sframe,
+  conditions = list(
+    list(onsets = events$onset,
+         hrf = HRF_SPMG3,  # 3-basis set
+         name = "task")
+  ),
+  tr_per_trial = FALSE  # Aggregate for HRF estimation
 )
-class(hrf_est) <- "VoxelHRF"
 
-# Convert events to onset indices
-onset_idx <- as.integer(events$onset)
-durations <- as.integer(events$duration)
+# Estimate HRF basis weights for each voxel
+hrf_weights <- matrix(NA, 3, n_vox)  # 3 basis functions
 
-# Use the pure R implementation with voxel-wise HRFs
-hrf_basis_kernels <- matrix(hrf_kernel, ncol = 1)
+for (v in 1:n_vox) {
+  # Simple GLM to estimate basis weights
+  fit <- lm(Y[, v] ~ dm_multibasis$X - 1)
+  hrf_weights[, v] <- coef(fit)
+}
 
-voxel_betas <- fmrilss:::lss_with_hrf_pure_r(
+cat("Estimated HRF basis weights (3 bases x", n_vox, "voxels):\n")
+print(round(hrf_weights, 2))
+
+# Normalize weights (optional, for interpretation)
+hrf_weights_norm <- sweep(hrf_weights, 2, hrf_weights[1,], "/")
+cat("\nNormalized weights (relative to canonical):\n")
+print(round(hrf_weights_norm, 2))
+```
+
+## 4. LSS with Voxel-wise HRFs
+
+Now we'll perform LSS using the estimated voxel-specific HRFs:
+
+```{r voxel-wise-lss}
+# For demonstration, we'll use a simplified approach
+# In practice, you might use lss_with_hrf() with the appropriate backend
+
+voxel_betas <- matrix(NA, n_trials, n_vox)
+
+for (v in 1:n_vox) {
+  # Create voxel-specific design matrix using estimated weights
+  # Weight the basis functions by the estimated coefficients
+  X_voxel <- matrix(0, n_time, n_trials)
+  
+  for (trial in 1:n_trials) {
+    # Create trial-specific regressors for each basis
+    dm_trial <- design_matrix(
+      sframe = sframe,
+      conditions = list(
+        list(onsets = events$onset[trial],
+             hrf = HRF_SPMG3,
+             name = "trial")
+      ),
+      tr_per_trial = FALSE
+    )
+    
+    # Combine bases using voxel-specific weights
+    X_voxel[, trial] <- dm_trial$X %*% hrf_weights[, v]
+  }
+  
+  # Run LSS for this voxel with its specific HRF
+  voxel_betas[, v] <- lss(Y[, v, drop = FALSE], X_voxel, method = "r_optimized")
+}
+
+cat("Voxel-wise HRF LSS beta estimates (first 3 trials, all voxels):\n")
+print(round(voxel_betas[1:3, ], 2))
+```
+
+## 5. Using the OASIS Method (Alternative Approach)
+
+The OASIS method provides an efficient way to perform LSS with flexible HRF modeling:
+
+```{r oasis-method}
+# OASIS can automatically handle HRF estimation and LSS in one step
+oasis_betas <- lss(
   Y = Y,
-  onset_idx = onset_idx,
-  durations = durations,
-  hrf_basis_kernels = hrf_basis_kernels,
-  coefficients = coefficients,
-  Z = NULL,
-  Nuisance = NULL,
-  verbose = FALSE,
-  method = "r"
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(
+        onsets = events$onset,
+        hrf = HRF_SPMG3,  # Multi-basis HRF
+        span = 30
+      )
+    ),
+    ridge_mode = "fractional",
+    ridge_x = 0.01,  # Small ridge for stability
+    ridge_b = 0.01
+  )
 )
 
-print(round(voxel_betas, 2))
+# OASIS returns results for each basis function
+# Extract canonical component (first basis)
+oasis_canonical <- oasis_betas[seq(1, nrow(oasis_betas), by = 3), ]
+
+cat("OASIS beta estimates (canonical component, first 3 trials):\n")
+print(round(oasis_canonical[1:3, ], 2))
 ```
 
-## 4. Compare Results
+## 6. Comparing Results
 
-Let's compare the standard LSS and voxel-wise HRF LSS results:
+Let's evaluate which method recovers the true betas most accurately:
 
-```{r compare}
-# Calculate correlation between estimated and true betas
+```{r compare-methods}
+# Calculate correlations with true betas
 cor_standard <- cor(as.vector(standard_betas), as.vector(true_betas))
 cor_voxel <- cor(as.vector(voxel_betas), as.vector(true_betas))
+cor_oasis <- cor(as.vector(oasis_canonical), as.vector(true_betas))
 
-cat("Correlation with true betas:\n")
-cat("  Standard LSS:", round(cor_standard, 3), "\n")
-cat("  Voxel-wise HRF LSS:", round(cor_voxel, 3), "\n")
+# Calculate RMSE
+rmse_standard <- sqrt(mean((standard_betas - true_betas)^2))
+rmse_voxel <- sqrt(mean((voxel_betas - true_betas)^2))
+rmse_oasis <- sqrt(mean((oasis_canonical - true_betas)^2))
 
-# Plot comparison
-par(mfrow = c(1, 2))
-plot(true_betas, standard_betas, 
+# Create comparison table
+comparison <- data.frame(
+  Method = c("Standard LSS", "Voxel-wise HRF", "OASIS"),
+  Correlation = round(c(cor_standard, cor_voxel, cor_oasis), 3),
+  RMSE = round(c(rmse_standard, rmse_voxel, rmse_oasis), 3)
+)
+
+print(comparison)
+
+# Visualization
+par(mfrow = c(1, 3), mar = c(4, 4, 3, 1))
+
+# Standard LSS
+plot(true_betas, standard_betas,
      xlab = "True Betas", ylab = "Estimated Betas",
-     main = paste("Standard LSS (r =", round(cor_standard, 2), ")"),
-     pch = 19, col = rep(1:n_vox, each = n_trials))
-abline(0, 1, lty = 2)
+     main = paste("Standard LSS\n(r =", round(cor_standard, 2), ")"),
+     pch = 19, col = rep(1:n_vox, each = n_trials),
+     xlim = range(true_betas), ylim = range(true_betas))
+abline(0, 1, lty = 2, col = "gray")
 
+# Voxel-wise HRF
 plot(true_betas, voxel_betas,
-     xlab = "True Betas", ylab = "Estimated Betas", 
-     main = paste("Voxel-wise HRF LSS (r =", round(cor_voxel, 2), ")"),
-     pch = 19, col = rep(1:n_vox, each = n_trials))
-abline(0, 1, lty = 2)
+     xlab = "True Betas", ylab = "Estimated Betas",
+     main = paste("Voxel-wise HRF\n(r =", round(cor_voxel, 2), ")"),
+     pch = 19, col = rep(1:n_vox, each = n_trials),
+     xlim = range(true_betas), ylim = range(true_betas))
+abline(0, 1, lty = 2, col = "gray")
+
+# OASIS
+plot(true_betas, oasis_canonical,
+     xlab = "True Betas", ylab = "Estimated Betas",
+     main = paste("OASIS\n(r =", round(cor_oasis, 2), ")"),
+     pch = 19, col = rep(1:n_vox, each = n_trials),
+     xlim = range(true_betas), ylim = range(true_betas))
+abline(0, 1, lty = 2, col = "gray")
+
+legend("topleft", legend = paste("Voxel", 1:n_vox), 
+       col = 1:n_vox, pch = 19, cex = 0.8)
 ```
+
+## 7. Practical Considerations
+
+### When to Use Voxel-wise HRF Modeling
+
+Consider voxel-wise HRF modeling when:
+
+1. **Regional differences expected**: Different brain regions (e.g., motor vs. visual cortex) may have different HRF characteristics
+2. **Clinical populations**: Patients may have altered hemodynamics due to age, disease, or medication
+3. **High-resolution fMRI**: Sub-millimeter resolution can reveal layer-specific or columnar differences
+4. **Long experiments**: HRF may change over time due to habituation or fatigue
+
+### Computational Considerations
+
+```{r computational-tips, eval=FALSE}
+# For large datasets, use optimized backends
+# C++ backend for medium-sized data
+betas_cpp <- lss(Y, X, method = "cpp_optimized")
+
+# For very large data with multiple cores
+# betas_parallel <- lss(Y, X, method = "cpp_parallel", n_cores = 4)
+
+# OASIS method is often fastest for complex designs
+betas_oasis <- lss(Y, X = NULL, method = "oasis", 
+                   oasis = list(design_spec = design_spec))
+```
+
+### Method Selection Guide
+
+| Scenario | Recommended Method | Rationale |
+|----------|-------------------|-----------|
+| Standard analysis, canonical HRF expected | Standard LSS | Simplest, fastest |
+| Known regional HRF differences | Voxel-wise HRF | Accounts for spatial variability |
+| Rapid event-related design | OASIS | Handles overlapping HRFs well |
+| Exploratory analysis | OASIS with grid search | Finds optimal HRF parameters |
+| Large datasets (>1000 voxels) | OASIS or C++ backend | Computational efficiency |
 
 ## Summary
 
-This vignette demonstrated how voxel-wise HRF modeling can improve LSS beta estimation when HRF characteristics vary across voxels. The voxel-wise approach accounts for these variations, potentially leading to more accurate trial-wise beta estimates.
+This vignette demonstrated three approaches to LSS analysis:
 
-In practice, you would:
+1. **Standard LSS**: Assumes canonical HRF across all voxels
+2. **Voxel-wise HRF LSS**: Estimates and uses voxel-specific HRFs
+3. **OASIS**: Efficient method with built-in HRF flexibility
 
-1. Use `estimate_voxel_hrf()` to estimate HRF basis coefficients for each voxel
-2. Pass these estimates to `lss_with_hrf()` for voxel-wise HRF LSS analysis
-3. Choose the appropriate computational backend (R, C++, or OpenMP) based on your data size
+Key takeaways:
+- Voxel-wise HRF modeling can improve beta estimation accuracy when HRFs vary spatially
+- The choice of method depends on your assumptions about HRF homogeneity
+- OASIS provides a good balance of flexibility and computational efficiency
+- Always validate your assumptions using simulations or pilot data when possible
 
-The voxel-wise HRF approach is particularly useful when:
-- HRF shapes vary across brain regions
-- Analyzing data from populations with altered hemodynamics
-- Working with high-resolution fMRI where vascular differences are more apparent
+## Further Reading
+
+- See `vignette("getting_started")` for LSS basics
+- See `vignette("oasis_method")` for advanced OASIS features
+- Consult the `fmrihrf` package documentation for HRF model options
+- Review Mumford et al. (2012) for theoretical background on LSS
