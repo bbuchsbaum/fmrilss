@@ -27,6 +27,7 @@ Enter OASIS—Optimized Acquisition and Stimulus Sequencing—a method that reim
 This vignette assumes you're comfortable with the basic LSS concepts from our getting started guide, understand HRF models and basis functions from working with neuroimaging data, have some familiarity with ridge regression and regularization concepts, and know the basics of the `fmrihrf` package for HRF modeling. With this foundation, we'll explore how OASIS can transform your approach to trial-wise beta estimation.
 
 ```{r setup}
+library(fmrihrf)
 library(fmrilss)
 set.seed(42)
 ```
@@ -62,7 +63,7 @@ onsets <- seq(10, 280, by = 15)  # Events every 15 seconds
 n_trials <- length(onsets)
 
 # Create sampling frame
-sframe <- sampling_frame(blocklens = n_time, TR = TR)
+sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
 
 # Generate synthetic fMRI data
 Y <- matrix(rnorm(n_time * n_voxels), n_time, n_voxels)
@@ -72,10 +73,10 @@ true_betas <- matrix(rnorm(n_trials * n_voxels, mean = 1, sd = 0.5),
                      n_trials, n_voxels)
 
 # Create signal using canonical HRF
-dm <- design_matrix(
+dm <- fmrihrf::design_matrix(
   sframe = sframe,
   conditions = list(
-    list(onsets = onsets, hrf = HRF_SPMG1, name = "task")
+    list(onsets = onsets, hrf = fmrihrf::HRF_SPMG1, name = "task")
   ),
   tr_per_trial = TRUE
 )
@@ -92,7 +93,7 @@ beta_oasis <- lss(
       sframe = sframe,
       cond = list(
         onsets = onsets,
-        hrf = HRF_SPMG1,
+        hrf = fmrihrf::HRF_SPMG1,
         span = 30  # HRF duration
       )
     )
@@ -462,13 +463,13 @@ for (size_name in names(sizes)) {
   Y_bench <- matrix(rnorm(n_time * n_vox), n_time, n_vox)
 
   # Create sampling frame and onsets for this size
-  sframe_bench <- sampling_frame(blocklens = n_time, TR = TR)
+  sframe_bench <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
   onsets_bench <- seq(10, n_time - 20, length.out = min(20, floor(n_time/15)))
 
   # Standard LSS with pre-built design
-  dm_bench <- design_matrix(
+  dm_bench <- fmrihrf::design_matrix(
     sframe = sframe_bench,
-    conditions = list(list(onsets = onsets_bench, hrf = HRF_SPMG1)),
+    conditions = list(list(onsets = onsets_bench, hrf = fmrihrf::HRF_SPMG1)),
     tr_per_trial = TRUE
   )$X
 

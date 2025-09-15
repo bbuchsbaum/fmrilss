@@ -129,8 +129,8 @@ test_that("OASIS AR(1) whitening works", {
 test_that("OASIS input validation catches errors", {
   skip_on_cran()
   
-  # Non-matrix Y
-  expect_error(lss(1:10, method = "oasis"), "Y must be a numeric matrix")
+  # Non-matrix Y with valid X
+  expect_error(lss(1:10, X = matrix(1:10, 10, 1), method = "oasis"), "Y must be a numeric matrix")
   
   # Non-finite values
   Y <- matrix(1:20, 10, 2)

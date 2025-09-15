@@ -203,6 +203,116 @@ test_that("lss_with_hrf equivalent to lss when HRF identical", {
   expect_lt(mse, 0.01)
 })
 
-test_that("lss_with_hrf basis aliasing", {
-  skip("Test needs redesign - convolve_design not exported from fmrihrf")
+test_that("lss_with_hrf handles multi-basis HRF correctly", {
+  skip_if_not_installed("fmrihrf")
+  set.seed(42)
+
+  # Setup parameters
+  n_time <- 100
+  n_trials <- 5
+  n_vox <- 10
+  TR <- 1.0
+
+  # Create sampling frame
+  sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
+  times <- fmrihrf::samples(sframe, global = TRUE)
+
+  # Define events
+  events <- data.frame(
+    onset = c(10, 25, 40, 60, 80),
+    duration = rep(1, n_trials),
+    condition = rep("A", n_trials)
+  )
+
+  # Create multi-basis HRF (SPMG3 has 3 basis functions)
+  hrf_multi <- fmrihrf::HRF_SPMG3
+  K <- 3  # Number of basis functions
+
+  # Build design matrix using fmrihrf
+  rset <- fmrihrf::regressor_set(
+    onsets = events$onset,
+    fac = factor(1:n_trials),
+    hrf = hrf_multi,
+    duration = events$duration,
+    span = 30,
+    summate = TRUE
+  )
+
+  # Evaluate to get convolved design matrix
+  X_multi <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")
+  if (inherits(X_multi, "Matrix")) X_multi <- as.matrix(X_multi)
+
+  # X_multi should have dimensions: n_time x (n_trials * K)
+  expect_equal(dim(X_multi), c(n_time, n_trials * K))
+
+  # Generate synthetic data with multi-basis structure
+  # Each trial has K coefficients (one per basis)
+  true_coefs <- matrix(rnorm(n_trials * K * n_vox, mean = 0, sd = 0.5),
+                       nrow = n_trials * K, ncol = n_vox)
+  # Add stronger signal to first basis to make it dominant
+  true_coefs[seq(1, n_trials * K, by = K), ] <-
+    true_coefs[seq(1, n_trials * K, by = K), ] + 1
+
+  Y <- X_multi %*% true_coefs + matrix(rnorm(n_time * n_vox, sd = 0.2), n_time, n_vox)
+
+  # Extract basis kernels from HRF object
+  hrf_eval_times <- seq(0, 30, by = TR)
+  hrf_basis_kernels <- fmrihrf::evaluate(hrf_multi, hrf_eval_times)
+  if (inherits(hrf_basis_kernels, "Matrix")) {
+    hrf_basis_kernels <- as.matrix(hrf_basis_kernels)
+  }
+
+  # Create coefficients matrix (K x n_vox)
+  # For testing, use identity - each voxel uses all basis functions equally
+  coefficients <- matrix(1/K, nrow = K, ncol = n_vox)
+
+  # Run lss_with_hrf with multi-basis HRF
+  onset_idx <- as.integer(events$onset)
+  durations <- as.integer(events$duration)
+
+  result <- fmrilss:::lss_with_hrf_pure_r(
+    Y = Y,
+    onset_idx = onset_idx,
+    durations = durations,
+    hrf_basis_kernels = hrf_basis_kernels,
+    coefficients = coefficients,
+    Z = NULL,
+    Nuisance = NULL,
+    verbose = FALSE,
+    method = "r"
+  )
+
+  # Check dimensions
+  expect_equal(dim(result), c(n_trials, n_vox))
+
+  # Results should be finite
+  expect_true(all(is.finite(result)))
+
+  # Check that we can recover some signal
+  # Since first basis has stronger signal, trial estimates should correlate with it
+  trial_means <- rowMeans(result)
+  expect_true(var(trial_means) > 0)  # Should have variation across trials
+
+  # Alternative test using OASIS with multi-basis
+  oasis_result <- lss(
+    Y = Y,
+    X = X_multi,
+    method = "oasis",
+    oasis = list(K = K)
+  )
+
+  # OASIS should return K*n_trials rows for multi-basis
+  expect_equal(nrow(oasis_result), n_trials * K)
+  expect_equal(ncol(oasis_result), n_vox)
+
+  # Compare aggregated results (sum across basis functions per trial)
+  oasis_aggregated <- matrix(0, n_trials, n_vox)
+  for (i in 1:n_trials) {
+    idx <- ((i-1)*K + 1):(i*K)
+    oasis_aggregated[i, ] <- colSums(oasis_result[idx, , drop = FALSE])
+  }
+
+  # Results should be somewhat correlated
+  correlation <- cor(as.vector(result), as.vector(oasis_aggregated))
+  expect_gt(correlation, 0.5)  # Should have positive correlation
 })

@@ -383,7 +383,7 @@ compare_hrf_recovery <- function(data, hrf_grid = NULL) {
         sframe = sframe,
         cond = list(
           onsets = onsets,
-          hrf = HRF_SPMG3,
+          hrf = fmrihrf::HRF_SPMG3,
           span = 30
         )
       )

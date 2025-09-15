@@ -28,6 +28,7 @@ This vignette will guide you through the process of accounting for HRF variabili
 
 ```{r setup}
 library(fmrilss)
+library(fmrihrf)
 set.seed(123)
 ```
 
@@ -54,7 +55,7 @@ events <- data.frame(
 )
 
 # Create sampling frame
-sframe <- sampling_frame(blocklens = n_time, TR = TR)
+sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
 
 # Generate voxel-specific HRF parameters
 # Each voxel has slightly different HRF characteristics
@@ -78,7 +79,7 @@ Y <- matrix(0, n_time, n_vox)
 # For each voxel, create signal with voxel-specific HRF
 for (v in 1:n_vox) {
   # Create design matrix for this voxel
-  dm <- design_matrix(
+  dm <- fmrihrf::design_matrix(
     sframe = sframe,
     conditions = list(
       list(onsets = events$onset,

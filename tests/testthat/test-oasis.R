@@ -229,7 +229,7 @@ test_that("OASIS handles other conditions as nuisances", {
               design_spec = list(
                 sframe = sframe,
                 cond = list(onsets = c(10, 40, 70, 100, 130),
-                           hrf = HRF_SPMG1),
+                           hrf = fmrihrf::HRF_SPMG1),
                 others = list(
                   list(onsets = c(20, 50, 80, 110, 140)),
                   list(onsets = c(30, 60, 90, 120, 150))

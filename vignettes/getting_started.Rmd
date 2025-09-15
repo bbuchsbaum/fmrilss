@@ -35,6 +35,7 @@ Beyond these two core regressors, LSS models can include experimental regressors
 ## Your First LSS Analysis
 
 ```{r setup}
+library(fmrihrf)
 library(fmrilss)
 
 set.seed(42)
