@@ -34,25 +34,28 @@ set.seed(42)
 # Helper function to create design matrix using fmrihrf API
 # (design_matrix is not exported from fmrihrf, so we create a wrapper)
 design_matrix <- function(sframe, conditions, tr_per_trial = FALSE) {
-  # Get block info from sframe
-  n_blocks <- length(fmrihrf::blocklens(sframe))
+  # Helper to safely extract condition fields without partial matching
+  cond_field <- function(cond, name, default = NULL) {
+    if (!is.null(cond[[name]])) cond[[name]] else default
+  }
 
   if (tr_per_trial) {
     # Create trial-wise design (one column per trial)
     X_list <- list()
     for (cond in conditions) {
-      n_trials <- length(cond$onsets)
+      onsets <- cond_field(cond, "onsets")
+      n_trials <- length(onsets)
       # Each trial gets its own regressor
       X_trial <- fmrihrf::regressor_design(
-        onsets = cond$onsets,
-        fac = factor(1:n_trials),  # Each trial is its own level
-        block = rep(1, n_trials),  # Assume single block for simplicity
+        onsets = onsets,
+        fac = factor(seq_len(n_trials)),  # Each trial is its own level
+        block = rep(1L, n_trials),        # Assume single block for simplicity
         sframe = sframe,
-        hrf = cond$hrf,
-        duration = if (!is.null(cond$duration)) cond$duration else 0,
-        span = if (!is.null(cond$span)) cond$span else 30,
-        precision = 0.1,
-        method = "conv",
+        hrf = cond_field(cond, "hrf", fmrihrf::HRF_SPMG1),
+        duration = cond_field(cond, "duration", 0),
+        span = cond_field(cond, "span", 30),
+        precision = cond_field(cond, "precision", 0.1),
+        method = cond_field(cond, "method", "conv"),
         summate = FALSE  # Don't sum across trials
       )
       X_list[[length(X_list) + 1]] <- X_trial
@@ -62,18 +65,19 @@ design_matrix <- function(sframe, conditions, tr_per_trial = FALSE) {
     # Create aggregate design (one column per condition)
     X_list <- list()
     for (cond in conditions) {
-      n_trials <- length(cond$onsets)
+      onsets <- cond_field(cond, "onsets")
+      n_trials <- length(onsets)
       # All trials in same condition get summed
       X_cond <- fmrihrf::regressor_design(
-        onsets = cond$onsets,
-        fac = factor(rep(1, n_trials)),  # All trials same level
-        block = rep(1, n_trials),
+        onsets = onsets,
+        fac = factor(rep(1L, n_trials)),  # All trials same level
+        block = rep(1L, n_trials),
         sframe = sframe,
-        hrf = cond$hrf,
-        duration = if (!is.null(cond$duration)) cond$duration else 0,
-        span = if (!is.null(cond$span)) cond$span else 30,
-        precision = 0.1,
-        method = "conv",
+        hrf = cond_field(cond, "hrf", fmrihrf::HRF_SPMG1),
+        duration = cond_field(cond, "duration", 0),
+        span = cond_field(cond, "span", 30),
+        precision = cond_field(cond, "precision", 0.1),
+        method = cond_field(cond, "method", "conv"),
         summate = TRUE  # Sum across trials in condition
       )
       X_list[[length(X_list) + 1]] <- X_cond
@@ -501,47 +505,51 @@ To understand OASIS's efficiency, let's conduct systematic benchmarks comparing 
 ```{r performance-comparison}
 # Benchmark across different dataset sizes
 sizes <- list(
-  small = c(200, 100),   # 200 timepoints, 100 voxels
-  medium = c(300, 500),  # 300 timepoints, 500 voxels
-  large = c(400, 2000)   # 400 timepoints, 2000 voxels
+  small  = list(timepoints = 300, voxels = 500),
+  medium = list(timepoints = 400, voxels = 2000),
+  large  = list(timepoints = 600, voxels = 8000),
+  xlarge = list(timepoints = 800, voxels = 16000)
 )
 
 benchmark_results <- data.frame()
 
 for (size_name in names(sizes)) {
-  n_time <- sizes[[size_name]][1]
-  n_vox <- sizes[[size_name]][2]
+  n_time <- sizes[[size_name]][['timepoints']]
+  n_vox  <- sizes[[size_name]][['voxels']]
 
   # Create test data
   Y_bench <- matrix(rnorm(n_time * n_vox), n_time, n_vox)
 
   # Create sampling frame and onsets for this size
   sframe_bench <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
-  onsets_bench <- seq(10, n_time - 20, length.out = min(20, floor(n_time/15)))
+  n_trials <- min(60, floor(n_time / 10))
+  onsets_bench <- seq(10, n_time - 20, length.out = n_trials)
 
-  # Standard LSS with pre-built design
+  # Standard LSS with pre-built design (shared across methods)
   dm_bench <- design_matrix(
     sframe = sframe_bench,
     conditions = list(list(onsets = onsets_bench, hrf = fmrihrf::HRF_SPMG1)),
     tr_per_trial = TRUE
-  )$X
+  )[['X']]
 
   # Time standard LSS (R optimized)
   time_r_opt <- system.time({
     beta_r <- lss(Y_bench, dm_bench, method = "r_optimized")
   })[3]
 
-  # Time standard LSS (C++ optimized) if available
-  time_cpp <- NA
-  if (requireNamespace("Rcpp", quietly = TRUE)) {
-    time_cpp <- system.time({
-      beta_cpp <- lss(Y_bench, dm_bench, method = "cpp_optimized")
-    })[3]
-  }
+  # Time standard LSS (C++ optimized)
+  time_cpp <- system.time({
+    beta_cpp <- lss(Y_bench, dm_bench, method = "cpp_optimized")
+  })[3]
 
-  # Time OASIS
+  # Time OASIS using the pre-built design (fair comparison)
   time_oasis <- system.time({
-    beta_oasis_bench <- lss(
+    beta_oasis <- lss(Y = Y_bench, X = dm_bench, method = "oasis")
+  })[3]
+
+  # Time OASIS when it also has to build the design internally
+  time_oasis_build <- system.time({
+    beta_oasis_build <- lss(
       Y = Y_bench,
       X = NULL,
       method = "oasis",
@@ -550,7 +558,7 @@ for (size_name in names(sizes)) {
           sframe = sframe_bench,
           cond = list(
             onsets = onsets_bench,
-            hrf = HRF_SPMG1,
+            hrf = fmrihrf::HRF_SPMG1,
             span = 30
           )
         )
@@ -563,37 +571,44 @@ for (size_name in names(sizes)) {
     Size = size_name,
     Timepoints = n_time,
     Voxels = n_vox,
-    Trials = length(onsets_bench),
-    R_Optimized = round(time_r_opt, 3),
-    CPP_Optimized = round(time_cpp, 3),
-    OASIS = round(time_oasis, 3),
-    Speedup_vs_R = round(time_r_opt / time_oasis, 1),
-    Speedup_vs_CPP = if (!is.na(time_cpp)) round(time_cpp / time_oasis, 1) else NA
+    Trials = n_trials,
+    R_Optimized = time_r_opt,
+    CPP_Optimized = time_cpp,
+    OASIS = time_oasis,
+    OASIS_with_design = time_oasis_build,
+    Speedup_vs_R = time_r_opt / time_oasis,
+    Speedup_vs_CPP = time_cpp / time_oasis,
+    Design_Build_Overhead = time_oasis_build - time_oasis
   ))
 }
 
-print(benchmark_results)
+# Display rounded results for readability
+numeric_cols <- setdiff(names(benchmark_results), "Size")
+benchmark_display <- benchmark_results
+benchmark_display[numeric_cols] <- lapply(benchmark_display[numeric_cols], function(x) round(x, 3))
+print(benchmark_display)
 
 # Visualize scaling
 par(mfrow = c(1, 2))
 
 # Time vs dataset size
+ylim_max <- max(benchmark_results[, c("R_Optimized", "CPP_Optimized", "OASIS_with_design")])
 plot(benchmark_results$Voxels, benchmark_results$R_Optimized,
      type = "b", col = "blue", pch = 19,
      xlab = "Number of Voxels", ylab = "Time (seconds)",
      main = "Computation Time Scaling",
-     ylim = c(0, max(benchmark_results$R_Optimized, na.rm = TRUE)))
+     ylim = c(0, ylim_max))
+lines(benchmark_results$Voxels, benchmark_results$CPP_Optimized,
+      type = "b", col = "darkgreen", pch = 15)
 lines(benchmark_results$Voxels, benchmark_results$OASIS,
       type = "b", col = "red", pch = 17)
-if (any(!is.na(benchmark_results$CPP_Optimized))) {
-  lines(benchmark_results$Voxels, benchmark_results$CPP_Optimized,
-        type = "b", col = "green", pch = 15)
-  legend("topleft", c("R Optimized", "C++ Optimized", "OASIS"),
-         col = c("blue", "green", "red"), pch = c(19, 15, 17), lty = 1)
-} else {
-  legend("topleft", c("R Optimized", "OASIS"),
-         col = c("blue", "red"), pch = c(19, 17), lty = 1)
-}
+lines(benchmark_results$Voxels, benchmark_results$OASIS_with_design,
+      type = "b", col = "red", lty = 2, pch = 1)
+legend("topleft",
+       c("R Optimized", "C++ Optimized", "OASIS (pre-built X)", "OASIS (build design)"),
+       col = c("blue", "darkgreen", "red", "red"),
+       pch = c(19, 15, 17, 1),
+       lty = c(1, 1, 1, 2))
 
 # Speedup factor
 barplot(benchmark_results$Speedup_vs_R,
@@ -603,10 +618,11 @@ barplot(benchmark_results$Speedup_vs_R,
         col = "steelblue")
 abline(h = 1, lty = 2, col = "gray")
 ```
+```
 
-These benchmarks demonstrate OASIS's computational advantages, which stem from its mathematical reformulation that eliminates redundant calculations. The speedup factor typically increases with dataset size due to the efficiency of the closed-form solution approach.
+These benchmarks show that all three optimized backends sit within a few percent of one another across the regimes we tested. The R and fused C++ paths are already very efficient, and OASIS closely tracks them even as we scale to tens of thousands of voxels and dozens of trials. The `OASIS (build design)` curve highlights another key point: if you let OASIS construct the design inside the call you pay the additional cost of HRF convolution, so for apples-to-apples comparisons you should pre-build and reuse `X` just as you would for the other methods.
 
-The performance advantage is most pronounced when dealing with rapid event-related designs where the mathematical structure of LSS can be fully exploited. While exact speedup factors depend on dataset characteristics and hardware, OASIS consistently outperforms iterative approaches by avoiding redundant computations.
+The exact ordering will vary with hardware, trial spacing, and nuisance structure—on some reruns OASIS edges ahead, on others the R or C++ backend wins by a similar margin. The takeaway is that OASIS keeps pace with the existing optimized solvers while additionally providing HRF-aware design construction, ridge regularization, whitening, and diagnostics.
 
 ## Creating Custom HRF Functions
 
