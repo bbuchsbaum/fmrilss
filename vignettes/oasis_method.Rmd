@@ -30,6 +30,59 @@ This vignette assumes you're comfortable with the basic LSS concepts from our ge
 library(fmrihrf)
 library(fmrilss)
 set.seed(42)
+
+# Helper function to create design matrix using fmrihrf API
+# (design_matrix is not exported from fmrihrf, so we create a wrapper)
+design_matrix <- function(sframe, conditions, tr_per_trial = FALSE) {
+  # Get block info from sframe
+  n_blocks <- length(fmrihrf::blocklens(sframe))
+
+  if (tr_per_trial) {
+    # Create trial-wise design (one column per trial)
+    X_list <- list()
+    for (cond in conditions) {
+      n_trials <- length(cond$onsets)
+      # Each trial gets its own regressor
+      X_trial <- fmrihrf::regressor_design(
+        onsets = cond$onsets,
+        fac = factor(1:n_trials),  # Each trial is its own level
+        block = rep(1, n_trials),  # Assume single block for simplicity
+        sframe = sframe,
+        hrf = cond$hrf,
+        duration = if (!is.null(cond$duration)) cond$duration else 0,
+        span = if (!is.null(cond$span)) cond$span else 30,
+        precision = 0.1,
+        method = "conv",
+        summate = FALSE  # Don't sum across trials
+      )
+      X_list[[length(X_list) + 1]] <- X_trial
+    }
+    X <- do.call(cbind, X_list)
+  } else {
+    # Create aggregate design (one column per condition)
+    X_list <- list()
+    for (cond in conditions) {
+      n_trials <- length(cond$onsets)
+      # All trials in same condition get summed
+      X_cond <- fmrihrf::regressor_design(
+        onsets = cond$onsets,
+        fac = factor(rep(1, n_trials)),  # All trials same level
+        block = rep(1, n_trials),
+        sframe = sframe,
+        hrf = cond$hrf,
+        duration = if (!is.null(cond$duration)) cond$duration else 0,
+        span = if (!is.null(cond$span)) cond$span else 30,
+        precision = 0.1,
+        method = "conv",
+        summate = TRUE  # Sum across trials in condition
+      )
+      X_list[[length(X_list) + 1]] <- X_cond
+    }
+    X <- do.call(cbind, X_list)
+  }
+
+  list(X = as.matrix(X))
+}
 ```
 
 ## Understanding the OASIS Innovation
@@ -73,7 +126,7 @@ true_betas <- matrix(rnorm(n_trials * n_voxels, mean = 1, sd = 0.5),
                      n_trials, n_voxels)
 
 # Create signal using canonical HRF
-dm <- fmrihrf::design_matrix(
+dm <- design_matrix(
   sframe = sframe,
   conditions = list(
     list(onsets = onsets, hrf = fmrihrf::HRF_SPMG1, name = "task")
@@ -467,7 +520,7 @@ for (size_name in names(sizes)) {
   onsets_bench <- seq(10, n_time - 20, length.out = min(20, floor(n_time/15)))
 
   # Standard LSS with pre-built design
-  dm_bench <- fmrihrf::design_matrix(
+  dm_bench <- design_matrix(
     sframe = sframe_bench,
     conditions = list(list(onsets = onsets_bench, hrf = fmrihrf::HRF_SPMG1)),
     tr_per_trial = TRUE

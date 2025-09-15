@@ -30,6 +30,59 @@ This vignette will guide you through the process of accounting for HRF variabili
 library(fmrilss)
 library(fmrihrf)
 set.seed(123)
+
+# Helper function to create design matrix using fmrihrf API
+# (design_matrix is not exported from fmrihrf, so we create a wrapper)
+design_matrix <- function(sframe, conditions, tr_per_trial = FALSE) {
+  # Get block info from sframe
+  n_blocks <- length(fmrihrf::blocklens(sframe))
+
+  if (tr_per_trial) {
+    # Create trial-wise design (one column per trial)
+    X_list <- list()
+    for (cond in conditions) {
+      n_trials <- length(cond$onsets)
+      # Each trial gets its own regressor
+      X_trial <- fmrihrf::regressor_design(
+        onsets = cond$onsets,
+        fac = factor(1:n_trials),  # Each trial is its own level
+        block = rep(1, n_trials),  # Assume single block for simplicity
+        sframe = sframe,
+        hrf = cond$hrf,
+        duration = if (!is.null(cond$duration)) cond$duration else 0,
+        span = if (!is.null(cond$span)) cond$span else 30,
+        precision = 0.1,
+        method = "conv",
+        summate = FALSE  # Don't sum across trials
+      )
+      X_list[[length(X_list) + 1]] <- X_trial
+    }
+    X <- do.call(cbind, X_list)
+  } else {
+    # Create aggregate design (one column per condition)
+    X_list <- list()
+    for (cond in conditions) {
+      n_trials <- length(cond$onsets)
+      # All trials in same condition get summed
+      X_cond <- fmrihrf::regressor_design(
+        onsets = cond$onsets,
+        fac = factor(rep(1, n_trials)),  # All trials same level
+        block = rep(1, n_trials),
+        sframe = sframe,
+        hrf = cond$hrf,
+        duration = if (!is.null(cond$duration)) cond$duration else 0,
+        span = if (!is.null(cond$span)) cond$span else 30,
+        precision = 0.1,
+        method = "conv",
+        summate = TRUE  # Sum across trials in condition
+      )
+      X_list[[length(X_list) + 1]] <- X_cond
+    }
+    X <- do.call(cbind, X_list)
+  }
+
+  list(X = as.matrix(X))
+}
 ```
 
 ## Building Intuition Through Simulation
@@ -79,7 +132,7 @@ Y <- matrix(0, n_time, n_vox)
 # For each voxel, create signal with voxel-specific HRF
 for (v in 1:n_vox) {
   # Create design matrix for this voxel
-  dm <- fmrihrf::design_matrix(
+  dm <- design_matrix(
     sframe = sframe,
     conditions = list(
       list(onsets = events$onset,
