@@ -61,7 +61,7 @@ for(i in 1:n_trials) {
 
 # Experimental regressors (Z) - intercept and condition effects
 # These are regressors we want to model and get estimates for, but not trial-wise
-Z <- cbind(Intercept = 1, LinearTrend = scale(1:n_timepoints, center = TRUE, scale = FALSE))
+Z <- cbind(Intercept = 1, LinearTrend = as.vector(scale(1:n_timepoints, center = TRUE, scale = FALSE)))
 
 # Nuisance regressors - e.g., 6 motion parameters
 Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)
@@ -76,9 +76,14 @@ Before fitting models, it helps to quickly inspect the experimental and nuisance
 ```{r plot-regressors, fig.width=8, fig.height=6}
 # Pretty plotting helper
 plot_regressors <- function(Z, Nuisance) {
+  # Ensure Z has column names
+  if (is.null(colnames(Z))) {
+    colnames(Z) <- paste0("Z", seq_len(ncol(Z)))
+  }
+
   # Omit the intercept when plotting experimental regressors
   z_names <- setdiff(colnames(Z), "Intercept")
-  z_mat <- if (length(z_names)) as.matrix(Z[, z_names, drop = FALSE]) else NULL
+  z_mat <- if (length(z_names) > 0) as.matrix(Z[, z_names, drop = FALSE]) else NULL
 
   # Standardize (z-score) for comparability
   N_std <- scale(Nuisance)
