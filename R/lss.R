@@ -169,7 +169,29 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
                 method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive", "oasis"),
                 block_size = 96, oasis = list()) {
   
-  # Input validation
+  method <- match.arg(method)
+  
+  # Fast-path to OASIS: it has its own coercion/validation and supports Matrix inputs
+  if (method == "oasis") {
+    if (is.null(X) && is.null(oasis$design_spec)) {
+      stop("For method='oasis', either X or oasis$design_spec must be provided")
+    }
+    return(.lss_oasis(Y, X, Z, Nuisance, oasis))
+  }
+  
+  # Coerce S4 Matrix/data.frame to base matrices for non-OASIS methods
+  to_mat <- function(M) {
+    if (is.null(M)) return(NULL)
+    if (inherits(M, "Matrix")) return(as.matrix(M))
+    if (is.data.frame(M))     return(as.matrix(M))
+    M
+  }
+  Y        <- to_mat(Y)
+  X        <- to_mat(X)
+  Z        <- to_mat(Z)
+  Nuisance <- to_mat(Nuisance)
+  
+  # Input validation (non-OASIS)
   if (!is.matrix(Y) || !is.numeric(Y)) {
     stop("Y must be a numeric matrix")
   }
@@ -178,18 +200,6 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   }
   if (!is.null(Nuisance) && (!is.matrix(Nuisance) || !is.numeric(Nuisance) || nrow(Nuisance) != nrow(Y))) {
     stop("Nuisance must be a numeric matrix with the same number of rows as Y")
-  }
-  
-  method <- match.arg(method)
-  
-  # Handle OASIS method separately (it has different X requirements)
-  if (method == "oasis") {
-    # Allow X to be NULL for OASIS if design_spec is provided
-    if (is.null(X) && is.null(oasis$design_spec)) {
-      stop("For method='oasis', either X or oasis$design_spec must be provided")
-    }
-    # OASIS handles its own validation and dispatch
-    return(.lss_oasis(Y, X, Z, Nuisance, oasis))
   }
   
   # For non-OASIS methods, X is required
