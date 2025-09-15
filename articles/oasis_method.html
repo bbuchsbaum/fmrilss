@@ -172,9 +172,10 @@ per‑trial designs share components that let you factor the computation
 and reuse them across trials. Note this factoring is already exploited
 by fmrilss’s optimized backends (e.g., the fused single‑pass solver that
 residualizes once and reuses totals and cross‑products across trials).
-OASIS builds on the same algebra but extends it to event→design
-construction with HRFs, multi‑basis models, and stabilized,
-diagnostics‑ready closed‑form solves.</p>
+OASIS uses the same core solve but wraps it in a richer, HRF-aware
+workflow: automatic design construction from event specs, built-in ridge
+scaling, AR(1) whitening, SE/diagnostic reporting, and native support
+for multi-basis or FIR HRFs.</p>
 <p>Beyond computational efficiency, OASIS adds features that the generic
 LSS path does not expose: built‑in ridge regularization (absolute and
 fractional) on the two‑regressor Gram per trial, optional AR(1)
@@ -789,15 +790,15 @@ dataset sizes:</p>
 <span><span class="va">benchmark_display</span><span class="op">[</span><span class="va">numeric_cols</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">benchmark_display</span><span class="op">[</span><span class="va">numeric_cols</span><span class="op">]</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">x</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">benchmark_display</span><span class="op">)</span></span>
 <span><span class="co">#&gt;            Size Timepoints Voxels Trials R_Optimized CPP_Optimized OASIS</span></span>
-<span><span class="co">#&gt; elapsed   small        300    500     30       0.005         0.013 0.002</span></span>
-<span><span class="co">#&gt; elapsed1 medium        400   2000     40       0.015         0.140 0.009</span></span>
-<span><span class="co">#&gt; elapsed2  large        600   8000     60       0.072         0.137 0.050</span></span>
-<span><span class="co">#&gt; elapsed3 xlarge        800  16000     60       0.165         0.581 0.120</span></span>
+<span><span class="co">#&gt; elapsed   small        300    500     30       0.005         0.017 0.002</span></span>
+<span><span class="co">#&gt; elapsed1 medium        400   2000     40       0.014         0.111 0.009</span></span>
+<span><span class="co">#&gt; elapsed2  large        600   8000     60       0.070         0.064 0.051</span></span>
+<span><span class="co">#&gt; elapsed3 xlarge        800  16000     60       0.167         0.192 0.124</span></span>
 <span><span class="co">#&gt;          OASIS_with_design Speedup_vs_R Speedup_vs_CPP Design_Build_Overhead</span></span>
-<span><span class="co">#&gt; elapsed              0.019        2.500          6.500                 0.017</span></span>
-<span><span class="co">#&gt; elapsed1             0.030        1.667         15.556                 0.021</span></span>
-<span><span class="co">#&gt; elapsed2             0.086        1.440          2.740                 0.036</span></span>
-<span><span class="co">#&gt; elapsed3             0.162        1.375          4.842                 0.042</span></span>
+<span><span class="co">#&gt; elapsed              0.021        2.500          8.500                 0.019</span></span>
+<span><span class="co">#&gt; elapsed1             0.037        1.556         12.333                 0.028</span></span>
+<span><span class="co">#&gt; elapsed2             0.088        1.373          1.255                 0.037</span></span>
+<span><span class="co">#&gt; elapsed3             0.168        1.347          1.548                 0.044</span></span>
 <span></span>
 <span><span class="co"># Visualize scaling</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
