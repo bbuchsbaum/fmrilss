@@ -73,7 +73,7 @@ The trial matrix `X` represents the expected BOLD response for each trial, typic
 
 Before fitting models, it helps to quickly inspect the experimental and nuisance regressors. Below are clean plots of the session‑wide experimental effects (excluding the intercept) and the nuisance regressors, standardized for comparability. If `ggplot2` is available, we use it for polished visuals; otherwise we fall back to base R.
 
-```{r plot-regressors, fig.width=8, fig.height=6}
+```{r plot-regressors, fig.width=8, fig.height=6, echo=FALSE}
 # Pretty plotting helper
 plot_regressors <- function(Z, Nuisance) {
   # Ensure Z has column names
@@ -150,6 +150,35 @@ plot_regressors <- function(Z, Nuisance) {
 }
 
 plot_regressors(Z, Nuisance)
+```
+
+### Single-Trial Regressors
+
+A compact way to view the per‑trial regressors is as a heatmap (time × trial). This makes overlaps and spacing immediately visible.
+
+```{r plot-trial-regressors, fig.width=8, fig.height=4, echo=FALSE}
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  dfX <- data.frame(
+    Time = rep(seq_len(nrow(X)), times = ncol(X)),
+    Trial = factor(rep(seq_len(ncol(X)), each = nrow(X))),
+    Value = as.vector(X)
+  )
+  pX <- ggplot2::ggplot(dfX, ggplot2::aes(Time, Trial, fill = Value)) +
+    ggplot2::geom_tile() +
+    ggplot2::scale_fill_viridis_c(option = "C") +
+    ggplot2::labs(title = "Single-trial regressors (time × trial)",
+                  x = "Time (TR)", y = "Trial", fill = "Value") +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(legend.position = "right")
+  print(pX)
+} else {
+  op <- par(no.readonly = TRUE); on.exit(par(op), add = TRUE)
+  image(t(X), col = hcl.colors(64, "BluGrn"), axes = FALSE,
+        main = "Single-trial regressors (time × trial)")
+  axis(1, at = c(0, 1), labels = c("0", nrow(X)))
+  axis(2, at = c(0, 1), labels = c("1", ncol(X)))
+  box()
+}
 ```
 
 ### Generating Realistic Data
