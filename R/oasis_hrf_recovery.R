@@ -171,7 +171,7 @@ create_lwu_grid <- function(tau_range = c(4, 8),
       sigma_val <- params$sigma
       rho_val <- params$rho
       function(t) {
-        hrf_lwu(t, tau = tau_val, sigma = sigma_val, rho = rho_val, normalize = "height")
+        fmrihrf::hrf_lwu(t, tau = tau_val, sigma = sigma_val, rho = rho_val, normalize = "height")
       }
     })
     # Add attributes for later reference
@@ -200,7 +200,7 @@ create_lwu_grid <- function(tau_range = c(4, 8),
 #' @return List with best HRF index, parameters, and beta estimates
 #' @export
 fit_oasis_grid <- function(Y, onsets, sframe, hrf_grid,
-                          ridge_x = 0.01, ridge_b = 0.01) {
+                           ridge_x = 0.01, ridge_b = 0.01) {
   
   n_hrfs <- length(hrf_grid$hrfs)
   scores <- numeric(n_hrfs)
@@ -215,7 +215,7 @@ fit_oasis_grid <- function(Y, onsets, sframe, hrf_grid,
       
       hrf_obj <- structure(
         function(t) {
-          hrf_lwu(t, tau = tau_val, sigma = sigma_val, rho = rho_val, normalize = "height")
+          fmrihrf::hrf_lwu(t, tau = tau_val, sigma = sigma_val, rho = rho_val, normalize = "height")
         },
         class = c("hrf", "function"),
         span = 30,
@@ -251,12 +251,16 @@ fit_oasis_grid <- function(Y, onsets, sframe, hrf_grid,
         next
       }
       
-      # Reconstruct fitted values using evaluate_design
-      times <- samples(sframe, global = TRUE)
+      # Reconstruct fitted values using evaluated regressors.
+      # For multi-basis HRFs, collapse basis columns to a single per-trial regressor (rowSums),
+      # matching OASIS's summed-basis trial design used in .oasis_build_X_from_events.
+      times <- fmrihrf::samples(sframe, global = TRUE)
       X_trial <- matrix(0, length(times), length(onsets))
       for (j in seq_along(onsets)) {
-        reg <- regressor(onsets[j], hrf_obj)
-        X_trial[, j] <- evaluate(reg, times)
+        reg    <- fmrihrf::regressor(onsets = onsets[j], hrf = hrf_obj, duration = 0, span = 30)
+        x_eval <- fmrihrf::evaluate(reg, times)
+        if (inherits(x_eval, "Matrix")) x_eval <- as.matrix(x_eval)
+        X_trial[, j] <- if (is.matrix(x_eval)) rowSums(x_eval) else as.numeric(x_eval)
       }
       
       # Check dimensions match
@@ -287,8 +291,8 @@ fit_oasis_grid <- function(Y, onsets, sframe, hrf_grid,
   # Create best HRF object
   best_hrf <- structure(
     function(t) {
-      hrf_lwu(t, tau = best_params$tau, sigma = best_params$sigma, 
-              rho = best_params$rho, normalize = "height")
+      fmrihrf::hrf_lwu(t, tau = best_params$tau, sigma = best_params$sigma, 
+                       rho = best_params$rho, normalize = "height")
     },
     class = c("hrf", "function"),
     span = 30,

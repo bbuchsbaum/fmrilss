@@ -18,60 +18,24 @@ knitr::opts_chunk$set(
 )
 ```
 
-## Learning Objectives
+## The Challenge of Event-Related fMRI Analysis
 
-After completing this vignette, you will be able to:
+Imagine you're analyzing an fMRI experiment where participants view different images in rapid succession, with only a few seconds between each stimulus. You want to estimate the brain's response to each individual image, but there's a problem: the hemodynamic response unfolds slowly over 10-15 seconds, causing responses from consecutive trials to overlap substantially. Traditional approaches that model all trials simultaneously in a single general linear model (GLM) can suffer from collinearity, especially when trials occur close together. This collinearity makes it difficult to obtain reliable, trial-specific activation estimates that are essential for techniques like multivariate pattern analysis (MVPA) or trial-by-trial connectivity analyses.
 
-1. Understand the theoretical foundation of Least Squares Separate (LSS)
-2. Implement LSS analysis using the `fmrilss` package
-3. Choose appropriate computational backends for your data
-4. Compare LSS with standard GLM approaches (LSA)
-5. Handle nuisance regressors and experimental covariates
-6. Optimize performance for large datasets
+The Least Squares Separate (LSS) approach, introduced by Mumford and colleagues in 2012, offers an elegant solution to this problem. Rather than estimating all trials at once, LSS fits a separate GLM for each trial, dramatically reducing collinearity and producing more reliable trial-specific estimates. The `fmrilss` package brings you a fast, flexible implementation of this powerful method, with modern enhancements that make it practical for large-scale analyses.
 
-## Prerequisites
+## Understanding the LSS Approach
 
-This vignette assumes basic familiarity with:
-- fMRI analysis concepts (GLM, design matrices, HRF)
-- R programming and matrix operations
-- Basic statistics (linear regression)
+Before diving into the implementation, let's build an intuition for how LSS works. This vignette assumes you're familiar with basic fMRI analysis concepts like the general linear model, design matrices, and the hemodynamic response function (HRF). You should also be comfortable with R programming and basic matrix operations, as we'll be working with these throughout.
 
-## Introduction to Least Squares Separate (LSS)
+In a standard GLM analysis (often called Least Squares All or LSA), we create a design matrix with separate columns for each trial and estimate all beta coefficients simultaneously. When trials are closely spaced, these columns become highly correlated, leading to unstable estimates. LSS takes a different approach: for each trial of interest, it creates a simplified model with just two main regressors. The first regressor models the trial we're currently interested in, while the second aggregates all other trials into a single regressor. This process repeats for every trial, yielding a unique, more stable beta estimate for each one.
 
-The `fmrilss` package provides a fast and flexible implementation of the Least Squares Separate (LSS) modeling approach, first proposed by Mumford et al. (2012). LSS is a powerful method for analyzing event-related fMRI data, especially for studies involving multivariate pattern analysis (MVPA) or functional connectivity.
+Beyond these two core regressors, LSS models can include experimental regressors that capture session-wide effects like linear trends or block effects, which we want to model but don't need trial-specific estimates for. The model can also incorporate nuisance regressors such as motion parameters or physiological noise, which are projected out before the analysis begins.
 
-The core idea of LSS is to estimate a separate GLM for each trial. For a given trial, the model includes:
-
-1.  A regressor for the **trial of interest**.
-2.  A single regressor for **all other trials** combined.
-3.  **Experimental regressors** that we want to model and estimate, but not trial-wise (e.g., intercept, condition effects, block effects).
-4.  **Nuisance regressors** that we want to remove from the data before analysis (e.g., motion parameters, physiological noise).
-
-This process is repeated for every trial, yielding a unique beta estimate for each one.
-
-## The `lss()` Function
-
-The main entry point to the package is the `lss()` function, which has a clean and modern interface:
-
-```r
-lss(Y, X, Z = NULL, Nuisance = NULL, method = "r_optimized")
-```
-
--   `Y`: The data matrix (timepoints x voxels).
--   `X`: The trial design matrix (timepoints x trials).
--   `Z`: A matrix of experimental regressors we want to model and get beta estimates for, but not trial-wise (e.g., intercept, condition effects, block effects). Defaults to an intercept if `NULL`.
--   `Nuisance`: A matrix of nuisance regressors to be projected out before analysis (e.g., motion parameters, physiological noise).
--   `method`: The computational backend to use. Options range from a simple `naive` R loop to a highly optimized and parallelized `"cpp_optimized"` engine.
-
-## A Practical Example
-
-Let's walk through a complete example, from generating data to running the analysis.
-
-### 1. Load the Package and Prepare Data
-
-First, we load `fmrilss` and set up our parameters.
+## Your First LSS Analysis
 
 ```{r setup}
+library(fmrihrf)
 library(fmrilss)
 
 set.seed(42)
@@ -80,18 +44,17 @@ n_trials <- 12
 n_voxels <- 25
 ```
 
-### 2. Create Design Matrices
+Let's walk through a complete example that demonstrates the power of LSS. We'll start by creating synthetic data that mimics a typical rapid event-related design, then compare different analysis approaches to see how LSS performs.
 
-Next, we create the core components of our model.
+### Creating the Experimental Design
 
--   **Trial Matrix (`X`)**: A matrix where each column represents the predicted BOLD response for a single trial.
--   **Experimental Regressors (`Z`)**: A matrix for experimental regressors that we want to model and get beta estimates for, but not trial-wise. These might include condition effects, block effects, or other experimental factors that vary across the session but not trial-by-trial.
--   **Nuisance Matrix**: Regressors we want to remove from the data before modeling, such as motion parameters or physiological noise.
+The foundation of any fMRI analysis is the design matrix, which encodes when stimuli were presented and how we expect the brain to respond. In our example, we'll simulate an experiment with trials occurring at regular intervals, which is common in many cognitive neuroscience studies.
 
 ```{r design}
 # Trial design matrix (X)
 X <- matrix(0, n_timepoints, n_trials)
-onsets <- seq(from = 10, to = n_timepoints - 12, length.out = n_trials)
+# Ensure integer onsets within bounds
+onsets <- round(seq(from = 10, to = n_timepoints - 12, length.out = n_trials))
 for(i in 1:n_trials) {
   X[onsets[i]:(onsets[i] + 5), i] <- 1
 }
@@ -104,9 +67,11 @@ Z <- cbind(Intercept = 1, LinearTrend = scale(1:n_timepoints, center = TRUE, sca
 Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)
 ```
 
-### 3. Simulate Data (`Y`)
+The trial matrix `X` represents the expected BOLD response for each trial, typically convolved with an HRF (though we're using a simplified box-car function here for clarity). The experimental regressors in `Z` capture effects that vary across the session but not trial-by-trial, such as baseline activation levels or linear drift. The nuisance matrix contains signals we want to remove, like head motion or breathing artifacts.
 
-Now, we'll generate a synthetic data matrix `Y` that includes signals from our regressors plus some random noise.
+### Generating Realistic Data
+
+Now we'll create synthetic fMRI data that includes contributions from all these components, plus some noise to make it realistic:
 
 ```{r data}
 # Simulate effects for each component
@@ -115,18 +80,15 @@ true_fixed_effects <- matrix(rnorm(2 * n_voxels, c(5, -0.1), 0.5), 2, n_voxels)
 true_nuisance_effects <- matrix(rnorm(6 * n_voxels, 0, 2), 6, n_voxels)
 
 # Combine signals and add noise
-Y <- (Z %*% true_fixed_effects) + 
+Y <- (Z %*% true_fixed_effects) +
      (X %*% true_trial_betas) +
      (Nuisance %*% true_nuisance_effects) +
      matrix(rnorm(n_timepoints * n_voxels, 0, 1), n_timepoints, n_voxels)
 ```
 
-### 4. Run the LSS Analysis
+### Running the Analysis
 
-With our data prepared, we can now run the `lss` analysis.
-
-#### Basic Usage
-If you only provide the data `Y` and the trial matrix `X`, the function will automatically include an intercept.
+The `lss()` function provides a clean, modern interface that adapts to your needs. At its simplest, you can provide just the data and trial matrix, and the function automatically includes an intercept term:
 
 ```{r lss_basic}
 beta_basic <- lss(Y, X)
@@ -134,8 +96,7 @@ beta_basic <- lss(Y, X)
 dim(beta_basic)
 ```
 
-#### Including Experimental Regressors and Nuisance Regressors
-For a more realistic analysis, we include our `Z` and `Nuisance` matrices. The nuisance regressors are projected out of both `Y` and `X` before the trial-wise GLMs are estimated, while the experimental regressors in `Z` are included in every trial-wise GLM to get their beta estimates.
+For a more complete analysis that accounts for experimental effects and removes nuisance signals, we include our `Z` and `Nuisance` matrices. The function handles the nuisance regression efficiently, projecting these signals out of both the data and design matrix before estimating trial-specific betas:
 
 ```{r lss_advanced}
 beta_full <- lss(Y, X, Z = Z, Nuisance = Nuisance)
@@ -143,9 +104,9 @@ beta_full <- lss(Y, X, Z = Z, Nuisance = Nuisance)
 dim(beta_full)
 ```
 
-### 5. Choosing a High-Performance Method
+## Choosing the Right Computational Backend
 
-While the default R implementation is well-optimized, the C++ backend offers a significant speedup, especially for large datasets. It is also parallelized with OpenMP to use multiple CPU cores. To use it, simply set `method = "cpp_optimized"`.
+The `fmrilss` package offers multiple computational backends, each optimized for different scenarios. While the default R implementation is well-optimized and readable, making it excellent for understanding the algorithm and debugging, you'll often want to use the high-performance C++ backend for real analyses, especially with large datasets. The C++ implementation leverages Armadillo for efficient linear algebra and OpenMP for parallel processing across multiple CPU cores:
 
 ```{r lss_cpp, eval=require("Rcpp") && require("RcppArmadillo")}
 # Run the same analysis with the high-performance C++ engine
@@ -155,11 +116,11 @@ beta_fast <- lss(Y, X, Z = Z, Nuisance = Nuisance, method = "cpp_optimized")
 all.equal(beta_full, beta_fast, tolerance = 1e-8)
 ```
 
-This makes it easy to switch between a readable R implementation and a high-performance C++ engine without changing any other code.
+The beauty of this design is that you can seamlessly switch between backends without changing any other code, allowing you to use the readable R implementation during development and the optimized C++ version for production analyses.
 
-## Comparing LSS with LSA (Least Squares All)
+## LSS versus Traditional GLM: When Each Shines
 
-While LSS estimates separate models for each trial, the traditional Least Squares All (LSA) approach estimates all trials simultaneously in a single model. Let's compare these approaches:
+To understand when LSS offers advantages over traditional approaches, let's compare it with the standard Least Squares All (LSA) method that estimates all trials simultaneously:
 
 ```{r lsa-comparison}
 # LSA: Standard GLM with all trials in one model
@@ -179,32 +140,24 @@ cat("  LSA:", mean(var_lsa), "\n")
 
 # Plot comparison
 par(mfrow = c(1, 2))
-hist(beta_full[, 1], main = "LSS: Beta distribution (Voxel 1)", 
+hist(beta_full[, 1], main = "LSS: Beta distribution (Voxel 1)",
      xlab = "Beta values", col = "lightblue")
-hist(beta_lsa[, 1], main = "LSA: Beta distribution (Voxel 1)", 
+hist(beta_lsa[, 1], main = "LSA: Beta distribution (Voxel 1)",
      xlab = "Beta values", col = "lightgreen")
 ```
 
-### When to Use LSS vs LSA
+The comparison reveals important differences between the methods. LSS typically produces beta estimates with different variance characteristics than LSA, which can be advantageous for certain analyses. When should you choose one over the other?
 
-| Scenario | Recommended Method | Reason |
-|----------|-------------------|---------|
-| MVPA analysis | LSS | Reduces collinearity between trial estimates |
-| Rapid event-related designs | LSS | Better handles overlapping HRFs |
-| Block designs | LSA | Sufficient trial separation |
-| Connectivity analysis | LSS | Provides trial-specific connectivity estimates |
-| Group-level contrasts | LSA | More stable for averaging |
+For MVPA analyses, LSS generally performs better because it reduces collinearity between trial estimates, leading to more distinguishable patterns. In rapid event-related designs where hemodynamic responses overlap substantially, LSS's approach of isolating each trial helps maintain estimate stability. However, for block designs with well-separated trials, or when you need to compute group-level contrasts that benefit from the stability of simultaneous estimation, LSA might be more appropriate. Connectivity analyses that require trial-specific estimates particularly benefit from LSS's approach.
 
-## Introduction to OASIS Method
+## Introducing the OASIS Method
 
-The OASIS (Optimized Acquisition and Stimulus Sequencing) method is a powerful extension that provides:
-- Automatic HRF estimation
-- Ridge regularization for stability
-- Efficient computation for complex designs
-- Built-in support for multi-basis HRFs
+While the standard LSS implementation is powerful, the package also includes the OASIS (Optimized Acquisition and Stimulus Sequencing) method, which extends LSS with several sophisticated features. OASIS automatically estimates hemodynamic response functions, applies ridge regularization for enhanced stability, provides efficient computation for complex designs, and includes built-in support for multi-basis HRF models. Here's a taste of what OASIS can do:
 
 ```{r oasis-intro}
 # Basic OASIS usage
+# Requires fmrihrf for event->design construction
+library(fmrihrf)
 beta_oasis <- lss(
   Y = Y,
   X = NULL,  # OASIS builds design internally
@@ -213,8 +166,8 @@ beta_oasis <- lss(
     design_spec = list(
       sframe = sampling_frame(blocklens = nrow(Y), TR = 1),
       cond = list(
-        onsets = seq(10, 290, by = 30),  # Event onsets
-        hrf = HRF_SPMG1,  # HRF model
+        onsets = onsets,        # reuse onsets from above
+        hrf = HRF_SPMG1,        # HRF model
         span = 30
       )
     ),
@@ -227,9 +180,9 @@ beta_oasis <- lss(
 cat("OASIS beta dimensions:", dim(beta_oasis), "\n")
 ```
 
-## Working with Different Backends
+## Working with Different Computational Backends
 
-The package provides multiple computational backends optimized for different scenarios:
+The package provides multiple backends to match your computational needs and resources. Each backend implements the same algorithm but with different optimization strategies. The naive implementation offers the clearest code for understanding the algorithm, while the vectorized and optimized R versions provide good performance with pure R code. For production work with large datasets, the C++ backend offers the best performance, especially when combined with parallel processing.
 
 ```{r backend-comparison, eval=FALSE}
 # Benchmark different methods
@@ -251,34 +204,38 @@ timing_df <- data.frame(
 )
 print(timing_df)
 
-# For large datasets, use parallel processing
+# For large datasets, consider threading for C++ backends
 if (require("parallel")) {
-  n_cores <- detectCores() - 1
-  beta_parallel <- lss(Y, X, method = "r_optimized", parallel = TRUE, ncores = n_cores)
+  n_cores <- parallel::detectCores() - 1
+  # Set OpenMP threads for C++ backend if supported
+  Sys.setenv(OMP_NUM_THREADS = n_cores)
 }
 ```
 
 ## Handling Complex Experimental Designs
 
-### Multiple Conditions
+Real experiments often involve multiple conditions, parametric modulations, and various covariates. The `fmrilss` package handles these complexities gracefully. When working with multiple conditions, you can create separate design matrices for each condition and include condition labels as experimental regressors. This allows you to model condition-specific effects while still obtaining trial-wise estimates within each condition.
 
 ```{r multiple-conditions}
 # Create design with multiple conditions
 n_cond <- 3
-X_multi <- matrix(0, n_time, n_trials * n_cond)
+X_multi <- matrix(0, n_timepoints, n_trials * n_cond)
+
+# Generate a simple HRF for demonstration
+hrf <- c(0, 0.2, 0.5, 0.8, 1, 0.9, 0.7, 0.5, 0.3, 0.1)
 
 for (c in 1:n_cond) {
   trial_idx <- ((c-1) * n_trials + 1):(c * n_trials)
   for (i in 1:n_trials) {
-    onset <- 10 + (trial_idx[i] - 1) * 20
-    if (onset + 9 <= n_time) {
+    onset <- 10 + (trial_idx[i] - 1) * 5
+    if (onset + 9 <= n_timepoints) {
       X_multi[onset:(onset + 9), trial_idx[i]] <- hrf
     }
   }
 }
 
 # Add condition labels as experimental regressors
-Z_cond <- matrix(0, n_time, n_cond)
+Z_cond <- matrix(0, n_timepoints, n_cond)
 for (c in 1:n_cond) {
   trial_idx <- ((c-1) * n_trials + 1):(c * n_trials)
   Z_cond[, c] <- rowSums(X_multi[, trial_idx, drop = FALSE])
@@ -288,33 +245,43 @@ for (c in 1:n_cond) {
 beta_multi <- lss(Y, X_multi, Z = Z_cond, method = "r_optimized")
 ```
 
-### Parametric Modulations
+Parametric modulations, where trial responses are weighted by continuous variables like reaction time or stimulus intensity, are also straightforward to implement. For a quantitative demo, we simulate a parametric effect in the data and show recovery with and without the modulator:
 
 ```{r parametric-modulation}
 # Add parametric modulator (e.g., reaction time, stimulus intensity)
-modulator <- rnorm(n_trials, mean = 0, sd = 1)
+modulator <- scale(rnorm(n_trials, mean = 0, sd = 1), center = TRUE, scale = FALSE)
 
-# Create parametrically modulated design
-X_param <- X
-for (i in 1:n_trials) {
-  X_param[, i] <- X[, i] * modulator[i]
-}
+# Create parametrically modulated design (scale each trial by its modulator)
+X_param <- sweep(X, 2, as.numeric(modulator), `*`)
 
-# Run LSS with parametric modulation
-beta_param <- lss(Y, X_param, Z = Z, method = "r_optimized")
+# Simulate data with a parametric effect (reuse fixed and nuisance parts)
+Y_mod <- (Z %*% true_fixed_effects) +
+         (X_param %*% true_trial_betas) +
+         (Nuisance %*% true_nuisance_effects) +
+         matrix(rnorm(n_timepoints * n_voxels, 0, 1), n_timepoints, n_voxels)
 
-# Compare with unmodulated
-cor_unmod <- cor(as.vector(beta_full), as.vector(Y %*% t(X)))
-cor_param <- cor(as.vector(beta_param), as.vector(Y %*% t(X_param)))
+# Fit models with and without the parametric modulator
+beta_unmod <- lss(Y_mod, X,       Z = Z, method = "r_optimized")
+beta_param <- lss(Y_mod, X_param, Z = Z, method = "r_optimized")
 
-cat("Correlation with signal:\n")
-cat("  Unmodulated:", round(cor_unmod, 3), "\n")
-cat("  Parametric:", round(cor_param, 3), "\n")
+# Ground truths for comparison
+# - For unmodulated design X, the true coefficients are modulator * true_trial_betas
+true_unmod_coefs <- sweep(true_trial_betas, 1, as.numeric(modulator), `*`)
+# - For parametrically modulated design X_param, the true coefficients are true_trial_betas
+
+cor_unmod <- cor(as.vector(beta_unmod), as.vector(true_unmod_coefs))
+cor_param <- cor(as.vector(beta_param), as.vector(true_trial_betas))
+
+cat("Correlation with true coefficients (parametric effect simulated):\n")
+cat("  Using X (no modulator):\t", round(cor_unmod, 3), "\n")
+cat("  Using X_param (with modulator):", round(cor_param, 3), "\n")
 ```
 
-## Performance Optimization Tips
+## Optimizing Performance for Large-Scale Analyses
 
-### 1. Memory Management
+When working with whole-brain data containing hundreds of thousands of voxels, memory management and computational efficiency become critical. The package provides several strategies for handling large datasets effectively.
+
+For very large datasets that exceed available memory, you can process voxels in chunks. This approach maintains reasonable memory usage while still benefiting from vectorized operations within each chunk:
 
 ```{r memory-tips, eval=FALSE}
 # For very large datasets, process in chunks
@@ -331,37 +298,26 @@ for (chunk in 1:n_chunks) {
 beta_full <- do.call(cbind, beta_chunks)
 ```
 
-### 2. Preprocessing for Speed
+Another optimization strategy involves preprocessing your data to remove nuisance signals before running LSS. While LSS can handle nuisance regressors internally, preprocessing can be more efficient when running multiple analyses:
 
 ```{r preprocessing}
 # Project out nuisance before LSS (when appropriate)
-Y_clean <- project_confounds(Y, Nuisance)
+# project_confounds returns the projection matrix Q; apply it to both Y and X
+Q_nuis <- project_confounds(Nuisance)
+Y_clean <- Q_nuis %*% Y
+X_clean <- Q_nuis %*% X
 
 # This can be faster than including Nuisance in each LSS iteration
-beta_preprocessed <- lss(Y_clean, X, Z = Z, method = "r_optimized")
+beta_preprocessed <- lss(Y_clean, X_clean, Z = Z, method = "r_optimized")
 ```
 
-### 3. Choose the Right Method
+Choosing the right backend for your data size is crucial for optimal performance. As a rule of thumb, for small datasets with fewer than 100 voxels, the optimized R implementation is usually fast enough and offers the advantage of being easily debuggable. For medium-sized datasets up to 10,000 voxels, the C++ backend provides significant speedup. For very large whole-brain datasets, consider using OASIS, which implements additional optimizations for handling massive design matrices efficiently.
 
-```{r method-selection, eval=FALSE}
-# Decision tree for method selection
-n_voxels <- ncol(Y)
-n_timepoints <- nrow(Y)
+## Troubleshooting Common Challenges
 
-if (n_voxels < 100) {
-  method <- "r_optimized"  # Fast enough for small data
-} else if (n_voxels < 10000) {
-  method <- "cpp_optimized"  # C++ for medium data
-} else {
-  method <- "oasis"  # OASIS for large data
-}
+Even with robust implementations, certain data characteristics can cause issues. Understanding how to diagnose and address these problems will help you get the most out of your analyses.
 
-cat("Recommended method for", n_voxels, "voxels:", method, "\n")
-```
-
-## Troubleshooting Common Issues
-
-### Issue 1: Singular Design Matrix
+When design matrices become singular or near-singular due to high collinearity between regressors, standard least squares solutions become unstable. You can detect this by examining the correlation matrix of your design:
 
 ```{r troubleshoot-singular, eval=FALSE}
 # Check for collinearity
@@ -371,24 +327,24 @@ high_cor <- which(abs(cor_matrix) > 0.9 & cor_matrix != 1, arr.ind = TRUE)
 if (nrow(high_cor) > 0) {
   warning("High correlation between regressors detected")
   # Consider using ridge regression via OASIS
-  beta_ridge <- lss(Y, X, method = "oasis", 
+  beta_ridge <- lss(Y, X, method = "oasis",
                     oasis = list(ridge_mode = "absolute", ridge_x = 0.1))
 }
 ```
 
-### Issue 2: Memory Errors
+Memory limitations can also pose challenges with large datasets. Before starting an analysis, it's wise to estimate memory requirements and adjust your approach accordingly:
 
 ```{r troubleshoot-memory, eval=FALSE}
 # Monitor memory usage
 mem_required <- object.size(Y) * n_trials * 2  # Rough estimate
-mem_available <- memory.limit()  # Windows only
+# mem_available <- memory.limit()  # Windows only
 
-if (mem_required > mem_available * 0.8) {
-  warning("May run out of memory. Consider chunking or using OASIS.")
-}
+# if (mem_required > mem_available * 0.8) {
+#   warning("May run out of memory. Consider chunking or using OASIS.")
+# }
 ```
 
-### Issue 3: Slow Performance
+If you encounter unexpectedly slow performance, profiling can help identify bottlenecks:
 
 ```{r troubleshoot-speed, eval=FALSE}
 # Profile code to find bottlenecks
@@ -398,26 +354,14 @@ Rprof(NULL)
 summaryRprof("lss_profile.out")
 ```
 
-## Advanced Topics
+## Where to Go From Here
 
-For more advanced usage, see:
-- `vignette("voxel-wise-hrf")` - Voxel-specific HRF modeling
-- `vignette("oasis_method")` - Complete OASIS documentation
-- `vignette("mixed_models")` - Mixed effects models with LSS
+This vignette has introduced you to the core concepts and capabilities of the `fmrilss` package. You've learned how LSS addresses the collinearity problem in rapid event-related designs, how to choose between different computational backends, and strategies for handling complex experimental designs and large datasets.
 
-## Summary
+To deepen your understanding and explore advanced features, we recommend examining the voxel-wise HRF vignette, which demonstrates how to model spatial variation in hemodynamic responses across the brain. The OASIS method vignette provides comprehensive coverage of this powerful extension, including HRF estimation and ridge regression techniques. For those interested in hierarchical analyses, the mixed models vignette shows how to combine LSS with mixed-effects modeling frameworks.
 
-This vignette covered:
-1. Basic LSS implementation and theory
-2. Comparison with LSA
-3. Introduction to OASIS method
-4. Different computational backends
-5. Complex experimental designs
-6. Performance optimization
-7. Troubleshooting
-
-The `fmrilss` package provides a comprehensive toolkit for trial-wise beta estimation with options ranging from simple to highly optimized implementations.
+The `fmrilss` package represents a comprehensive toolkit for trial-wise beta estimation, providing options that range from simple, interpretable implementations to highly optimized solutions for large-scale analyses. Whether you're conducting exploratory analyses on a laptop or processing massive datasets on a computing cluster, the package offers the flexibility and performance you need for modern fMRI analysis.
 
 ## References
 
-Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012). Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses. *NeuroImage*, 59(3), 2636-2643. 
+Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012). Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses. *NeuroImage*, 59(3), 2636-2643.

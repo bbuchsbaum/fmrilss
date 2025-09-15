@@ -26,28 +26,39 @@
 #' @return by default: (N_trials x V) matrix of betas; if `return_se` or `return_diag`, a list
 #' @keywords internal
 .lss_oasis <- function(Y, X = NULL, Z = NULL, Nuisance = NULL, oasis = list()) {
-  # Input validation
+  # Coerce to base matrices early & validate ---------------------------------
+  to_mat <- function(M) {
+    if (is.null(M)) return(NULL)
+    if (inherits(M, "Matrix")) return(as.matrix(M))
+    if (is.data.frame(M))     return(as.matrix(M))
+    M
+  }
+  Y        <- to_mat(Y)
+  X        <- to_mat(X)
+  Z        <- to_mat(Z)
+  Nuisance <- to_mat(Nuisance)
+
   if (!is.matrix(Y)) stop("Y must be a matrix")
   if (any(!is.finite(Y))) stop("Y contains non-finite values")
-  
-  T <- nrow(Y)
-  V <- ncol(Y)
-  
+
+  n_time <- nrow(Y)
+  V      <- ncol(Y)
+
   if (!is.null(X)) {
     if (!is.matrix(X)) stop("X must be a matrix")
-    if (nrow(X) != T) stop("X must have the same number of rows as Y")
+    if (nrow(X) != n_time) stop("X must have the same number of rows as Y")
     if (any(!is.finite(X))) stop("X contains non-finite values")
   }
   
   if (!is.null(Z)) {
     if (!is.matrix(Z)) stop("Z must be a matrix")
-    if (nrow(Z) != T) stop("Z must have the same number of rows as Y")
+    if (nrow(Z) != n_time) stop("Z must have the same number of rows as Y")
     if (any(!is.finite(Z))) stop("Z contains non-finite values")
   }
   
   if (!is.null(Nuisance)) {
     if (!is.matrix(Nuisance)) stop("Nuisance must be a matrix")
-    if (nrow(Nuisance) != T) stop("Nuisance must have the same number of rows as Y")
+    if (nrow(Nuisance) != n_time) stop("Nuisance must have the same number of rows as Y")
     if (any(!is.finite(Nuisance))) stop("Nuisance contains non-finite values")
   }
   
@@ -67,6 +78,12 @@
     oasis$whiten <- match.arg(tolower(oasis$whiten), c("none", "ar1"))
   }
 
+  # Default intercept (aligns with non-OASIS paths)
+  if (is.null(Z) && isTRUE(oasis$add_intercept %||% TRUE)) {
+    Z <- matrix(1, n_time, 1)
+    colnames(Z) <- "Intercept"
+  }
+
   # 1) Build trial-wise design if needed (from fmrihrf)
   X_other <- NULL
   if (is.null(X)) {
@@ -76,9 +93,10 @@
     
     # If user supplied an HRF grid, pick best HRF now
     if (!is.null(oasis$design_spec$hrf_grid)) {
+      conf_for_grid <- cbind(if (!is.null(Z)) Z, if (!is.null(Nuisance)) Nuisance)
       oasis$design_spec$cond$hrf <- .oasis_pick_hrf_lwu_fast(
         Y, oasis$design_spec, oasis$design_spec$hrf_grid, 
-        confounds = Nuisance, block_cols = oasis$block_cols %||% 4096L
+        confounds = conf_for_grid, block_cols = as.integer(oasis$block_cols %||% 4096L)
       )
     }
     
@@ -94,37 +112,32 @@
   # 2) Detect K (basis dimension)
   K <- oasis$K %||% {
     if (!is.null(oasis$design_spec$cond$hrf) && requireNamespace("fmrihrf", quietly=TRUE)) {
-      tryCatch(fmrihrf::nbasis(oasis$design_spec$cond$hrf), 
-               error = function(e) 1L)
-    } else if (!is.null(X)) {
-      # Auto-detect K from X dimensions if user provided it
-      N <- ncol(X)
-      
-      # If ntrials is provided, use it to compute K directly
-      if (!is.null(oasis$ntrials)) {
-        ntrials <- as.integer(oasis$ntrials)
-        if (N %% ntrials != 0) {
-          stop(sprintf("ncol(X)=%d is not divisible by ntrials=%d", N, ntrials))
-        }
-        N / ntrials
-      } else if (N <= 1) {
-        1L
-      } else {
-        # Fallback: heuristic based on correlation structure
-        cors <- cor(X)
-        diag(cors) <- 0
-        avg_adj_cor <- mean(abs(cors[cbind(1:(N-1), 2:N)]))
-        if (avg_adj_cor > 0.7) {
-          # Likely multi-basis, try to detect K
-          K_guess <- .detect_basis_dimension(X)
-          K_guess
-        } else {
-          1L
-        }
-      }
-    } else {
-      1L
+      return(tryCatch(fmrihrf::nbasis(oasis$design_spec$cond$hrf), error = function(e) 1L))
     }
+    if (!is.null(oasis$ntrials) && !is.null(X)) {
+      N <- ncol(X); ntr <- as.integer(oasis$ntrials)
+      if (N %% ntr != 0L) stop(sprintf("ncol(X)=%d is not divisible by ntrials=%d", N, ntr))
+      return(as.integer(N / ntr))
+    }
+    if (!is.null(X)) {
+      N <- ncol(X)
+      for (Kcand in c(2L,3L,4L,5L,6L,8L,10L,12L)) {
+        if (N %% Kcand != 0L) next
+        ntr <- N / Kcand
+        trials <- seq_len(min(ntr, 8L))
+        ok <- TRUE
+        for (i in trials) {
+          idx <- ((i-1L)*Kcand + 1L):(i*Kcand)
+          B <- X[, idx, drop=FALSE]
+          G <- crossprod(B)
+          Dn <- 1/sqrt(pmax(diag(G), .Machine$double.eps))
+          Cn <- diag(Dn) %*% G %*% diag(Dn)
+          if (mean(abs(Cn[upper.tri(Cn)])) < 0.5) { ok <- FALSE; break }
+        }
+        if (ok) return(as.integer(Kcand))
+      }
+    }
+    1L
   }
   K <- as.integer(K)
 
@@ -133,7 +146,7 @@
 
   # 4) Whitening hook (optional)
   if (isTRUE(tolower(oasis$whiten %||% "none") == "ar1")) {
-    w <- .oasis_ar1_whitener(Y)
+    w <- .oasis_ar1_whitener(Y, X_nuis = N_nuis)
     Y <- w$Wy
     if (!is.null(N_nuis) && ncol(N_nuis) > 0) N_nuis <- w$W_apply(N_nuis)
     if (!is.null(X))      X      <- w$W_apply(X)
@@ -173,12 +186,17 @@
   }
 
   # 6) Default: return the bare matrix (back-compat with fmrilss::lss)
+  name_rows_cols <- function(Beta) {
+    if (is.null(rownames(Beta))) rownames(Beta) <- sprintf("Trial_%d", seq_len(nrow(Beta)))
+    if (!is.null(colnames(Y)) && is.null(colnames(Beta))) colnames(Beta) <- colnames(Y)
+    Beta
+  }
   if (!isTRUE(oasis$return_se) && !isTRUE(oasis$return_diag)) {
-    return(B)
+    return(name_rows_cols(B))
   }
 
   # 7) Optional: SEs and diagnostics
-  out <- list(beta = B)
+  out <- list(beta = name_rows_cols(B))
   if (isTRUE(oasis$return_diag)) {
     if (K == 1L) {
       out$diag <- list(d = pre$d, alpha = pre$alpha, s = pre$s)
@@ -187,31 +205,34 @@
     }
   }
   if (isTRUE(oasis$return_se)) {
+    # Nuisance rank from the whitened nuisance actually used
+    nuis_rank <- if (!is.null(N_nuis) && ncol(N_nuis) > 0L) qr(N_nuis)$rank else 0L
     if (K == 1L) {
-      # Compute SEs for single-basis case
-      rnk <- if (ncol(pre$Q) > 0) ncol(pre$Q) else 0L
-      dof <- max(1L, T - rnk - 2L)
+      # Ensure RY_norm2 exists
+      RY2 <- if (!is.null(mats$RY_norm2)) mats$RY_norm2 else {
+        if (!is.null(pre$Q) && nrow(pre$Q) == n_time) {
+          Ry <- Y - pre$Q %*% crossprod(pre$Q, Y)
+          colSums(Ry^2)
+        } else if (!is.null(N_nuis) && ncol(N_nuis) > 0L) {
+          Qn <- qr.Q(qr(N_nuis))
+          Ry <- Y - Qn %*% crossprod(Qn, Y)
+          colSums(Ry^2)
+        } else {
+          colSums(Y^2)
+        }
+      }
+      dof <- max(1L, n_time - nuis_rank - 2L)
       out$se <- .oasis_se_from_norms(pre$d, pre$alpha, pre$s,
                                      lam$lx, lam$lb,
-                                     mats$RY_norm2, bg$beta, bg$gamma, 
+                                     RY2, bg$beta, bg$gamma, 
                                      mats$N_Y, mats$S_Y, dof)
     } else {
-      # Multi-basis SEs
-      rnk <- if (ncol(pre$Q) > 0) ncol(pre$Q) else 0L
-      dof <- max(1L, T - rnk - 2L*K)
-      
-      # Compute RY_norm2 if not already available
-      RY_norm2 <- if (!is.null(mats$RY_norm2)) {
-        mats$RY_norm2
-      } else {
-        oasisk_compute_RY_norm2(pre$Q, Y)
-      }
-      
-      # Get betas and SEs together
+      dof <- max(1L, n_time - nuis_rank - 2L*K)
+      RY_norm2 <- if (!is.null(mats$RY_norm2)) mats$RY_norm2 else oasisk_compute_RY_norm2(pre$Q, Y)
       result <- oasisk_betas_se(pre$D, pre$C, pre$E, mats$N1, mats$SY,
                                 RY_norm2, ridge_x = lam$lx, ridge_b = lam$lb)
-      out$beta <- result$beta
-      out$se <- result$se
+      out$beta <- name_rows_cols(result$beta)
+      out$se   <- result$se
     }
   }
   out
@@ -277,32 +298,33 @@
 }
 
 # --- Helper: simple AR(1) whitening (optional) ---
-.oasis_ar1_whitener <- function(Y) {
-  # Estimate AR(1) parameter and apply whitening without dense matrix
-  T <- nrow(Y)
-  
-  # Estimate rho using Yule-Walker on each voxel, then average
-  y1 <- Y[-T, , drop=FALSE]
-  y2 <- Y[-1, , drop=FALSE]
+.oasis_ar1_whitener <- function(Y, X_nuis = NULL) {
+  # Estimate AR(1) parameter and apply variance-preserving whitening
+  n_time <- nrow(Y)
+
+  # Optionally deflate nuisance before rho estimation
+  Y_for_rho <- if (!is.null(X_nuis) && is.matrix(X_nuis) && ncol(X_nuis) > 0L) {
+    Qn <- qr.Q(qr(X_nuis))
+    Y - Qn %*% crossprod(Qn, Y)
+  } else Y
+
+  y1  <- Y_for_rho[-n_time, , drop=FALSE]
+  y2  <- Y_for_rho[-1,     , drop=FALSE]
   rho <- mean(colSums(y1 * y2) / pmax(colSums(y1 * y1), .Machine$double.eps))
   rho <- min(max(rho, -0.98), 0.98)
-  
-  # Apply AR(1) whitening: y'[t] = y[t] - rho * y[t-1]
-  Wy <- Y
-  Wy[-1, ] <- Y[-1, ] - rho * Y[-T, ]
-  
-  # Return whitening operator as a function instead of dense matrix
+
+  Wy        <- Y
+  Wy[1, ]   <- sqrt(1 - rho^2) * Y[1, ]
+  Wy[-1, ]  <- Y[-1, ] - rho * Y[-n_time, ]
+
   W_apply <- function(X) {
-    if (is.matrix(X)) {
-      WX <- X
-      WX[-1, ] <- X[-1, ] - rho * X[-T, ]
-      WX
-    } else {
-      # Vector case
-      c(X[1], X[-1] - rho * X[-T])
-    }
+    if (is.null(X)) return(NULL)
+    if (!is.matrix(X)) X <- as.matrix(X)
+    WX        <- X
+    WX[1, ]   <- sqrt(1 - rho^2) * X[1, ]
+    WX[-1, ]  <- X[-1, ] - rho * X[-n_time, ]
+    WX
   }
-  
   list(W_apply = W_apply, Wy = Wy, rho = rho)
 }
 

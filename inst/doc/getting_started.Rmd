@@ -71,7 +71,7 @@ Next, we create the core components of our model.
 ```{r design}
 # Trial design matrix (X)
 X <- matrix(0, n_timepoints, n_trials)
-onsets <- seq(from = 10, to = n_timepoints - 12, length.out = n_trials)
+onsets <- round(seq(from = 10, to = n_timepoints - 12, length.out = n_trials))
 for(i in 1:n_trials) {
   X[onsets[i]:(onsets[i] + 5), i] <- 1
 }

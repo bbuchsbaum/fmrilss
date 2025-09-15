@@ -46,14 +46,38 @@
 #' 
 #' When using method="oasis", the following options are available in the oasis list:
 #' \itemize{
-#'   \item design_spec: List for building designs from events using fmrihrf
-#'   \item K: Explicit basis dimension (auto-detected if not provided)
-#'   \item ridge_mode: "absolute" (default) or "fractional"
-#'   \item ridge_x, ridge_b: Ridge values for trial and aggregator regressors
-#'   \item return_se: Return standard errors (default FALSE)
-#'   \item return_diag: Return design diagnostics (default FALSE)
-#'   \item block_cols: Voxel block size (default 4096)
+#'   \item \code{design_spec}: A list for building trial-wise designs from event onsets using fmrihrf.
+#'     Must contain: \code{sframe} (sampling frame), \code{cond} (list with \code{onsets},
+#'     \code{hrf}, and optionally \code{span}), and optionally \code{others} (list of other conditions
+#'     to be modeled as nuisances). When provided, X can be NULL and will be constructed automatically.
+#'   \item \code{K}: Explicit basis dimension for multi-basis HRF models (e.g., 3 for SPMG3).
+#'     If not provided, it's auto-detected from X dimensions or defaults to 1 for single-basis HRFs.
+#'   \item \code{ridge_mode}: Either "absolute" (default) or "fractional". In absolute mode,
+#'     ridge_x and ridge_b are used directly as regularization parameters. In fractional mode,
+#'     they represent fractions of the maximum eigenvalue for adaptive regularization.
+#'   \item \code{ridge_x}: Ridge parameter for trial-specific regressors (default 0). Controls
+#'     regularization strength for individual trial estimates.
+#'   \item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0). Controls
+#'     regularization strength for the sum of all other trials.
+#'   \item \code{return_se}: Logical, whether to return standard errors (default FALSE). When TRUE,
+#'     returns a list with \code{beta} (trial estimates) and \code{se} (standard errors) components.
+#'   \item \code{return_diag}: Logical, whether to return design diagnostics (default FALSE).
+#'     When TRUE, includes diagnostic information about the design matrix structure.
+#'   \item \code{block_cols}: Integer, voxel block size for memory-efficient processing (default 4096).
+#'     Larger values use more memory but may be faster for systems with sufficient RAM.
+#'   \item \code{whiten}: Logical, whether to apply AR(1) whitening (default FALSE). When TRUE,
+#'     estimates AR(1) coefficients and pre-whitens data to account for temporal autocorrelation.
+#'   \item \code{ntrials}: Explicit number of trials (used when K > 1 to determine output dimensions).
+#'     If not provided, calculated as ncol(X) / K.
+#'   \item \code{hrf_grid}: Vector of HRF indices for grid-based HRF selection (advanced use).
+#'     Allows testing multiple HRF shapes simultaneously.
 #' }
+#'
+#' The OASIS method provides a mathematically equivalent but computationally optimized version
+#' of standard LSS. It reformulates the per-trial GLM fitting as a single matrix operation,
+#' eliminating redundant computations. This is particularly beneficial for designs with many
+#' trials or when processing large datasets. When K > 1 (multi-basis HRFs), the output will
+#' have K*ntrials rows, with basis functions for each trial arranged sequentially.
 #'
 #' @references
 #' Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
@@ -92,6 +116,56 @@
 #' # With nuisance regression (motion parameters)
 #' Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)
 #' beta_estimates_clean <- lss(Y, X, Z = Z, Nuisance = Nuisance)
+#'
+#' \dontrun{
+#' # Using OASIS method with ridge regularization
+#' beta_oasis <- lss(Y, X, method = "oasis",
+#'                   oasis = list(ridge_x = 0.1, ridge_b = 0.1,
+#'                               ridge_mode = "fractional"))
+#'
+#' # OASIS with standard errors
+#' result_with_se <- lss(Y, X, method = "oasis",
+#'                      oasis = list(return_se = TRUE))
+#' beta_estimates <- result_with_se$beta
+#' standard_errors <- result_with_se$se
+#'
+#' # Building design from event onsets using fmrihrf (if available)
+#' if (requireNamespace("fmrihrf", quietly = TRUE)) {
+#'   library(fmrihrf)
+#'   sframe <- sampling_frame(blocklens = 200, TR = 1.0)
+#'
+#'   # OASIS with automatic design construction
+#'   beta_auto <- lss(Y, X = NULL, method = "oasis",
+#'                    oasis = list(
+#'                      design_spec = list(
+#'                        sframe = sframe,
+#'                        cond = list(
+#'                          onsets = c(10, 30, 50, 70, 90, 110, 130, 150),
+#'                          hrf = HRF_SPMG1,
+#'                          span = 25
+#'                        ),
+#'                        others = list(
+#'                          list(onsets = c(20, 40, 60, 80, 100, 120, 140))
+#'                        )
+#'                      )
+#'                    ))
+#'
+#'   # Multi-basis HRF example (3 basis functions per trial)
+#'   beta_multibasis <- lss(Y, X = NULL, method = "oasis",
+#'                         oasis = list(
+#'                           design_spec = list(
+#'                             sframe = sframe,
+#'                             cond = list(
+#'                               onsets = c(10, 30, 50, 70, 90),
+#'                               hrf = HRF_SPMG3,  # 3-basis HRF
+#'                               span = 30
+#'                             )
+#'                           ),
+#'                           K = 3  # Explicit basis dimension
+#'                         ))
+#'   # Returns 15 rows (5 trials * 3 basis functions)
+#' }
+#' }
 #'
 #' @export
 lss <- function(Y, X, Z = NULL, Nuisance = NULL, 
@@ -180,13 +254,18 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
 
 # Helper function to project out nuisance regressors
 .project_out_nuisance <- function(Y, X, X_nuisance) {
-  # Compute projection matrix P = I - X_nuisance * (X_nuisance' * X_nuisance)^-1 * X_nuisance'
-  XtX_inv <- chol2inv(chol(crossprod(X_nuisance)))
-  P_coef <- XtX_inv %*% t(X_nuisance)
+  # Handle empty or NULL nuisance matrix early
+  if (is.null(X_nuisance) || !is.matrix(X_nuisance) || ncol(X_nuisance) == 0L) {
+    return(list(Y_residual = Y, X_residual = X))
+  }
+
+  # Numerically stable residualization via QR (avoids explicit inverse)
+  qrX <- qr(X_nuisance)
+  coefY <- qr.coef(qrX, Y)
+  coefX <- qr.coef(qrX, X)
   
-  # Compute residuals
-  Y_residual <- Y - X_nuisance %*% (P_coef %*% Y)
-  X_residual <- X - X_nuisance %*% (P_coef %*% X)
+  Y_residual <- Y - X_nuisance %*% coefY
+  X_residual <- X - X_nuisance %*% coefX
   
   list(Y_residual = Y_residual, X_residual = X_residual)
 }
