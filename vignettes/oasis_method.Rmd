@@ -91,7 +91,7 @@ design_matrix <- function(sframe, conditions, tr_per_trial = FALSE) {
 
 ## Understanding the OASIS Innovation
 
-The key algebra that OASIS leverages is the special structure of LSS: although naïvely it looks like N separate GLMs (one per trial), the per‑trial designs share components that let you factor the computation and reuse them across trials. Note this factoring is already exploited by fmrilss’s optimized backends (e.g., the fused single‑pass solver that residualizes once and reuses totals and cross‑products across trials). OASIS builds on the same algebra but extends it to event→design construction with HRFs, multi‑basis models, and stabilized, diagnostics‑ready closed‑form solves.
+The key algebra that OASIS leverages is the special structure of LSS: although naïvely it looks like N separate GLMs (one per trial), the per‑trial designs share components that let you factor the computation and reuse them across trials. Note this factoring is already exploited by fmrilss’s optimized backends (e.g., the fused single‑pass solver that residualizes once and reuses totals and cross‑products across trials). OASIS uses the same core solve but wraps it in a richer, HRF-aware workflow: automatic design construction from event specs, built-in ridge scaling, AR(1) whitening, SE/diagnostic reporting, and native support for multi-basis or FIR HRFs.
 
 Beyond computational efficiency, OASIS adds features that the generic LSS path does not expose: built‑in ridge regularization (absolute and fractional) on the two‑regressor Gram per trial, optional AR(1) whitening, analytical standard errors and diagnostics, and a blocked multi‑basis solver that treats K>1 HRF bases as 2K×2K closed‑form systems per trial.
 
