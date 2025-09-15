@@ -446,8 +446,11 @@ variations or task-related modulations of the hemodynamic response.</p>
 Finite Impulse Response (FIR) basis provides a completely non-parametric
 approach, estimating the response at each time point independently:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Create FIR basis with 15 time bins</span></span>
+<code class="sourceCode R"><span><span class="co"># Create FIR basis with 15 time bins (2s width over a 30s window)</span></span>
 <span><span class="va">fir_hrf</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/hrf_fir_generator.html" class="external-link">hrf_fir_generator</a></span><span class="op">(</span>nbasis <span class="op">=</span> <span class="fl">15</span>, span <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
+<span><span class="va">fir_params</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fir_hrf</span>, <span class="st">"params"</span><span class="op">)</span></span>
+<span><span class="va">bin_width</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">fir_params</span><span class="op">[[</span><span class="st">"bin_width"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="va">n_bins</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fir_hrf</span>, <span class="st">"nbasis"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">beta_fir</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
@@ -463,8 +466,8 @@ approach, estimating the response at each time point independently:</p>
 <span>      <span class="op">)</span></span>
 <span>    <span class="op">)</span>,</span>
 <span>    ridge_mode <span class="op">=</span> <span class="st">"fractional"</span>,</span>
-<span>    ridge_x <span class="op">=</span> <span class="fl">0.02</span>,  <span class="co"># Small ridge for FIR stability</span></span>
-<span>    ridge_b <span class="op">=</span> <span class="fl">0.02</span></span>
+<span>    ridge_x <span class="op">=</span> <span class="fl">0.2</span>,  <span class="co"># Moderate ridge improves stability for high-dimensional FIR fits</span></span>
+<span>    ridge_b <span class="op">=</span> <span class="fl">0.2</span></span>
 <span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -475,26 +478,50 @@ approach, estimating the response at each time point independently:</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Time bins per trial:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">beta_fir</span><span class="op">)</span> <span class="op">/</span> <span class="va">n_trials</span>, <span class="st">"\n"</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   Time bins per trial: 15</span></span>
 <span></span>
-<span><span class="co"># Reconstruct HRF shape for first trial, first voxel</span></span>
-<span><span class="va">fir_coefs</span> <span class="op">&lt;-</span> <span class="va">beta_fir</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">15</span>, <span class="fl">1</span><span class="op">]</span></span>
-<span><span class="va">time_points</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">29</span>, by <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="co"># Organise coefficients as (time bin × trial × voxel)</span></span>
+<span><span class="va">fir_array</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/array.html" class="external-link">array</a></span><span class="op">(</span><span class="va">beta_fir</span>, dim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">n_bins</span>, <span class="va">n_trials</span>, <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">beta_fir</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">time_points</span>, <span class="va">fir_coefs</span>, type <span class="op">=</span> <span class="st">"b"</span>,</span>
-<span>     main <span class="op">=</span> <span class="st">"Reconstructed HRF from FIR basis"</span>,</span>
+<span><span class="co"># Average across trials and voxels to recover a smooth HRF estimate</span></span>
+<span><span class="va">fir_mean</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">fir_array</span>, <span class="fl">1</span>, <span class="va">mean</span><span class="op">)</span></span>
+<span><span class="va">fir_se</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">fir_array</span>, <span class="fl">1</span>, <span class="va">sd</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="va">n_trials</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">beta_fir</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">time_points</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="op">(</span><span class="va">n_bins</span> <span class="op">-</span> <span class="fl">1</span><span class="op">)</span> <span class="op">*</span> <span class="va">bin_width</span>, by <span class="op">=</span> <span class="va">bin_width</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Plot mean HRF with ±1 SE ribbon</span></span>
+<span><span class="va">upper</span> <span class="op">&lt;-</span> <span class="va">fir_mean</span> <span class="op">+</span> <span class="va">fir_se</span></span>
+<span><span class="va">lower</span> <span class="op">&lt;-</span> <span class="va">fir_mean</span> <span class="op">-</span> <span class="va">fir_se</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">time_points</span>, <span class="va">fir_mean</span>, type <span class="op">=</span> <span class="st">"l"</span>,</span>
+<span>     ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/range.html" class="external-link">range</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">lower</span>, <span class="va">upper</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>     main <span class="op">=</span> <span class="st">"FIR-derived HRF (mean across trials/voxels)"</span>,</span>
 <span>     xlab <span class="op">=</span> <span class="st">"Time (seconds)"</span>, ylab <span class="op">=</span> <span class="st">"Response"</span>,</span>
-<span>     col <span class="op">=</span> <span class="st">"blue"</span>, pch <span class="op">=</span> <span class="fl">19</span><span class="op">)</span></span>
+<span>     col <span class="op">=</span> <span class="st">"navy"</span>, lwd <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/polygon.html" class="external-link">polygon</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">time_points</span>, <span class="fu"><a href="https://rdrr.io/r/base/rev.html" class="external-link">rev</a></span><span class="op">(</span><span class="va">time_points</span><span class="op">)</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">upper</span>, <span class="fu"><a href="https://rdrr.io/r/base/rev.html" class="external-link">rev</a></span><span class="op">(</span><span class="va">lower</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>        col <span class="op">=</span> <span class="fu">grDevices</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/grDevices/adjustcolor.html" class="external-link">adjustcolor</a></span><span class="op">(</span><span class="st">"navy"</span>, alpha.f <span class="op">=</span> <span class="fl">0.2</span><span class="op">)</span>, border <span class="op">=</span> <span class="cn">NA</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/lines.html" class="external-link">lines</a></span><span class="op">(</span><span class="va">time_points</span>, <span class="va">fir_mean</span>, col <span class="op">=</span> <span class="st">"navy"</span>, lwd <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Add canonical HRF for comparison</span></span>
+<span><span class="co"># Add canonical HRF sampled on the same grid for reference</span></span>
 <span><span class="va">canonical</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/evaluate.html" class="external-link">evaluate</a></span><span class="op">(</span><span class="va">HRF_SPMG1</span>, <span class="va">time_points</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/lines.html" class="external-link">lines</a></span><span class="op">(</span><span class="va">time_points</span>, <span class="va">canonical</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">fir_coefs</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">canonical</span><span class="op">)</span>,</span>
-<span>      col <span class="op">=</span> <span class="st">"red"</span>, lty <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">"topright"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"FIR"</span>, <span class="st">"Canonical"</span><span class="op">)</span>, col <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"blue"</span>, <span class="st">"red"</span><span class="op">)</span>,</span>
-<span>       lty <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span>, pch <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">19</span>, <span class="cn">NA</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span><span class="va">scale_factor</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">fir_mean</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">canonical</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/lines.html" class="external-link">lines</a></span><span class="op">(</span><span class="va">time_points</span>, <span class="va">canonical</span> <span class="op">*</span> <span class="va">scale_factor</span>, col <span class="op">=</span> <span class="st">"firebrick"</span>, lty <span class="op">=</span> <span class="fl">2</span>, lwd <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">"topright"</span>,</span>
+<span>       <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"FIR mean"</span>, <span class="st">"±1 SE"</span>, <span class="st">"Canonical (scaled)"</span><span class="op">)</span>,</span>
+<span>       col <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"navy"</span>, <span class="cn">NA</span>, <span class="st">"firebrick"</span><span class="op">)</span>,</span>
+<span>       lty <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="cn">NA</span>, <span class="fl">2</span><span class="op">)</span>,</span>
+<span>       lwd <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span>, <span class="cn">NA</span>, <span class="fl">2</span><span class="op">)</span>,</span>
+<span>       pch <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="cn">NA</span>, <span class="fl">15</span>, <span class="cn">NA</span><span class="op">)</span>,</span>
+<span>       pt.cex <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="cn">NA</span>, <span class="fl">2</span>, <span class="cn">NA</span><span class="op">)</span>,</span>
+<span>       pt.bg <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="cn">NA</span>, <span class="fu">grDevices</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/grDevices/adjustcolor.html" class="external-link">adjustcolor</a></span><span class="op">(</span><span class="st">"navy"</span>, alpha.f <span class="op">=</span> <span class="fl">0.2</span><span class="op">)</span>, <span class="cn">NA</span><span class="op">)</span>,</span>
+<span>       bty <span class="op">=</span> <span class="st">"n"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="oasis_method_files/figure-html/fir-basis-1.png" width="768"></p>
 <p>The FIR approach reveals the actual shape of the hemodynamic response
-without parametric constraints. While this flexibility is powerful, it
-comes at the cost of many more parameters to estimate, making
-regularization especially important.</p>
+without parametric constraints. Because each trial now contributes one
+coefficient per time bin, individual voxel-level estimates can look
+jagged—the variance is simply much higher than in the single-parameter
+canonical fit. Averaging across trials and voxels (and adding a modest
+ridge penalty) recovers a smooth, HRF-like curve while still allowing
+deviations from the canonical shape. In practice you would typically
+pool information across voxels/regions or apply additional
+smoothing/regularization when working with FIR bases.</p>
 </div>
 <div class="section level2">
 <h2 id="optimizing-hrf-models-through-grid-search">Optimizing HRF Models Through Grid Search<a class="anchor" aria-label="anchor" href="#optimizing-hrf-models-through-grid-search"></a>
@@ -762,15 +789,15 @@ dataset sizes:</p>
 <span><span class="va">benchmark_display</span><span class="op">[</span><span class="va">numeric_cols</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">benchmark_display</span><span class="op">[</span><span class="va">numeric_cols</span><span class="op">]</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">x</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">benchmark_display</span><span class="op">)</span></span>
 <span><span class="co">#&gt;            Size Timepoints Voxels Trials R_Optimized CPP_Optimized OASIS</span></span>
-<span><span class="co">#&gt; elapsed   small        300    500     30       0.006         0.006 0.002</span></span>
-<span><span class="co">#&gt; elapsed1 medium        400   2000     40       0.014         0.035 0.010</span></span>
-<span><span class="co">#&gt; elapsed2  large        600   8000     60       0.072         0.174 0.050</span></span>
-<span><span class="co">#&gt; elapsed3 xlarge        800  16000     60       0.160         0.327 0.116</span></span>
+<span><span class="co">#&gt; elapsed   small        300    500     30       0.005         0.013 0.002</span></span>
+<span><span class="co">#&gt; elapsed1 medium        400   2000     40       0.015         0.140 0.009</span></span>
+<span><span class="co">#&gt; elapsed2  large        600   8000     60       0.072         0.137 0.050</span></span>
+<span><span class="co">#&gt; elapsed3 xlarge        800  16000     60       0.165         0.581 0.120</span></span>
 <span><span class="co">#&gt;          OASIS_with_design Speedup_vs_R Speedup_vs_CPP Design_Build_Overhead</span></span>
-<span><span class="co">#&gt; elapsed              0.016        3.000          3.000                 0.014</span></span>
-<span><span class="co">#&gt; elapsed1             0.037        1.400          3.500                 0.027</span></span>
-<span><span class="co">#&gt; elapsed2             0.083        1.440          3.480                 0.033</span></span>
-<span><span class="co">#&gt; elapsed3             0.155        1.379          2.819                 0.039</span></span>
+<span><span class="co">#&gt; elapsed              0.019        2.500          6.500                 0.017</span></span>
+<span><span class="co">#&gt; elapsed1             0.030        1.667         15.556                 0.021</span></span>
+<span><span class="co">#&gt; elapsed2             0.086        1.440          2.740                 0.036</span></span>
+<span><span class="co">#&gt; elapsed3             0.162        1.375          4.842                 0.042</span></span>
 <span></span>
 <span><span class="co"># Visualize scaling</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
