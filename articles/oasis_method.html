@@ -35,6 +35,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/getting_started.html">Getting Started with fmrilss</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_method.html">The OASIS Method: Optimized Analytic Single-pass Inverse Solution</a></li>
+    <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: Algebra and Implementation Details</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF Modeling with fmrilss</a></li>
   </ul>
 </li>
@@ -790,15 +791,15 @@ dataset sizes:</p>
 <span><span class="va">benchmark_display</span><span class="op">[</span><span class="va">numeric_cols</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">benchmark_display</span><span class="op">[</span><span class="va">numeric_cols</span><span class="op">]</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">x</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">benchmark_display</span><span class="op">)</span></span>
 <span><span class="co">#&gt;            Size Timepoints Voxels Trials R_Optimized CPP_Optimized OASIS</span></span>
-<span><span class="co">#&gt; elapsed   small        300    500     30       0.005         0.017 0.002</span></span>
-<span><span class="co">#&gt; elapsed1 medium        400   2000     40       0.014         0.111 0.009</span></span>
-<span><span class="co">#&gt; elapsed2  large        600   8000     60       0.070         0.064 0.051</span></span>
-<span><span class="co">#&gt; elapsed3 xlarge        800  16000     60       0.167         0.192 0.124</span></span>
+<span><span class="co">#&gt; elapsed   small        300    500     30       0.005         0.030 0.003</span></span>
+<span><span class="co">#&gt; elapsed1 medium        400   2000     40       0.015         0.264 0.010</span></span>
+<span><span class="co">#&gt; elapsed2  large        600   8000     60       0.076         0.280 0.054</span></span>
+<span><span class="co">#&gt; elapsed3 xlarge        800  16000     60       0.171         0.274 0.130</span></span>
 <span><span class="co">#&gt;          OASIS_with_design Speedup_vs_R Speedup_vs_CPP Design_Build_Overhead</span></span>
-<span><span class="co">#&gt; elapsed              0.021        2.500          8.500                 0.019</span></span>
-<span><span class="co">#&gt; elapsed1             0.037        1.556         12.333                 0.028</span></span>
-<span><span class="co">#&gt; elapsed2             0.088        1.373          1.255                 0.037</span></span>
-<span><span class="co">#&gt; elapsed3             0.168        1.347          1.548                 0.044</span></span>
+<span><span class="co">#&gt; elapsed              0.017        1.667         10.000                 0.014</span></span>
+<span><span class="co">#&gt; elapsed1             0.033        1.500         26.400                 0.023</span></span>
+<span><span class="co">#&gt; elapsed2             0.089        1.407          5.185                 0.035</span></span>
+<span><span class="co">#&gt; elapsed3             0.173        1.315          2.108                 0.043</span></span>
 <span></span>
 <span><span class="co"># Visualize scaling</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>

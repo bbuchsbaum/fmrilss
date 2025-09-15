@@ -35,6 +35,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/getting_started.html">Getting Started with fmrilss</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_method.html">The OASIS Method: Optimized Analytic Single-pass Inverse Solution</a></li>
+    <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: Algebra and Implementation Details</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF Modeling with fmrilss</a></li>
   </ul>
 </li>
@@ -333,6 +334,18 @@ models. Here’s a taste of what OASIS can do:</p>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"OASIS beta dimensions:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_oasis</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; OASIS beta dimensions: 12 25</span></span></code></pre></div>
+<p>We pass <code>X = NULL</code> together with a
+<code>design_spec</code> so that OASIS can rebuild the trial-wise design
+from the event description and HRF settings on every call. Internally
+(see <code>R/oasis_glue.R</code>) the solver calls <code>fmrihrf</code>
+to generate the appropriate basis for the requested HRF, apply
+span/precision choices, and add any extra conditions before the
+single-pass solve. This keeps the design in sync with changes to the HRF
+(for example when running a grid search or switching to an FIR basis)
+without requiring you to hand-maintain a matching matrix. If you already
+have a fixed design matrix you can still provide it via <code>X</code>,
+but the high-level <code>design_spec</code> path is the recommended
+interface when the HRF is part of what you want OASIS to manage.</p>
 </div>
 <div class="section level2">
 <h2 id="working-with-different-computational-backends">Working with Different Computational Backends<a class="anchor" aria-label="anchor" href="#working-with-different-computational-backends"></a>
@@ -503,13 +516,18 @@ running multiple analyses:</p>
 <span><span class="co"># This can be faster than including Nuisance in each LSS iteration</span></span>
 <span><span class="va">beta_preprocessed</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y_clean</span>, <span class="va">X_clean</span>, Z <span class="op">=</span> <span class="va">Z</span>, method <span class="op">=</span> <span class="st">"r_optimized"</span><span class="op">)</span></span></code></pre></div>
 <p>Choosing the right backend for your data size is crucial for optimal
-performance. As a rule of thumb, for small datasets with fewer than 100
-voxels, the optimized R implementation is usually fast enough and offers
-the advantage of being easily debuggable. For medium-sized datasets up
-to 10,000 voxels, the C++ backend provides significant speedup. For very
-large whole-brain datasets, consider using OASIS, which implements
-additional optimizations for handling massive design matrices
-efficiently.</p>
+performance. Based on the synthetic benchmarks in the OASIS vignette,
+the optimized R and fused C++ implementations perform almost identically
+for small-to-medium problems (hundreds of trials, up to a few thousand
+voxels); the C++ path pulls slightly ahead once the voxel count grows
+into the tens of thousands. OASIS stays in the same ballpark for these
+workloads, but you typically reach for it when you also want its
+HRF-aware features (automatic design construction, ridge, FIR support,
+grid search) rather than purely for speed, because those extras make the
+comparison less apples-to-apples. In practice pick the backend that
+matches the tooling you need (R for ease of debugging, C++ for maximum
+throughput, OASIS when you want the richer HRF workflow) and validate
+with a short benchmark on your own data.</p>
 </div>
 <div class="section level2">
 <h2 id="troubleshooting-common-challenges">Troubleshooting Common Challenges<a class="anchor" aria-label="anchor" href="#troubleshooting-common-challenges"></a>
