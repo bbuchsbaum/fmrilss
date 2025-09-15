@@ -5,12 +5,12 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>The OASIS Method: Advanced LSS with HRF Flexibility • fmrilss</title>
+<title>The OASIS Method: Optimized Analytic Single-pass Inverse Solution • fmrilss</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
 <script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="The OASIS Method: Advanced LSS with HRF Flexibility">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="The OASIS Method: Optimized Analytic Single-pass Inverse Solution">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -34,7 +34,7 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/getting_started.html">Getting Started with fmrilss</a></li>
-    <li><a class="dropdown-item" href="../articles/oasis_method.html">The OASIS Method: Advanced LSS with HRF Flexibility</a></li>
+    <li><a class="dropdown-item" href="../articles/oasis_method.html">The OASIS Method: Optimized Analytic Single-pass Inverse Solution</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF Modeling with fmrilss</a></li>
   </ul>
 </li>
@@ -57,7 +57,7 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
 
-      <h1>The OASIS Method: Advanced LSS with HRF Flexibility</h1>
+      <h1>The OASIS Method: Optimized Analytic Single-pass Inverse Solution</h1>
                         <h4 data-toc-skip class="author">fmrilss
 Development Team</h4>
             
@@ -80,7 +80,7 @@ sound, requires fitting separate models for each trial at each
 voxel—potentially millions of model fits. With large datasets, this
 computational burden becomes significant. What if there was a way to
 achieve the same theoretical results more efficiently?</p>
-<p>Enter OASIS—Optimized Acquisition and Stimulus Sequencing—a method
+<p>Enter OASIS—Optimized Analytic Single-pass Inverse Solution—a method
 that reimagines how we compute LSS estimates. Rather than iterating
 through trials one by one, OASIS leverages clever mathematical
 reformulations to compute all trial estimates simultaneously in a
@@ -748,13 +748,13 @@ dataset sizes:</p>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">benchmark_results</span><span class="op">)</span></span>
 <span><span class="co">#&gt;            Size Timepoints Voxels Trials R_Optimized CPP_Optimized OASIS</span></span>
-<span><span class="co">#&gt; elapsed   small        200    100     13       0.002         0.004 0.007</span></span>
-<span><span class="co">#&gt; elapsed1 medium        300    500     20       0.004         0.014 0.013</span></span>
-<span><span class="co">#&gt; elapsed2  large        400   2000     20       0.012         0.022 0.025</span></span>
+<span><span class="co">#&gt; elapsed   small        200    100     13       0.002         0.004 0.008</span></span>
+<span><span class="co">#&gt; elapsed1 medium        300    500     20       0.004         0.016 0.011</span></span>
+<span><span class="co">#&gt; elapsed2  large        400   2000     20       0.012         0.027 0.023</span></span>
 <span><span class="co">#&gt;          Speedup_vs_R Speedup_vs_CPP</span></span>
-<span><span class="co">#&gt; elapsed           0.3            0.6</span></span>
-<span><span class="co">#&gt; elapsed1          0.3            1.1</span></span>
-<span><span class="co">#&gt; elapsed2          0.5            0.9</span></span>
+<span><span class="co">#&gt; elapsed           0.3            0.5</span></span>
+<span><span class="co">#&gt; elapsed1          0.4            1.5</span></span>
+<span><span class="co">#&gt; elapsed2          0.5            1.2</span></span>
 <span></span>
 <span><span class="co"># Visualize scaling</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
