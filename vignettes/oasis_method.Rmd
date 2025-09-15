@@ -1,10 +1,10 @@
 ---
-title: "The OASIS Method: Advanced LSS with HRF Flexibility"
+title: "The OASIS Method: Optimized Analytic Single-pass Inverse Solution"
 author: "fmrilss Development Team"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{The OASIS Method: Advanced LSS with HRF Flexibility}
+  %\VignetteIndexEntry{The OASIS Method: Optimized Analytic Single-pass Inverse Solution}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -22,7 +22,7 @@ knitr::opts_chunk$set(
 
 Imagine you're working with a cutting-edge fMRI dataset: sub-millimeter resolution, thousands of trials, complex overlapping designs, and you need trial-specific estimates for each of hundreds of thousands of voxels. The standard LSS approach, while theoretically sound, requires fitting separate models for each trial at each voxel—potentially millions of model fits. With large datasets, this computational burden becomes significant. What if there was a way to achieve the same theoretical results more efficiently?
 
-Enter OASIS—Optimized Acquisition and Stimulus Sequencing—a method that reimagines how we compute LSS estimates. Rather than iterating through trials one by one, OASIS leverages clever mathematical reformulations to compute all trial estimates simultaneously in a single, highly optimized pass. But OASIS is more than just a speed improvement; it brings sophisticated features like automatic HRF estimation, ridge regularization for numerical stability, and seamless handling of multi-basis HRF models that would be cumbersome to implement in traditional frameworks.
+Enter OASIS—Optimized Analytic Single-pass Inverse Solution—a method that reimagines how we compute LSS estimates. Rather than iterating through trials one by one, OASIS leverages clever mathematical reformulations to compute all trial estimates simultaneously in a single, highly optimized pass. But OASIS is more than just a speed improvement; it brings sophisticated features like automatic HRF estimation, ridge regularization for numerical stability, and seamless handling of multi-basis HRF models that would be cumbersome to implement in traditional frameworks.
 
 This vignette assumes you're comfortable with the basic LSS concepts from our getting started guide, understand HRF models and basis functions from working with neuroimaging data, have some familiarity with ridge regression and regularization concepts, and know the basics of the `fmrihrf` package for HRF modeling. With this foundation, we'll explore how OASIS can transform your approach to trial-wise beta estimation.
 

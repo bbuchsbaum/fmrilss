@@ -69,6 +69,84 @@ Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)
 
 The trial matrix `X` represents the expected BOLD response for each trial, typically convolved with an HRF (though we're using a simplified box-car function here for clarity). The experimental regressors in `Z` capture effects that vary across the session but not trial-by-trial, such as baseline activation levels or linear drift. The nuisance matrix contains signals we want to remove, like head motion or breathing artifacts.
 
+### Visualizing Regressors
+
+Before fitting models, it helps to quickly inspect the experimental and nuisance regressors. Below are clean plots of the session‑wide experimental effects (excluding the intercept) and the nuisance regressors, standardized for comparability. If `ggplot2` is available, we use it for polished visuals; otherwise we fall back to base R.
+
+```{r plot-regressors, fig.width=8, fig.height=6}
+# Pretty plotting helper
+plot_regressors <- function(Z, Nuisance) {
+  # Omit the intercept when plotting experimental regressors
+  z_names <- setdiff(colnames(Z), "Intercept")
+  z_mat <- if (length(z_names)) as.matrix(Z[, z_names, drop = FALSE]) else NULL
+
+  # Standardize (z-score) for comparability
+  N_std <- scale(Nuisance)
+
+  if (requireNamespace("ggplot2", quietly = TRUE)) {
+    ggplot2::theme_set(ggplot2::theme_minimal(base_size = 12))
+
+    # Experimental regressors (standardized)
+    if (!is.null(z_mat) && ncol(z_mat) > 0) {
+      z_std <- scale(z_mat)
+      z_df <- data.frame(
+        Time = rep(seq_len(nrow(z_std)), times = ncol(z_std)),
+        Regressor = rep(colnames(z_std), each = nrow(z_std)),
+        Value = as.vector(z_std)
+      )
+      pz <- ggplot2::ggplot(z_df, ggplot2::aes(Time, Value, color = Regressor)) +
+        ggplot2::geom_line(linewidth = 0.9) +
+        ggplot2::labs(
+          title = "Experimental regressors (standardized; intercept omitted)",
+          x = "Time (TR)", y = "Z-score"
+        ) +
+        ggplot2::theme(legend.position = "top", legend.title = ggplot2::element_blank())
+      print(pz)
+    }
+
+    # Nuisance regressors (standardized), small multiples
+    n_df <- data.frame(
+      Time = rep(seq_len(nrow(N_std)), times = ncol(N_std)),
+      Regressor = rep(paste0("N", seq_len(ncol(N_std))), each = nrow(N_std)),
+      Value = as.vector(N_std)
+    )
+    pn <- ggplot2::ggplot(n_df, ggplot2::aes(Time, Value)) +
+      ggplot2::geom_line(color = "#2c7fb8", linewidth = 0.6) +
+      ggplot2::facet_wrap(~ Regressor, ncol = 3) +
+      ggplot2::labs(
+        title = "Nuisance regressors (standardized)",
+        x = "Time (TR)", y = "Z-score"
+      ) +
+      ggplot2::theme(strip.background = ggplot2::element_rect(fill = "#f5f5f5", color = NA))
+    print(pn)
+
+  } else {
+    # Base plotting fallback
+    op <- par(no.readonly = TRUE)
+    on.exit(par(op), add = TRUE)
+
+    if (!is.null(z_mat) && ncol(z_mat) > 0) {
+      z_std <- scale(z_mat)
+      matplot(z_std, type = "l", lwd = 2, lty = 1, col = seq_len(ncol(z_std)),
+              xlab = "Time (TR)", ylab = "Z-score",
+              main = "Experimental regressors (standardized; intercept omitted)")
+      legend("topright", legend = colnames(z_std), col = seq_len(ncol(z_std)),
+             lwd = 2, bty = "n")
+    }
+
+    par(mfrow = c(3, 2), mar = c(3, 3, 2, 1))
+    for (i in seq_len(ncol(N_std))) {
+      plot(N_std[, i], type = "l", col = "#2c7fb8", lwd = 1.5,
+           xlab = "Time (TR)", ylab = "Z-score", main = paste0("N", i))
+      abline(h = 0, col = "#cccccc", lty = 3)
+    }
+    par(mfrow = c(1, 1))
+  }
+}
+
+plot_regressors(Z, Nuisance)
+```
+
 ### Generating Realistic Data
 
 Now we'll create synthetic fMRI data that includes contributions from all these components, plus some noise to make it realistic:
@@ -152,7 +230,7 @@ For MVPA analyses, LSS generally performs better because it reduces collinearity
 
 ## Introducing the OASIS Method
 
-While the standard LSS implementation is powerful, the package also includes the OASIS (Optimized Acquisition and Stimulus Sequencing) method, which extends LSS with several sophisticated features. OASIS automatically estimates hemodynamic response functions, applies ridge regularization for enhanced stability, provides efficient computation for complex designs, and includes built-in support for multi-basis HRF models. Here's a taste of what OASIS can do:
+While the standard LSS implementation is powerful, the package also includes the OASIS (Optimized Analytic Single-pass Inverse Solution) method, which extends LSS with several sophisticated features. OASIS automatically estimates hemodynamic response functions, applies ridge regularization for enhanced stability, provides efficient computation for complex designs, and includes built-in support for multi-basis HRF models. Here's a taste of what OASIS can do:
 
 ```{r oasis-intro}
 # Basic OASIS usage
