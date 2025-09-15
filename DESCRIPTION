@@ -29,6 +29,8 @@ Suggests:
     pkgdown,
     progress,
     fmrihrf (>= 0.1.0)
+Remotes: 
+    bbuchsbaum/fmrihrf
 VignetteBuilder: knitr
 SystemRequirements: C++11
 RoxygenNote: 7.3.2.9000
