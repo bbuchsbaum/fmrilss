@@ -2,7 +2,6 @@
 # Demonstrates the OASIS implementation with various HRF types and options
 
 library(fmrilss)
-library(fmrihrf)
 
 # Set up example data
 set.seed(123)

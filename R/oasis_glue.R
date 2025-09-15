@@ -111,15 +111,14 @@
 
   # 2) Detect K (basis dimension)
   K <- oasis$K %||% {
+    detected_K <- 1L
     if (!is.null(oasis$design_spec$cond$hrf)) {
-      return(tryCatch(fmrihrf::nbasis(oasis$design_spec$cond$hrf), error = function(e) 1L))
-    }
-    if (!is.null(oasis$ntrials) && !is.null(X)) {
+      detected_K <- tryCatch(fmrihrf::nbasis(oasis$design_spec$cond$hrf), error = function(e) 1L)
+    } else if (!is.null(oasis$ntrials) && !is.null(X)) {
       N <- ncol(X); ntr <- as.integer(oasis$ntrials)
       if (N %% ntr != 0L) stop(sprintf("ncol(X)=%d is not divisible by ntrials=%d", N, ntr))
-      return(as.integer(N / ntr))
-    }
-    if (!is.null(X)) {
+      detected_K <- as.integer(N / ntr)
+    } else if (!is.null(X)) {
       N <- ncol(X)
       for (Kcand in c(2L,3L,4L,5L,6L,8L,10L,12L)) {
         if (N %% Kcand != 0L) next
@@ -134,10 +133,10 @@
           Cn <- diag(Dn) %*% G %*% diag(Dn)
           if (mean(abs(Cn[upper.tri(Cn)])) < 0.5) { ok <- FALSE; break }
         }
-        if (ok) return(as.integer(Kcand))
+        if (ok) { detected_K <- as.integer(Kcand); break }
       }
     }
-    1L
+    detected_K
   }
   K <- as.integer(K)
 

@@ -4,7 +4,6 @@
 # Demonstrates OASIS superiority for non-canonical HRF recovery
 
 library(fmrilss)
-library(fmrihrf)
 
 # Source helper functions
 source("R/oasis_hrf_recovery.R")

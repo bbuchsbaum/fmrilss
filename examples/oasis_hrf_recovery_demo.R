@@ -5,7 +5,6 @@
 #' designs with overlapping HRFs.
 
 library(fmrilss)
-library(fmrihrf)
 library(ggplot2)
 
 # Source helper functions

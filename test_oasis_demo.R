@@ -3,7 +3,6 @@
 # Simple demonstration of OASIS HRF recovery without skip_on_cran
 
 library(fmrilss)
-library(fmrihrf)
 
 # Source helper functions
 source("R/oasis_hrf_recovery.R")

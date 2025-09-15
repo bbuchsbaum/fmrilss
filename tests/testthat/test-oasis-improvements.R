@@ -4,8 +4,6 @@ library(fmrilss)
 test_that("OASIS HRF grid selection works", {
   skip_if_not_installed("fmrihrf")
   skip_on_cran()
-  
-  library(fmrihrf)
   set.seed(42)
   
   # Create data
@@ -39,8 +37,6 @@ test_that("OASIS HRF grid selection works", {
 test_that("OASIS multi-basis standard errors work", {
   skip_if_not_installed("fmrihrf")
   skip_on_cran()
-  
-  library(fmrihrf)
   set.seed(43)
   
   sframe <- sampling_frame(blocklens = 100, TR = 1.0)
@@ -156,8 +152,6 @@ test_that("OASIS input validation catches errors", {
 test_that("OASIS precision and method options work", {
   skip_if_not_installed("fmrihrf")
   skip_on_cran()
-  
-  library(fmrihrf)
   set.seed(46)
   
   sframe <- sampling_frame(blocklens = 80, TR = 1.0)

@@ -3,7 +3,6 @@
 
 library(testthat)
 library(fmrilss)
-library(fmrihrf)
 
 test_that("OASIS recovers LWU HRF parameters better than SPMG1 in rapid designs", {
   skip_on_cran()

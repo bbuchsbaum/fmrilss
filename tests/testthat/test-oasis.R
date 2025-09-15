@@ -154,8 +154,6 @@ test_that("OASIS fractional ridge mode works", {
 test_that("OASIS handles multi-basis HRFs (K>1)", {
   skip_if_not_installed("fmrihrf")
   skip_on_cran()
-  
-  library(fmrihrf)
   set.seed(5)
   
   # Create sampling frame
@@ -186,8 +184,6 @@ test_that("OASIS handles multi-basis HRFs (K>1)", {
 test_that("OASIS design_spec builds correct trial-wise design", {
   skip_if_not_installed("fmrihrf")
   skip_on_cran()
-  
-  library(fmrihrf)
   set.seed(6)
   
   # Create sampling frame
@@ -219,8 +215,6 @@ test_that("OASIS design_spec builds correct trial-wise design", {
 test_that("OASIS handles other conditions as nuisances", {
   skip_if_not_installed("fmrihrf")
   skip_on_cran()
-  
-  library(fmrihrf)
   set.seed(7)
   
   sframe <- sampling_frame(blocklens = 200, TR = 1.0)
