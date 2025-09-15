@@ -291,6 +291,17 @@ beta_oasis <- lss(
 cat("OASIS beta dimensions:", dim(beta_oasis), "\n")
 ```
 
+We pass `X = NULL` together with a `design_spec` so that OASIS can rebuild the
+trial-wise design from the event description and HRF settings on every call.
+Internally (see `R/oasis_glue.R`) the solver calls `fmrihrf` to generate the
+appropriate basis for the requested HRF, apply span/precision choices, and add
+any extra conditions before the single-pass solve. This keeps the design in sync
+with changes to the HRF (for example when running a grid search or switching to
+an FIR basis) without requiring you to hand-maintain a matching matrix. If you
+already have a fixed design matrix you can still provide it via `X`, but the
+high-level `design_spec` path is the recommended interface when the HRF is part
+of what you want OASIS to manage.
+
 ## Working with Different Computational Backends
 
 The package provides multiple backends to match your computational needs and resources. Each backend implements the same algorithm but with different optimization strategies. The naive implementation offers the clearest code for understanding the algorithm, while the vectorized and optimized R versions provide good performance with pure R code. For production work with large datasets, the C++ backend offers the best performance, especially when combined with parallel processing.
@@ -422,7 +433,7 @@ X_clean <- Q_nuis %*% X
 beta_preprocessed <- lss(Y_clean, X_clean, Z = Z, method = "r_optimized")
 ```
 
-Choosing the right backend for your data size is crucial for optimal performance. As a rule of thumb, for small datasets with fewer than 100 voxels, the optimized R implementation is usually fast enough and offers the advantage of being easily debuggable. For medium-sized datasets up to 10,000 voxels, the C++ backend provides significant speedup. For very large whole-brain datasets, consider using OASIS, which implements additional optimizations for handling massive design matrices efficiently.
+Choosing the right backend for your data size is crucial for optimal performance. Based on the synthetic benchmarks in the OASIS vignette, the optimized R and fused C++ implementations perform almost identically for small-to-medium problems (hundreds of trials, up to a few thousand voxels); the C++ path pulls slightly ahead once the voxel count grows into the tens of thousands. OASIS stays in the same ballpark for these workloads, but you typically reach for it when you also want its HRF-aware features (automatic design construction, ridge, FIR support, grid search) rather than purely for speed, because those extras make the comparison less apples-to-apples. In practice pick the backend that matches the tooling you need (R for ease of debugging, C++ for maximum throughput, OASIS when you want the richer HRF workflow) and validate with a short benchmark on your own data.
 
 ## Troubleshooting Common Challenges
 
