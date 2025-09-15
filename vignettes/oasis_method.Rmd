@@ -300,8 +300,11 @@ The multi-basis approach reveals how the hemodynamic response varies across tria
 Sometimes you want to make no assumptions about HRF shape at all. The Finite Impulse Response (FIR) basis provides a completely non-parametric approach, estimating the response at each time point independently:
 
 ```{r fir-basis}
-# Create FIR basis with 15 time bins
+# Create FIR basis with 15 time bins (2s width over a 30s window)
 fir_hrf <- hrf_fir_generator(nbasis = 15, span = 30)
+fir_params <- attr(fir_hrf, "params")
+bin_width <- as.numeric(fir_params[["bin_width"]])
+n_bins <- attr(fir_hrf, "nbasis")
 
 beta_fir <- lss(
   Y = Y,
@@ -317,8 +320,8 @@ beta_fir <- lss(
       )
     ),
     ridge_mode = "fractional",
-    ridge_x = 0.02,  # Small ridge for FIR stability
-    ridge_b = 0.02
+    ridge_x = 0.2,  # Moderate ridge improves stability for high-dimensional FIR fits
+    ridge_b = 0.2
   )
 )
 
@@ -326,24 +329,43 @@ cat("FIR basis results:\n")
 cat("  Beta dimensions:", dim(beta_fir), "\n")
 cat("  Time bins per trial:", nrow(beta_fir) / n_trials, "\n")
 
-# Reconstruct HRF shape for first trial, first voxel
-fir_coefs <- beta_fir[1:15, 1]
-time_points <- seq(0, 29, by = 2)
+# Organise coefficients as (time bin × trial × voxel)
+fir_array <- array(beta_fir, dim = c(n_bins, n_trials, ncol(beta_fir)))
 
-plot(time_points, fir_coefs, type = "b",
-     main = "Reconstructed HRF from FIR basis",
+# Average across trials and voxels to recover a smooth HRF estimate
+fir_mean <- apply(fir_array, 1, mean)
+fir_se <- apply(fir_array, 1, sd) / sqrt(n_trials * ncol(beta_fir))
+time_points <- seq(0, (n_bins - 1) * bin_width, by = bin_width)
+
+# Plot mean HRF with ±1 SE ribbon
+upper <- fir_mean + fir_se
+lower <- fir_mean - fir_se
+
+plot(time_points, fir_mean, type = "l",
+     ylim = range(c(lower, upper)),
+     main = "FIR-derived HRF (mean across trials/voxels)",
      xlab = "Time (seconds)", ylab = "Response",
-     col = "blue", pch = 19)
+     col = "navy", lwd = 2)
+polygon(c(time_points, rev(time_points)), c(upper, rev(lower)),
+        col = grDevices::adjustcolor("navy", alpha.f = 0.2), border = NA)
+lines(time_points, fir_mean, col = "navy", lwd = 2)
 
-# Add canonical HRF for comparison
+# Add canonical HRF sampled on the same grid for reference
 canonical <- evaluate(HRF_SPMG1, time_points)
-lines(time_points, canonical * mean(fir_coefs) / mean(canonical),
-      col = "red", lty = 2)
-legend("topright", c("FIR", "Canonical"), col = c("blue", "red"),
-       lty = c(1, 2), pch = c(19, NA))
+scale_factor <- max(fir_mean) / max(canonical)
+lines(time_points, canonical * scale_factor, col = "firebrick", lty = 2, lwd = 2)
+legend("topright",
+       c("FIR mean", "±1 SE", "Canonical (scaled)"),
+       col = c("navy", NA, "firebrick"),
+       lty = c(1, NA, 2),
+       lwd = c(2, NA, 2),
+       pch = c(NA, 15, NA),
+       pt.cex = c(NA, 2, NA),
+       pt.bg = c(NA, grDevices::adjustcolor("navy", alpha.f = 0.2), NA),
+       bty = "n")
 ```
 
-The FIR approach reveals the actual shape of the hemodynamic response without parametric constraints. While this flexibility is powerful, it comes at the cost of many more parameters to estimate, making regularization especially important.
+The FIR approach reveals the actual shape of the hemodynamic response without parametric constraints. Because each trial now contributes one coefficient per time bin, individual voxel-level estimates can look jagged—the variance is simply much higher than in the single-parameter canonical fit. Averaging across trials and voxels (and adding a modest ridge penalty) recovers a smooth, HRF-like curve while still allowing deviations from the canonical shape. In practice you would typically pool information across voxels/regions or apply additional smoothing/regularization when working with FIR bases.
 
 ## Optimizing HRF Models Through Grid Search
 
