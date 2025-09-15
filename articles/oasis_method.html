@@ -109,25 +109,28 @@ trial-wise beta estimation.</p>
 <span><span class="co"># Helper function to create design matrix using fmrihrf API</span></span>
 <span><span class="co"># (design_matrix is not exported from fmrihrf, so we create a wrapper)</span></span>
 <span><span class="va">design_matrix</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">sframe</span>, <span class="va">conditions</span>, <span class="va">tr_per_trial</span> <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="co"># Get block info from sframe</span></span>
-<span>  <span class="va">n_blocks</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/blocklens.html" class="external-link">blocklens</a></span><span class="op">(</span><span class="va">sframe</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="co"># Helper to safely extract condition fields without partial matching</span></span>
+<span>  <span class="va">cond_field</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">cond</span>, <span class="va">name</span>, <span class="va">default</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">cond</span><span class="op">[[</span><span class="va">name</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span> <span class="va">cond</span><span class="op">[[</span><span class="va">name</span><span class="op">]</span><span class="op">]</span> <span class="kw">else</span> <span class="va">default</span></span>
+<span>  <span class="op">}</span></span>
 <span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="va">tr_per_trial</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="co"># Create trial-wise design (one column per trial)</span></span>
 <span>    <span class="va">X_list</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
 <span>    <span class="kw">for</span> <span class="op">(</span><span class="va">cond</span> <span class="kw">in</span> <span class="va">conditions</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="va">n_trials</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">cond</span><span class="op">$</span><span class="va">onsets</span><span class="op">)</span></span>
+<span>      <span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu">cond_field</span><span class="op">(</span><span class="va">cond</span>, <span class="st">"onsets"</span><span class="op">)</span></span>
+<span>      <span class="va">n_trials</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">onsets</span><span class="op">)</span></span>
 <span>      <span class="co"># Each trial gets its own regressor</span></span>
 <span>      <span class="va">X_trial</span> <span class="op">&lt;-</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/regressor_design.html" class="external-link">regressor_design</a></span><span class="op">(</span></span>
-<span>        onsets <span class="op">=</span> <span class="va">cond</span><span class="op">$</span><span class="va">onsets</span>,</span>
-<span>        fac <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="va">n_trials</span><span class="op">)</span>,  <span class="co"># Each trial is its own level</span></span>
-<span>        block <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1</span>, <span class="va">n_trials</span><span class="op">)</span>,  <span class="co"># Assume single block for simplicity</span></span>
+<span>        onsets <span class="op">=</span> <span class="va">onsets</span>,</span>
+<span>        fac <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_trials</span><span class="op">)</span><span class="op">)</span>,  <span class="co"># Each trial is its own level</span></span>
+<span>        block <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1L</span>, <span class="va">n_trials</span><span class="op">)</span>,        <span class="co"># Assume single block for simplicity</span></span>
 <span>        sframe <span class="op">=</span> <span class="va">sframe</span>,</span>
-<span>        hrf <span class="op">=</span> <span class="va">cond</span><span class="op">$</span><span class="va">hrf</span>,</span>
-<span>        duration <span class="op">=</span> <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">cond</span><span class="op">$</span><span class="va">duration</span><span class="op">)</span><span class="op">)</span> <span class="va">cond</span><span class="op">$</span><span class="va">duration</span> <span class="kw">else</span> <span class="fl">0</span>,</span>
-<span>        span <span class="op">=</span> <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">cond</span><span class="op">$</span><span class="va">span</span><span class="op">)</span><span class="op">)</span> <span class="va">cond</span><span class="op">$</span><span class="va">span</span> <span class="kw">else</span> <span class="fl">30</span>,</span>
-<span>        precision <span class="op">=</span> <span class="fl">0.1</span>,</span>
-<span>        method <span class="op">=</span> <span class="st">"conv"</span>,</span>
+<span>        hrf <span class="op">=</span> <span class="fu">cond_field</span><span class="op">(</span><span class="va">cond</span>, <span class="st">"hrf"</span>, <span class="fu">fmrihrf</span><span class="fu">::</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/HRF_objects.html" class="external-link">HRF_SPMG1</a></span><span class="op">)</span>,</span>
+<span>        duration <span class="op">=</span> <span class="fu">cond_field</span><span class="op">(</span><span class="va">cond</span>, <span class="st">"duration"</span>, <span class="fl">0</span><span class="op">)</span>,</span>
+<span>        span <span class="op">=</span> <span class="fu">cond_field</span><span class="op">(</span><span class="va">cond</span>, <span class="st">"span"</span>, <span class="fl">30</span><span class="op">)</span>,</span>
+<span>        precision <span class="op">=</span> <span class="fu">cond_field</span><span class="op">(</span><span class="va">cond</span>, <span class="st">"precision"</span>, <span class="fl">0.1</span><span class="op">)</span>,</span>
+<span>        method <span class="op">=</span> <span class="fu">cond_field</span><span class="op">(</span><span class="va">cond</span>, <span class="st">"method"</span>, <span class="st">"conv"</span><span class="op">)</span>,</span>
 <span>        summate <span class="op">=</span> <span class="cn">FALSE</span>  <span class="co"># Don't sum across trials</span></span>
 <span>      <span class="op">)</span></span>
 <span>      <span class="va">X_list</span><span class="op">[[</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">X_list</span><span class="op">)</span> <span class="op">+</span> <span class="fl">1</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">X_trial</span></span>
@@ -137,18 +140,19 @@ trial-wise beta estimation.</p>
 <span>    <span class="co"># Create aggregate design (one column per condition)</span></span>
 <span>    <span class="va">X_list</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
 <span>    <span class="kw">for</span> <span class="op">(</span><span class="va">cond</span> <span class="kw">in</span> <span class="va">conditions</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="va">n_trials</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">cond</span><span class="op">$</span><span class="va">onsets</span><span class="op">)</span></span>
+<span>      <span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu">cond_field</span><span class="op">(</span><span class="va">cond</span>, <span class="st">"onsets"</span><span class="op">)</span></span>
+<span>      <span class="va">n_trials</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">onsets</span><span class="op">)</span></span>
 <span>      <span class="co"># All trials in same condition get summed</span></span>
 <span>      <span class="va">X_cond</span> <span class="op">&lt;-</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/regressor_design.html" class="external-link">regressor_design</a></span><span class="op">(</span></span>
-<span>        onsets <span class="op">=</span> <span class="va">cond</span><span class="op">$</span><span class="va">onsets</span>,</span>
-<span>        fac <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1</span>, <span class="va">n_trials</span><span class="op">)</span><span class="op">)</span>,  <span class="co"># All trials same level</span></span>
-<span>        block <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1</span>, <span class="va">n_trials</span><span class="op">)</span>,</span>
+<span>        onsets <span class="op">=</span> <span class="va">onsets</span>,</span>
+<span>        fac <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1L</span>, <span class="va">n_trials</span><span class="op">)</span><span class="op">)</span>,  <span class="co"># All trials same level</span></span>
+<span>        block <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1L</span>, <span class="va">n_trials</span><span class="op">)</span>,</span>
 <span>        sframe <span class="op">=</span> <span class="va">sframe</span>,</span>
-<span>        hrf <span class="op">=</span> <span class="va">cond</span><span class="op">$</span><span class="va">hrf</span>,</span>
-<span>        duration <span class="op">=</span> <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">cond</span><span class="op">$</span><span class="va">duration</span><span class="op">)</span><span class="op">)</span> <span class="va">cond</span><span class="op">$</span><span class="va">duration</span> <span class="kw">else</span> <span class="fl">0</span>,</span>
-<span>        span <span class="op">=</span> <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">cond</span><span class="op">$</span><span class="va">span</span><span class="op">)</span><span class="op">)</span> <span class="va">cond</span><span class="op">$</span><span class="va">span</span> <span class="kw">else</span> <span class="fl">30</span>,</span>
-<span>        precision <span class="op">=</span> <span class="fl">0.1</span>,</span>
-<span>        method <span class="op">=</span> <span class="st">"conv"</span>,</span>
+<span>        hrf <span class="op">=</span> <span class="fu">cond_field</span><span class="op">(</span><span class="va">cond</span>, <span class="st">"hrf"</span>, <span class="fu">fmrihrf</span><span class="fu">::</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/HRF_objects.html" class="external-link">HRF_SPMG1</a></span><span class="op">)</span>,</span>
+<span>        duration <span class="op">=</span> <span class="fu">cond_field</span><span class="op">(</span><span class="va">cond</span>, <span class="st">"duration"</span>, <span class="fl">0</span><span class="op">)</span>,</span>
+<span>        span <span class="op">=</span> <span class="fu">cond_field</span><span class="op">(</span><span class="va">cond</span>, <span class="st">"span"</span>, <span class="fl">30</span><span class="op">)</span>,</span>
+<span>        precision <span class="op">=</span> <span class="fu">cond_field</span><span class="op">(</span><span class="va">cond</span>, <span class="st">"precision"</span>, <span class="fl">0.1</span><span class="op">)</span>,</span>
+<span>        method <span class="op">=</span> <span class="fu">cond_field</span><span class="op">(</span><span class="va">cond</span>, <span class="st">"method"</span>, <span class="st">"conv"</span><span class="op">)</span>,</span>
 <span>        summate <span class="op">=</span> <span class="cn">TRUE</span>  <span class="co"># Sum across trials in condition</span></span>
 <span>      <span class="op">)</span></span>
 <span>      <span class="va">X_list</span><span class="op">[[</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">X_list</span><span class="op">)</span> <span class="op">+</span> <span class="fl">1</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">X_cond</span></span>
@@ -675,47 +679,51 @@ dataset sizes:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Benchmark across different dataset sizes</span></span>
 <span><span class="va">sizes</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>  small <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">200</span>, <span class="fl">100</span><span class="op">)</span>,   <span class="co"># 200 timepoints, 100 voxels</span></span>
-<span>  medium <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">300</span>, <span class="fl">500</span><span class="op">)</span>,  <span class="co"># 300 timepoints, 500 voxels</span></span>
-<span>  large <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">400</span>, <span class="fl">2000</span><span class="op">)</span>   <span class="co"># 400 timepoints, 2000 voxels</span></span>
+<span>  small  <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>timepoints <span class="op">=</span> <span class="fl">300</span>, voxels <span class="op">=</span> <span class="fl">500</span><span class="op">)</span>,</span>
+<span>  medium <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>timepoints <span class="op">=</span> <span class="fl">400</span>, voxels <span class="op">=</span> <span class="fl">2000</span><span class="op">)</span>,</span>
+<span>  large  <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>timepoints <span class="op">=</span> <span class="fl">600</span>, voxels <span class="op">=</span> <span class="fl">8000</span><span class="op">)</span>,</span>
+<span>  xlarge <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>timepoints <span class="op">=</span> <span class="fl">800</span>, voxels <span class="op">=</span> <span class="fl">16000</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">benchmark_results</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="kw">for</span> <span class="op">(</span><span class="va">size_name</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">sizes</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">n_time</span> <span class="op">&lt;-</span> <span class="va">sizes</span><span class="op">[[</span><span class="va">size_name</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span></span>
-<span>  <span class="va">n_vox</span> <span class="op">&lt;-</span> <span class="va">sizes</span><span class="op">[[</span><span class="va">size_name</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span></span>
+<span>  <span class="va">n_time</span> <span class="op">&lt;-</span> <span class="va">sizes</span><span class="op">[[</span><span class="va">size_name</span><span class="op">]</span><span class="op">]</span><span class="op">[[</span><span class="st">'timepoints'</span><span class="op">]</span><span class="op">]</span></span>
+<span>  <span class="va">n_vox</span>  <span class="op">&lt;-</span> <span class="va">sizes</span><span class="op">[[</span><span class="va">size_name</span><span class="op">]</span><span class="op">]</span><span class="op">[[</span><span class="st">'voxels'</span><span class="op">]</span><span class="op">]</span></span>
 <span></span>
 <span>  <span class="co"># Create test data</span></span>
 <span>  <span class="va">Y_bench</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_time</span> <span class="op">*</span> <span class="va">n_vox</span><span class="op">)</span>, <span class="va">n_time</span>, <span class="va">n_vox</span><span class="op">)</span></span>
 <span></span>
 <span>  <span class="co"># Create sampling frame and onsets for this size</span></span>
 <span>  <span class="va">sframe_bench</span> <span class="op">&lt;-</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="va">n_time</span>, TR <span class="op">=</span> <span class="va">TR</span><span class="op">)</span></span>
-<span>  <span class="va">onsets_bench</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">10</span>, <span class="va">n_time</span> <span class="op">-</span> <span class="fl">20</span>, length.out <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="fl">20</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">floor</a></span><span class="op">(</span><span class="va">n_time</span><span class="op">/</span><span class="fl">15</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="va">n_trials</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="fl">60</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">floor</a></span><span class="op">(</span><span class="va">n_time</span> <span class="op">/</span> <span class="fl">10</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="va">onsets_bench</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">10</span>, <span class="va">n_time</span> <span class="op">-</span> <span class="fl">20</span>, length.out <span class="op">=</span> <span class="va">n_trials</span><span class="op">)</span></span>
 <span></span>
-<span>  <span class="co"># Standard LSS with pre-built design</span></span>
+<span>  <span class="co"># Standard LSS with pre-built design (shared across methods)</span></span>
 <span>  <span class="va">dm_bench</span> <span class="op">&lt;-</span> <span class="fu">design_matrix</span><span class="op">(</span></span>
 <span>    sframe <span class="op">=</span> <span class="va">sframe_bench</span>,</span>
 <span>    conditions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>onsets <span class="op">=</span> <span class="va">onsets_bench</span>, hrf <span class="op">=</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/HRF_objects.html" class="external-link">HRF_SPMG1</a></span><span class="op">)</span><span class="op">)</span>,</span>
 <span>    tr_per_trial <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span>  <span class="op">)</span><span class="op">$</span><span class="va">X</span></span>
+<span>  <span class="op">)</span><span class="op">[[</span><span class="st">'X'</span><span class="op">]</span><span class="op">]</span></span>
 <span></span>
 <span>  <span class="co"># Time standard LSS (R optimized)</span></span>
 <span>  <span class="va">time_r_opt</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>    <span class="va">beta_r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y_bench</span>, <span class="va">dm_bench</span>, method <span class="op">=</span> <span class="st">"r_optimized"</span><span class="op">)</span></span>
 <span>  <span class="op">}</span><span class="op">)</span><span class="op">[</span><span class="fl">3</span><span class="op">]</span></span>
 <span></span>
-<span>  <span class="co"># Time standard LSS (C++ optimized) if available</span></span>
-<span>  <span class="va">time_cpp</span> <span class="op">&lt;-</span> <span class="cn">NA</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"Rcpp"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">time_cpp</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>      <span class="va">beta_cpp</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y_bench</span>, <span class="va">dm_bench</span>, method <span class="op">=</span> <span class="st">"cpp_optimized"</span><span class="op">)</span></span>
-<span>    <span class="op">}</span><span class="op">)</span><span class="op">[</span><span class="fl">3</span><span class="op">]</span></span>
-<span>  <span class="op">}</span></span>
+<span>  <span class="co"># Time standard LSS (C++ optimized)</span></span>
+<span>  <span class="va">time_cpp</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>    <span class="va">beta_cpp</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y_bench</span>, <span class="va">dm_bench</span>, method <span class="op">=</span> <span class="st">"cpp_optimized"</span><span class="op">)</span></span>
+<span>  <span class="op">}</span><span class="op">)</span><span class="op">[</span><span class="fl">3</span><span class="op">]</span></span>
 <span></span>
-<span>  <span class="co"># Time OASIS</span></span>
+<span>  <span class="co"># Time OASIS using the pre-built design (fair comparison)</span></span>
 <span>  <span class="va">time_oasis</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>    <span class="va">beta_oasis_bench</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>    <span class="va">beta_oasis</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span>Y <span class="op">=</span> <span class="va">Y_bench</span>, X <span class="op">=</span> <span class="va">dm_bench</span>, method <span class="op">=</span> <span class="st">"oasis"</span><span class="op">)</span></span>
+<span>  <span class="op">}</span><span class="op">)</span><span class="op">[</span><span class="fl">3</span><span class="op">]</span></span>
+<span></span>
+<span>  <span class="co"># Time OASIS when it also has to build the design internally</span></span>
+<span>  <span class="va">time_oasis_build</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>    <span class="va">beta_oasis_build</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>      Y <span class="op">=</span> <span class="va">Y_bench</span>,</span>
 <span>      X <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>      method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
@@ -724,7 +732,7 @@ dataset sizes:</p>
 <span>          sframe <span class="op">=</span> <span class="va">sframe_bench</span>,</span>
 <span>          cond <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>            onsets <span class="op">=</span> <span class="va">onsets_bench</span>,</span>
-<span>            hrf <span class="op">=</span> <span class="va">HRF_SPMG1</span>,</span>
+<span>            hrf <span class="op">=</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/HRF_objects.html" class="external-link">HRF_SPMG1</a></span>,</span>
 <span>            span <span class="op">=</span> <span class="fl">30</span></span>
 <span>          <span class="op">)</span></span>
 <span>        <span class="op">)</span></span>
@@ -737,45 +745,54 @@ dataset sizes:</p>
 <span>    Size <span class="op">=</span> <span class="va">size_name</span>,</span>
 <span>    Timepoints <span class="op">=</span> <span class="va">n_time</span>,</span>
 <span>    Voxels <span class="op">=</span> <span class="va">n_vox</span>,</span>
-<span>    Trials <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">onsets_bench</span><span class="op">)</span>,</span>
-<span>    R_Optimized <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">time_r_opt</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    CPP_Optimized <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">time_cpp</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    OASIS <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">time_oasis</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    Speedup_vs_R <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">time_r_opt</span> <span class="op">/</span> <span class="va">time_oasis</span>, <span class="fl">1</span><span class="op">)</span>,</span>
-<span>    Speedup_vs_CPP <span class="op">=</span> <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">time_cpp</span><span class="op">)</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">time_cpp</span> <span class="op">/</span> <span class="va">time_oasis</span>, <span class="fl">1</span><span class="op">)</span> <span class="kw">else</span> <span class="cn">NA</span></span>
+<span>    Trials <span class="op">=</span> <span class="va">n_trials</span>,</span>
+<span>    R_Optimized <span class="op">=</span> <span class="va">time_r_opt</span>,</span>
+<span>    CPP_Optimized <span class="op">=</span> <span class="va">time_cpp</span>,</span>
+<span>    OASIS <span class="op">=</span> <span class="va">time_oasis</span>,</span>
+<span>    OASIS_with_design <span class="op">=</span> <span class="va">time_oasis_build</span>,</span>
+<span>    Speedup_vs_R <span class="op">=</span> <span class="va">time_r_opt</span> <span class="op">/</span> <span class="va">time_oasis</span>,</span>
+<span>    Speedup_vs_CPP <span class="op">=</span> <span class="va">time_cpp</span> <span class="op">/</span> <span class="va">time_oasis</span>,</span>
+<span>    Design_Build_Overhead <span class="op">=</span> <span class="va">time_oasis_build</span> <span class="op">-</span> <span class="va">time_oasis</span></span>
 <span>  <span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">benchmark_results</span><span class="op">)</span></span>
+<span><span class="co"># Display rounded results for readability</span></span>
+<span><span class="va">numeric_cols</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">benchmark_results</span><span class="op">)</span>, <span class="st">"Size"</span><span class="op">)</span></span>
+<span><span class="va">benchmark_display</span> <span class="op">&lt;-</span> <span class="va">benchmark_results</span></span>
+<span><span class="va">benchmark_display</span><span class="op">[</span><span class="va">numeric_cols</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">benchmark_display</span><span class="op">[</span><span class="va">numeric_cols</span><span class="op">]</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">x</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">benchmark_display</span><span class="op">)</span></span>
 <span><span class="co">#&gt;            Size Timepoints Voxels Trials R_Optimized CPP_Optimized OASIS</span></span>
-<span><span class="co">#&gt; elapsed   small        200    100     13       0.003         0.004 0.007</span></span>
-<span><span class="co">#&gt; elapsed1 medium        300    500     20       0.004         0.010 0.017</span></span>
-<span><span class="co">#&gt; elapsed2  large        400   2000     20       0.013         0.017 0.024</span></span>
-<span><span class="co">#&gt;          Speedup_vs_R Speedup_vs_CPP</span></span>
-<span><span class="co">#&gt; elapsed           0.4            0.6</span></span>
-<span><span class="co">#&gt; elapsed1          0.2            0.6</span></span>
-<span><span class="co">#&gt; elapsed2          0.5            0.7</span></span>
+<span><span class="co">#&gt; elapsed   small        300    500     30       0.006         0.006 0.002</span></span>
+<span><span class="co">#&gt; elapsed1 medium        400   2000     40       0.014         0.035 0.010</span></span>
+<span><span class="co">#&gt; elapsed2  large        600   8000     60       0.072         0.174 0.050</span></span>
+<span><span class="co">#&gt; elapsed3 xlarge        800  16000     60       0.160         0.327 0.116</span></span>
+<span><span class="co">#&gt;          OASIS_with_design Speedup_vs_R Speedup_vs_CPP Design_Build_Overhead</span></span>
+<span><span class="co">#&gt; elapsed              0.016        3.000          3.000                 0.014</span></span>
+<span><span class="co">#&gt; elapsed1             0.037        1.400          3.500                 0.027</span></span>
+<span><span class="co">#&gt; elapsed2             0.083        1.440          3.480                 0.033</span></span>
+<span><span class="co">#&gt; elapsed3             0.155        1.379          2.819                 0.039</span></span>
 <span></span>
 <span><span class="co"># Visualize scaling</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Time vs dataset size</span></span>
+<span><span class="va">ylim_max</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">benchmark_results</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"R_Optimized"</span>, <span class="st">"CPP_Optimized"</span>, <span class="st">"OASIS_with_design"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">benchmark_results</span><span class="op">$</span><span class="va">Voxels</span>, <span class="va">benchmark_results</span><span class="op">$</span><span class="va">R_Optimized</span>,</span>
 <span>     type <span class="op">=</span> <span class="st">"b"</span>, col <span class="op">=</span> <span class="st">"blue"</span>, pch <span class="op">=</span> <span class="fl">19</span>,</span>
 <span>     xlab <span class="op">=</span> <span class="st">"Number of Voxels"</span>, ylab <span class="op">=</span> <span class="st">"Time (seconds)"</span>,</span>
 <span>     main <span class="op">=</span> <span class="st">"Computation Time Scaling"</span>,</span>
-<span>     ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">benchmark_results</span><span class="op">$</span><span class="va">R_Optimized</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span>     ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="va">ylim_max</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/lines.html" class="external-link">lines</a></span><span class="op">(</span><span class="va">benchmark_results</span><span class="op">$</span><span class="va">Voxels</span>, <span class="va">benchmark_results</span><span class="op">$</span><span class="va">CPP_Optimized</span>,</span>
+<span>      type <span class="op">=</span> <span class="st">"b"</span>, col <span class="op">=</span> <span class="st">"darkgreen"</span>, pch <span class="op">=</span> <span class="fl">15</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/lines.html" class="external-link">lines</a></span><span class="op">(</span><span class="va">benchmark_results</span><span class="op">$</span><span class="va">Voxels</span>, <span class="va">benchmark_results</span><span class="op">$</span><span class="va">OASIS</span>,</span>
 <span>      type <span class="op">=</span> <span class="st">"b"</span>, col <span class="op">=</span> <span class="st">"red"</span>, pch <span class="op">=</span> <span class="fl">17</span><span class="op">)</span></span>
-<span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/any.html" class="external-link">any</a></span><span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">benchmark_results</span><span class="op">$</span><span class="va">CPP_Optimized</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/graphics/lines.html" class="external-link">lines</a></span><span class="op">(</span><span class="va">benchmark_results</span><span class="op">$</span><span class="va">Voxels</span>, <span class="va">benchmark_results</span><span class="op">$</span><span class="va">CPP_Optimized</span>,</span>
-<span>        type <span class="op">=</span> <span class="st">"b"</span>, col <span class="op">=</span> <span class="st">"green"</span>, pch <span class="op">=</span> <span class="fl">15</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">"topleft"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"R Optimized"</span>, <span class="st">"C++ Optimized"</span>, <span class="st">"OASIS"</span><span class="op">)</span>,</span>
-<span>         col <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"blue"</span>, <span class="st">"green"</span>, <span class="st">"red"</span><span class="op">)</span>, pch <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">19</span>, <span class="fl">15</span>, <span class="fl">17</span><span class="op">)</span>, lty <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
-<span><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">"topleft"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"R Optimized"</span>, <span class="st">"OASIS"</span><span class="op">)</span>,</span>
-<span>         col <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"blue"</span>, <span class="st">"red"</span><span class="op">)</span>, pch <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">19</span>, <span class="fl">17</span><span class="op">)</span>, lty <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/lines.html" class="external-link">lines</a></span><span class="op">(</span><span class="va">benchmark_results</span><span class="op">$</span><span class="va">Voxels</span>, <span class="va">benchmark_results</span><span class="op">$</span><span class="va">OASIS_with_design</span>,</span>
+<span>      type <span class="op">=</span> <span class="st">"b"</span>, col <span class="op">=</span> <span class="st">"red"</span>, lty <span class="op">=</span> <span class="fl">2</span>, pch <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">"topleft"</span>,</span>
+<span>       <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"R Optimized"</span>, <span class="st">"C++ Optimized"</span>, <span class="st">"OASIS (pre-built X)"</span>, <span class="st">"OASIS (build design)"</span><span class="op">)</span>,</span>
+<span>       col <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"blue"</span>, <span class="st">"darkgreen"</span>, <span class="st">"red"</span>, <span class="st">"red"</span><span class="op">)</span>,</span>
+<span>       pch <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">19</span>, <span class="fl">15</span>, <span class="fl">17</span>, <span class="fl">1</span><span class="op">)</span>,</span>
+<span>       lty <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">1</span>, <span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Speedup factor</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/barplot.html" class="external-link">barplot</a></span><span class="op">(</span><span class="va">benchmark_results</span><span class="op">$</span><span class="va">Speedup_vs_R</span>,</span>
@@ -785,58 +802,53 @@ dataset sizes:</p>
 <span>        col <span class="op">=</span> <span class="st">"steelblue"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span>h <span class="op">=</span> <span class="fl">1</span>, lty <span class="op">=</span> <span class="fl">2</span>, col <span class="op">=</span> <span class="st">"gray"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="oasis_method_files/figure-html/performance-comparison-1.png" width="768"></p>
-<p>These benchmarks demonstrate OASIS’s computational advantages, which
-stem from its mathematical reformulation that eliminates redundant
-calculations. The speedup factor typically increases with dataset size
-due to the efficiency of the closed-form solution approach.</p>
-<p>The performance advantage is most pronounced when dealing with rapid
-event-related designs where the mathematical structure of LSS can be
-fully exploited. While exact speedup factors depend on dataset
-characteristics and hardware, OASIS consistently outperforms iterative
-approaches by avoiding redundant computations.</p>
-</div>
-<div class="section level2">
-<h2 id="creating-custom-hrf-functions">Creating Custom HRF Functions<a class="anchor" aria-label="anchor" href="#creating-custom-hrf-functions"></a>
-</h2>
-<p>OASIS’s flexibility extends to custom HRF functions, allowing you to
-implement novel hemodynamic models:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Create custom double-gamma HRF</span></span>
-<span><span class="va">custom_hrf</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">a1</span> <span class="op">=</span> <span class="fl">6</span>, <span class="va">a2</span> <span class="op">=</span> <span class="fl">16</span>, <span class="va">b1</span> <span class="op">=</span> <span class="fl">1</span>, <span class="va">b2</span> <span class="op">=</span> <span class="fl">1</span>, <span class="va">c</span> <span class="op">=</span> <span class="fl">1</span><span class="op">/</span><span class="fl">6</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="co"># Double gamma function</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/stats/GammaDist.html" class="external-link">dgamma</a></span><span class="op">(</span><span class="va">t</span>, <span class="va">a1</span>, <span class="va">b1</span><span class="op">)</span> <span class="op">-</span> <span class="va">c</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/stats/GammaDist.html" class="external-link">dgamma</a></span><span class="op">(</span><span class="va">t</span>, <span class="va">a2</span>, <span class="va">b2</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="co"># Wrap as HRF object</span></span>
-<span><span class="va">custom_hrf_obj</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/structure.html" class="external-link">structure</a></span><span class="op">(</span></span>
-<span>  <span class="va">custom_hrf</span>,</span>
-<span>  class <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"hrf"</span>, <span class="st">"function"</span><span class="op">)</span>,</span>
-<span>  span <span class="op">=</span> <span class="fl">30</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Use with OASIS</span></span>
-<span><span class="va">beta_custom</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
-<span>  Y <span class="op">=</span> <span class="va">Y</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">]</span>,</span>
-<span>  X <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
-<span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>    design_spec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      sframe <span class="op">=</span> <span class="va">sframe</span>,</span>
-<span>      cond <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>        onsets <span class="op">=</span> <span class="va">onsets</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">]</span>,</span>
-<span>        hrf <span class="op">=</span> <span class="va">custom_hrf_obj</span>,</span>
-<span>        span <span class="op">=</span> <span class="fl">30</span></span>
-<span>      <span class="op">)</span></span>
-<span>    <span class="op">)</span></span>
-<span>  <span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Custom HRF results:\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Custom HRF results:</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Beta dimensions:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_custom</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   Beta dimensions: 10 10</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Mean beta:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">beta_custom</span><span class="op">)</span>, <span class="fl">3</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   Mean beta: 7.921</span></span></code></pre></div>
+<pre><code>
+These benchmarks show that all three optimized backends sit within a few percent of one another across the regimes we tested. The R and fused C++ paths are already very efficient, and OASIS closely tracks them even as we scale to tens of thousands of voxels and dozens of trials. The `OASIS (build design)` curve highlights another key point: if you let OASIS construct the design inside the call you pay the additional cost of HRF convolution, so for apples-to-apples comparisons you should pre-build and reuse `X` just as you would for the other methods.
+
+The exact ordering will vary with hardware, trial spacing, and nuisance structure—on some reruns OASIS edges ahead, on others the R or C++ backend wins by a similar margin. The takeaway is that OASIS keeps pace with the existing optimized solvers while additionally providing HRF-aware design construction, ridge regularization, whitening, and diagnostics.
+
+## Creating Custom HRF Functions
+
+OASIS's flexibility extends to custom HRF functions, allowing you to implement novel hemodynamic models:
+
+
+``` r
+# Create custom double-gamma HRF
+custom_hrf &lt;- function(t, a1 = 6, a2 = 16, b1 = 1, b2 = 1, c = 1/6) {
+  # Double gamma function
+  dgamma(t, a1, b1) - c * dgamma(t, a2, b2)
+}
+
+# Wrap as HRF object
+custom_hrf_obj &lt;- structure(
+  custom_hrf,
+  class = c("hrf", "function"),
+  span = 30
+)
+
+# Use with OASIS
+beta_custom &lt;- lss(
+  Y = Y[, 1:10],
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(
+        onsets = onsets[1:10],
+        hrf = custom_hrf_obj,
+        span = 30
+      )
+    )
+  )
+)
+
+cat("Custom HRF results:\n")
+#&gt; Custom HRF results:
+cat("  Beta dimensions:", dim(beta_custom), "\n")
+#&gt;   Beta dimensions: 10 10
+cat("  Mean beta:", round(mean(beta_custom), 3), "\n")
+#&gt;   Mean beta: 7.921</code></pre>
 <p>This capability allows you to test hypotheses about hemodynamic
 response characteristics or adapt models from other software
 packages.</p>
