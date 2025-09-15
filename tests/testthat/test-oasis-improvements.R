@@ -7,16 +7,16 @@ test_that("OASIS HRF grid selection works", {
   set.seed(42)
   
   # Create data
-  sframe <- sampling_frame(blocklens = 100, TR = 1.0)
-  T <- sum(blocklens(sframe))
+  sframe <- fmrihrf::sampling_frame(blocklens = 100, TR = 1.0)
+  T <- sum(fmrihrf::blocklens(sframe))
   V <- 50
   Y <- matrix(rnorm(T * V), T, V)
   
   # Create HRF grid - use predefined HRFs
   hrf_grid <- list(
-    HRF_SPMG1,
-    HRF_SPMG3,
-    HRF_GAMMA
+    fmrihrf::HRF_SPMG1,
+    fmrihrf::HRF_SPMG3,
+    fmrihrf::HRF_GAMMA
   )
   
   # Test with HRF grid
@@ -39,8 +39,8 @@ test_that("OASIS multi-basis standard errors work", {
   skip_on_cran()
   set.seed(43)
   
-  sframe <- sampling_frame(blocklens = 100, TR = 1.0)
-  T <- sum(blocklens(sframe))
+  sframe <- fmrihrf::sampling_frame(blocklens = 100, TR = 1.0)
+  T <- sum(fmrihrf::blocklens(sframe))
   V <- 30
   Y <- matrix(rnorm(T * V), T, V)
   
@@ -50,7 +50,7 @@ test_that("OASIS multi-basis standard errors work", {
                   design_spec = list(
                     sframe = sframe,
                     cond = list(onsets = c(10, 30, 50, 70),
-                               hrf = HRF_SPMG3)
+                               hrf = fmrihrf::HRF_SPMG3)
                   ),
                   return_se = TRUE
                 ))
@@ -154,8 +154,8 @@ test_that("OASIS precision and method options work", {
   skip_on_cran()
   set.seed(46)
   
-  sframe <- sampling_frame(blocklens = 80, TR = 1.0)
-  T <- sum(blocklens(sframe))
+  sframe <- fmrihrf::sampling_frame(blocklens = 80, TR = 1.0)
+  T <- sum(fmrihrf::blocklens(sframe))
   V <- 20
   Y <- matrix(rnorm(T * V), T, V)
   
@@ -165,7 +165,7 @@ test_that("OASIS precision and method options work", {
                   design_spec = list(
                     sframe = sframe,
                     cond = list(onsets = c(10, 30, 50),
-                               hrf = HRF_SPMG1),  # Specify HRF
+                               hrf = fmrihrf::HRF_SPMG1),  # Specify HRF
                     precision = 0.05,
                     method = "conv"
                   )

@@ -157,8 +157,8 @@ test_that("OASIS handles multi-basis HRFs (K>1)", {
   set.seed(5)
   
   # Create sampling frame
-  sframe <- sampling_frame(blocklens = c(100, 100), TR = 1.0)
-  T <- sum(blocklens(sframe))
+  sframe <- fmrihrf::sampling_frame(blocklens = c(100, 100), TR = 1.0)
+  T <- sum(fmrihrf::blocklens(sframe))
   V <- 50
   
   # Create synthetic data
@@ -170,7 +170,7 @@ test_that("OASIS handles multi-basis HRFs (K>1)", {
               design_spec = list(
                 sframe = sframe,
                 cond = list(onsets = c(10, 30, 50, 70, 90, 110, 130, 150),
-                           hrf = HRF_SPMG3,
+                           hrf = fmrihrf::HRF_SPMG3,
                            span = 30)
               ),
               K = 3
@@ -187,8 +187,8 @@ test_that("OASIS design_spec builds correct trial-wise design", {
   set.seed(6)
   
   # Create sampling frame
-  sframe <- sampling_frame(blocklens = 150, TR = 1.0)
-  T <- sum(blocklens(sframe))
+  sframe <- fmrihrf::sampling_frame(blocklens = 150, TR = 1.0)
+  T <- sum(fmrihrf::blocklens(sframe))
   V <- 30
   
   # Create synthetic data
@@ -201,7 +201,7 @@ test_that("OASIS design_spec builds correct trial-wise design", {
               design_spec = list(
                 sframe = sframe,
                 cond = list(onsets = onsets,
-                           hrf = HRF_SPMG1,
+                           hrf = fmrihrf::HRF_SPMG1,
                            span = 25)
               )
             ))
@@ -217,8 +217,8 @@ test_that("OASIS handles other conditions as nuisances", {
   skip_on_cran()
   set.seed(7)
   
-  sframe <- sampling_frame(blocklens = 200, TR = 1.0)
-  T <- sum(blocklens(sframe))
+  sframe <- fmrihrf::sampling_frame(blocklens = 200, TR = 1.0)
+  T <- sum(fmrihrf::blocklens(sframe))
   V <- 25
   
   Y <- matrix(rnorm(T * V), T, V)

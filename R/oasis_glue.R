@@ -38,7 +38,7 @@
   Z        <- to_mat(Z)
   Nuisance <- to_mat(Nuisance)
 
-  if (!is.matrix(Y)) stop("Y must be a matrix")
+  if (!is.matrix(Y)) stop("Y must be a numeric matrix")
   if (any(!is.finite(Y))) stop("Y contains non-finite values")
 
   n_time <- nrow(Y)

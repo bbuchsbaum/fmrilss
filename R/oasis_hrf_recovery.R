@@ -61,6 +61,9 @@ generate_lwu_data <- function(onsets,
                              seed = NULL) {
   
   if (!is.null(seed)) set.seed(seed)
+  if (!requireNamespace("fmrihrf", quietly = TRUE)) {
+    stop("Package 'fmrihrf' is required for HRF simulation")
+  }
 
   # Time grid
   time_points <- seq(0, total_time, by = TR)
@@ -69,7 +72,7 @@ generate_lwu_data <- function(onsets,
   
   # Create HRF
   hrf_times <- seq(0, 30, by = TR)  # 30 second HRF window
-  true_hrf <- hrf_lwu(hrf_times, tau = tau, sigma = sigma, rho = rho, normalize = "height")
+  true_hrf <- fmrihrf::hrf_lwu(hrf_times, tau = tau, sigma = sigma, rho = rho, normalize = "height")
   
   # Generate amplitudes if not provided
   if (is.null(amplitudes)) {
@@ -112,7 +115,7 @@ generate_lwu_data <- function(onsets,
   
   # Create sampling frame for fmrilss
   # blocklens should be number of time points, not total time
-  sframe <- sampling_frame(blocklens = n_time, TR = TR)
+  sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
   
   return(list(
     Y = Y,
@@ -362,7 +365,7 @@ compare_hrf_recovery <- function(data, hrf_grid = NULL) {
         sframe = sframe,
         cond = list(
           onsets = onsets,
-          hrf = HRF_SPMG1,
+          hrf = fmrihrf::HRF_SPMG1,
           span = 30
         )
       )
@@ -389,7 +392,7 @@ compare_hrf_recovery <- function(data, hrf_grid = NULL) {
   
   # 4. FIR basis
   message("Fitting FIR...")
-  fir_hrf <- hrf_fir_generator(nbasis = 15, span = 30)
+  fir_hrf <- fmrihrf::hrf_fir_generator(nbasis = 15, span = 30)
   results$fir <- lss(
     Y = Y,
     X = NULL,
@@ -426,7 +429,7 @@ calculate_recovery_metrics <- function(results, true_hrf) {
 
   # Time grid for HRF evaluation
   hrf_times <- seq(0, 30, by = 1)
-  true_hrf_eval <- hrf_lwu(
+  true_hrf_eval <- fmrihrf::hrf_lwu(
     hrf_times,
     tau = results$true_params$tau,
     sigma = results$true_params$sigma,
@@ -449,12 +452,12 @@ calculate_recovery_metrics <- function(results, true_hrf) {
       return(hrf_model(times))
     } else {
       # For HRF objects
-      return(evaluate(hrf_model, times))
+      return(fmrihrf::evaluate(hrf_model, times))
     }
   }
   
   # 1. OASIS recovered HRF
-  oasis_hrf_eval <- hrf_lwu(
+  oasis_hrf_eval <- fmrihrf::hrf_lwu(
     hrf_times,
     tau = results$oasis$best_params$tau,
     sigma = results$oasis$best_params$sigma,
@@ -472,7 +475,7 @@ calculate_recovery_metrics <- function(results, true_hrf) {
   metrics <- rbind(metrics, oasis_metrics)
   
   # 2. SPMG1 HRF
-  spmg1_hrf_eval <- evaluate(HRF_SPMG1, hrf_times)
+  spmg1_hrf_eval <- fmrihrf::evaluate(fmrihrf::HRF_SPMG1, hrf_times)
   spmg1_metrics <- list(
     method = "SPMG1",
     mse = mean((spmg1_hrf_eval - true_hrf_eval)^2),
@@ -483,7 +486,7 @@ calculate_recovery_metrics <- function(results, true_hrf) {
   metrics <- rbind(metrics, spmg1_metrics)
   
   # 3. SPMG3 HRF (canonical component)
-  spmg3_hrf_eval <- evaluate(HRF_SPMG3, hrf_times)[, 1]  # First basis = canonical
+  spmg3_hrf_eval <- fmrihrf::evaluate(fmrihrf::HRF_SPMG3, hrf_times)[, 1]  # First basis = canonical
   spmg3_metrics <- list(
     method = "SPMG3",
     mse = mean((spmg3_hrf_eval - true_hrf_eval)^2),
@@ -530,7 +533,7 @@ plot_hrf_comparison <- function(results, save_path = NULL) {
   hrf_times <- seq(0, 30, by = 0.1)
   
   # True HRF
-  true_hrf <- hrf_lwu(
+  true_hrf <- fmrihrf::hrf_lwu(
     hrf_times,
     tau = results$true_params$tau,
     sigma = results$true_params$sigma,
@@ -539,7 +542,7 @@ plot_hrf_comparison <- function(results, save_path = NULL) {
   )
   
   # OASIS recovered
-  oasis_hrf <- hrf_lwu(
+  oasis_hrf <- fmrihrf::hrf_lwu(
     hrf_times,
     tau = results$oasis$best_params$tau,
     sigma = results$oasis$best_params$sigma,
@@ -548,8 +551,8 @@ plot_hrf_comparison <- function(results, save_path = NULL) {
   )
   
   # Standard models
-  spmg1_hrf <- evaluate(HRF_SPMG1, hrf_times)
-  spmg3_hrf <- evaluate(HRF_SPMG3, hrf_times)[, 1]
+  spmg1_hrf <- fmrihrf::evaluate(fmrihrf::HRF_SPMG1, hrf_times)
+  spmg3_hrf <- fmrihrf::evaluate(fmrihrf::HRF_SPMG3, hrf_times)[, 1]
   
   # Create data frame for plotting
   plot_data <- data.frame(
