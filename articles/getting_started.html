@@ -34,8 +34,11 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/getting_started.html">Getting Started with fmrilss</a></li>
+    <li><a class="dropdown-item" href="../articles/oasis_method.html">The OASIS Method: Advanced LSS with HRF Flexibility</a></li>
+    <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF Modeling with fmrilss</a></li>
   </ul>
 </li>
+<li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
 <li class="nav-item"><form class="form-inline" role="search">
@@ -55,9 +58,10 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Getting Started with fmrilss</h1>
-                        <h4 data-toc-skip class="author">Your Name</h4>
+                        <h4 data-toc-skip class="author">fmrilss
+Development Team</h4>
             
-            <h4 data-toc-skip class="date">2025-06-12</h4>
+            <h4 data-toc-skip class="date">2025-09-15</h4>
       
 
       <div class="d-none name"><code>getting_started.Rmd</code></div>
@@ -66,98 +70,86 @@
     
     
 <div class="section level2">
-<h2 id="introduction-to-least-squares-separate-lss">Introduction to Least Squares Separate (LSS)<a class="anchor" aria-label="anchor" href="#introduction-to-least-squares-separate-lss"></a>
+<h2 id="the-challenge-of-event-related-fmri-analysis">The Challenge of Event-Related fMRI Analysis<a class="anchor" aria-label="anchor" href="#the-challenge-of-event-related-fmri-analysis"></a>
 </h2>
-<p>The <code>fmrilss</code> package provides a fast and flexible
-implementation of the Least Squares Separate (LSS) modeling approach,
-first proposed by Mumford et al. (2012). LSS is a powerful method for
-analyzing event-related fMRI data, especially for studies involving
-multivariate pattern analysis (MVPA) or functional connectivity.</p>
-<p>The core idea of LSS is to estimate a separate GLM for each trial.
-For a given trial, the model includes:</p>
-<ol style="list-style-type: decimal">
-<li>A regressor for the <strong>trial of interest</strong>.</li>
-<li>A single regressor for <strong>all other trials</strong>
-combined.</li>
-<li>
-<strong>Experimental regressors</strong> that we want to model and
-estimate, but not trial-wise (e.g., intercept, condition effects, block
-effects).</li>
-<li>
-<strong>Nuisance regressors</strong> that we want to remove from the
-data before analysis (e.g., motion parameters, physiological
-noise).</li>
-</ol>
-<p>This process is repeated for every trial, yielding a unique beta
-estimate for each one.</p>
+<p>Imagine you’re analyzing an fMRI experiment where participants view
+different images in rapid succession, with only a few seconds between
+each stimulus. You want to estimate the brain’s response to each
+individual image, but there’s a problem: the hemodynamic response
+unfolds slowly over 10-15 seconds, causing responses from consecutive
+trials to overlap substantially. Traditional approaches that model all
+trials simultaneously in a single general linear model (GLM) can suffer
+from collinearity, especially when trials occur close together. This
+collinearity makes it difficult to obtain reliable, trial-specific
+activation estimates that are essential for techniques like multivariate
+pattern analysis (MVPA) or trial-by-trial connectivity analyses.</p>
+<p>The Least Squares Separate (LSS) approach, introduced by Mumford and
+colleagues in 2012, offers an elegant solution to this problem. Rather
+than estimating all trials at once, LSS fits a separate GLM for each
+trial, dramatically reducing collinearity and producing more reliable
+trial-specific estimates. The <code>fmrilss</code> package brings you a
+fast, flexible implementation of this powerful method, with modern
+enhancements that make it practical for large-scale analyses.</p>
 </div>
 <div class="section level2">
-<h2 id="the-lss-function">The <code>lss()</code> Function<a class="anchor" aria-label="anchor" href="#the-lss-function"></a>
+<h2 id="understanding-the-lss-approach">Understanding the LSS Approach<a class="anchor" aria-label="anchor" href="#understanding-the-lss-approach"></a>
 </h2>
-<p>The main entry point to the package is the <code><a href="../reference/lss.html">lss()</a></code>
-function, which has a clean and modern interface:</p>
+<p>Before diving into the implementation, let’s build an intuition for
+how LSS works. This vignette assumes you’re familiar with basic fMRI
+analysis concepts like the general linear model, design matrices, and
+the hemodynamic response function (HRF). You should also be comfortable
+with R programming and basic matrix operations, as we’ll be working with
+these throughout.</p>
+<p>In a standard GLM analysis (often called Least Squares All or LSA),
+we create a design matrix with separate columns for each trial and
+estimate all beta coefficients simultaneously. When trials are closely
+spaced, these columns become highly correlated, leading to unstable
+estimates. LSS takes a different approach: for each trial of interest,
+it creates a simplified model with just two main regressors. The first
+regressor models the trial we’re currently interested in, while the
+second aggregates all other trials into a single regressor. This process
+repeats for every trial, yielding a unique, more stable beta estimate
+for each one.</p>
+<p>Beyond these two core regressors, LSS models can include experimental
+regressors that capture session-wide effects like linear trends or block
+effects, which we want to model but don’t need trial-specific estimates
+for. The model can also incorporate nuisance regressors such as motion
+parameters or physiological noise, which are projected out before the
+analysis begins.</p>
+</div>
+<div class="section level2">
+<h2 id="your-first-lss-analysis">Your First LSS Analysis<a class="anchor" aria-label="anchor" href="#your-first-lss-analysis"></a>
+</h2>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="cn">NULL</span>, Nuisance <span class="op">=</span> <span class="cn">NULL</span>, method <span class="op">=</span> <span class="st">"r_optimized"</span><span class="op">)</span></span></code></pre></div>
-<ul>
-<li>
-<code>Y</code>: The data matrix (timepoints x voxels).</li>
-<li>
-<code>X</code>: The trial design matrix (timepoints x trials).</li>
-<li>
-<code>Z</code>: A matrix of experimental regressors we want to model
-and get beta estimates for, but not trial-wise (e.g., intercept,
-condition effects, block effects). Defaults to an intercept if
-<code>NULL</code>.</li>
-<li>
-<code>Nuisance</code>: A matrix of nuisance regressors to be
-projected out before analysis (e.g., motion parameters, physiological
-noise).</li>
-<li>
-<code>method</code>: The computational backend to use. Options range
-from a simple <code>naive</code> R loop to a highly optimized and
-parallelized <code>"cpp_optimized"</code> engine.</li>
-</ul>
-</div>
-<div class="section level2">
-<h2 id="a-practical-example">A Practical Example<a class="anchor" aria-label="anchor" href="#a-practical-example"></a>
-</h2>
-<p>Let’s walk through a complete example, from generating data to
-running the analysis.</p>
-<div class="section level3">
-<h3 id="load-the-package-and-prepare-data">1. Load the Package and Prepare Data<a class="anchor" aria-label="anchor" href="#load-the-package-and-prepare-data"></a>
-</h3>
-<p>First, we load <code>fmrilss</code> and set up our parameters.</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrilss/">fmrilss</a></span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/" class="external-link">fmrihrf</a></span><span class="op">)</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Attaching package: 'fmrihrf'</span></span>
+<span><span class="co">#&gt; The following object is masked from 'package:stats':</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;     deriv</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrilss/">fmrilss</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">42</span><span class="op">)</span></span>
 <span><span class="va">n_timepoints</span> <span class="op">&lt;-</span> <span class="fl">150</span></span>
 <span><span class="va">n_trials</span> <span class="op">&lt;-</span> <span class="fl">12</span></span>
 <span><span class="va">n_voxels</span> <span class="op">&lt;-</span> <span class="fl">25</span></span></code></pre></div>
-</div>
+<p>Let’s walk through a complete example that demonstrates the power of
+LSS. We’ll start by creating synthetic data that mimics a typical rapid
+event-related design, then compare different analysis approaches to see
+how LSS performs.</p>
 <div class="section level3">
-<h3 id="create-design-matrices">2. Create Design Matrices<a class="anchor" aria-label="anchor" href="#create-design-matrices"></a>
+<h3 id="creating-the-experimental-design">Creating the Experimental Design<a class="anchor" aria-label="anchor" href="#creating-the-experimental-design"></a>
 </h3>
-<p>Next, we create the core components of our model.</p>
-<ul>
-<li>
-<strong>Trial Matrix (<code>X</code>)</strong>: A matrix where each
-column represents the predicted BOLD response for a single trial.</li>
-<li>
-<strong>Experimental Regressors (<code>Z</code>)</strong>: A matrix
-for experimental regressors that we want to model and get beta estimates
-for, but not trial-wise. These might include condition effects, block
-effects, or other experimental factors that vary across the session but
-not trial-by-trial.</li>
-<li>
-<strong>Nuisance Matrix</strong>: Regressors we want to remove from
-the data before modeling, such as motion parameters or physiological
-noise.</li>
-</ul>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<p>The foundation of any fMRI analysis is the design matrix, which
+encodes when stimuli were presented and how we expect the brain to
+respond. In our example, we’ll simulate an experiment with trials
+occurring at regular intervals, which is common in many cognitive
+neuroscience studies.</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Trial design matrix (X)</span></span>
 <span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fl">0</span>, <span class="va">n_timepoints</span>, <span class="va">n_trials</span><span class="op">)</span></span>
-<span><span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span>from <span class="op">=</span> <span class="fl">10</span>, to <span class="op">=</span> <span class="va">n_timepoints</span> <span class="op">-</span> <span class="fl">12</span>, length.out <span class="op">=</span> <span class="va">n_trials</span><span class="op">)</span></span>
+<span><span class="co"># Ensure integer onsets within bounds</span></span>
+<span><span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span>from <span class="op">=</span> <span class="fl">10</span>, to <span class="op">=</span> <span class="va">n_timepoints</span> <span class="op">-</span> <span class="fl">12</span>, length.out <span class="op">=</span> <span class="va">n_trials</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="kw">for</span><span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_trials</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">X</span><span class="op">[</span><span class="va">onsets</span><span class="op">[</span><span class="va">i</span><span class="op">]</span><span class="op">:</span><span class="op">(</span><span class="va">onsets</span><span class="op">[</span><span class="va">i</span><span class="op">]</span> <span class="op">+</span> <span class="fl">5</span><span class="op">)</span>, <span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">1</span></span>
 <span><span class="op">}</span></span>
@@ -168,73 +160,403 @@ noise.</li>
 <span></span>
 <span><span class="co"># Nuisance regressors - e.g., 6 motion parameters</span></span>
 <span><span class="va">Nuisance</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_timepoints</span> <span class="op">*</span> <span class="fl">6</span><span class="op">)</span>, <span class="va">n_timepoints</span>, <span class="fl">6</span><span class="op">)</span></span></code></pre></div>
+<p>The trial matrix <code>X</code> represents the expected BOLD response
+for each trial, typically convolved with an HRF (though we’re using a
+simplified box-car function here for clarity). The experimental
+regressors in <code>Z</code> capture effects that vary across the
+session but not trial-by-trial, such as baseline activation levels or
+linear drift. The nuisance matrix contains signals we want to remove,
+like head motion or breathing artifacts.</p>
 </div>
 <div class="section level3">
-<h3 id="simulate-data-y">3. Simulate Data (<code>Y</code>)<a class="anchor" aria-label="anchor" href="#simulate-data-y"></a>
+<h3 id="generating-realistic-data">Generating Realistic Data<a class="anchor" aria-label="anchor" href="#generating-realistic-data"></a>
 </h3>
-<p>Now, we’ll generate a synthetic data matrix <code>Y</code> that
-includes signals from our regressors plus some random noise.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<p>Now we’ll create synthetic fMRI data that includes contributions from
+all these components, plus some noise to make it realistic:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Simulate effects for each component</span></span>
 <span><span class="va">true_trial_betas</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_trials</span> <span class="op">*</span> <span class="va">n_voxels</span>, <span class="fl">0</span>, <span class="fl">1.2</span><span class="op">)</span>, <span class="va">n_trials</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
 <span><span class="va">true_fixed_effects</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">2</span> <span class="op">*</span> <span class="va">n_voxels</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">5</span>, <span class="op">-</span><span class="fl">0.1</span><span class="op">)</span>, <span class="fl">0.5</span><span class="op">)</span>, <span class="fl">2</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
 <span><span class="va">true_nuisance_effects</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">6</span> <span class="op">*</span> <span class="va">n_voxels</span>, <span class="fl">0</span>, <span class="fl">2</span><span class="op">)</span>, <span class="fl">6</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Combine signals and add noise</span></span>
-<span><span class="va">Y</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="va">Z</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">true_fixed_effects</span><span class="op">)</span> <span class="op">+</span> </span>
+<span><span class="va">Y</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="va">Z</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">true_fixed_effects</span><span class="op">)</span> <span class="op">+</span></span>
 <span>     <span class="op">(</span><span class="va">X</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">true_trial_betas</span><span class="op">)</span> <span class="op">+</span></span>
 <span>     <span class="op">(</span><span class="va">Nuisance</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">true_nuisance_effects</span><span class="op">)</span> <span class="op">+</span></span>
 <span>     <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_timepoints</span> <span class="op">*</span> <span class="va">n_voxels</span>, <span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, <span class="va">n_timepoints</span>, <span class="va">n_voxels</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="run-the-lss-analysis">4. Run the LSS Analysis<a class="anchor" aria-label="anchor" href="#run-the-lss-analysis"></a>
+<h3 id="running-the-analysis">Running the Analysis<a class="anchor" aria-label="anchor" href="#running-the-analysis"></a>
 </h3>
-<p>With our data prepared, we can now run the <code>lss</code>
-analysis.</p>
-<div class="section level4">
-<h4 id="basic-usage">Basic Usage<a class="anchor" aria-label="anchor" href="#basic-usage"></a>
-</h4>
-<p>If you only provide the data <code>Y</code> and the trial matrix
-<code>X</code>, the function will automatically include an
-intercept.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<p>The <code><a href="../reference/lss.html">lss()</a></code> function provides a clean, modern interface
+that adapts to your needs. At its simplest, you can provide just the
+data and trial matrix, and the function automatically includes an
+intercept term:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">beta_basic</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span><span class="op">)</span></span>
 <span><span class="co"># The result is a trials-by-voxels matrix</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_basic</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 12 25</span></span></code></pre></div>
-</div>
-<div class="section level4">
-<h4 id="including-experimental-regressors-and-nuisance-regressors">Including Experimental Regressors and Nuisance Regressors<a class="anchor" aria-label="anchor" href="#including-experimental-regressors-and-nuisance-regressors"></a>
-</h4>
-<p>For a more realistic analysis, we include our <code>Z</code> and
-<code>Nuisance</code> matrices. The nuisance regressors are projected
-out of both <code>Y</code> and <code>X</code> before the trial-wise GLMs
-are estimated, while the experimental regressors in <code>Z</code> are
-included in every trial-wise GLM to get their beta estimates.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<p>For a more complete analysis that accounts for experimental effects
+and removes nuisance signals, we include our <code>Z</code> and
+<code>Nuisance</code> matrices. The function handles the nuisance
+regression efficiently, projecting these signals out of both the data
+and design matrix before estimating trial-specific betas:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">beta_full</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span><span class="op">)</span></span>
 <span><span class="co"># The output dimensions remain the same</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_full</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 12 25</span></span></code></pre></div>
 </div>
 </div>
-<div class="section level3">
-<h3 id="choosing-a-high-performance-method">5. Choosing a High-Performance Method<a class="anchor" aria-label="anchor" href="#choosing-a-high-performance-method"></a>
-</h3>
-<p>While the default R implementation is well-optimized, the C++ backend
-offers a significant speedup, especially for large datasets. It is also
-parallelized with OpenMP to use multiple CPU cores. To use it, simply
-set <code>method = "cpp_optimized"</code>.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="section level2">
+<h2 id="choosing-the-right-computational-backend">Choosing the Right Computational Backend<a class="anchor" aria-label="anchor" href="#choosing-the-right-computational-backend"></a>
+</h2>
+<p>The <code>fmrilss</code> package offers multiple computational
+backends, each optimized for different scenarios. While the default R
+implementation is well-optimized and readable, making it excellent for
+understanding the algorithm and debugging, you’ll often want to use the
+high-performance C++ backend for real analyses, especially with large
+datasets. The C++ implementation leverages Armadillo for efficient
+linear algebra and OpenMP for parallel processing across multiple CPU
+cores:</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Run the same analysis with the high-performance C++ engine</span></span>
 <span><span class="va">beta_fast</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>, method <span class="op">=</span> <span class="st">"cpp_optimized"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># The results are numerically identical to the R version</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/all.equal.html" class="external-link">all.equal</a></span><span class="op">(</span><span class="va">beta_full</span>, <span class="va">beta_fast</span>, tolerance <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
-<p>This makes it easy to switch between a readable R implementation and
-a high-performance C++ engine without changing any other code.</p>
+<p>The beauty of this design is that you can seamlessly switch between
+backends without changing any other code, allowing you to use the
+readable R implementation during development and the optimized C++
+version for production analyses.</p>
 </div>
+<div class="section level2">
+<h2 id="lss-versus-traditional-glm-when-each-shines">LSS versus Traditional GLM: When Each Shines<a class="anchor" aria-label="anchor" href="#lss-versus-traditional-glm-when-each-shines"></a>
+</h2>
+<p>To understand when LSS offers advantages over traditional approaches,
+let’s compare it with the standard Least Squares All (LSA) method that
+estimates all trials simultaneously:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># LSA: Standard GLM with all trials in one model</span></span>
+<span><span class="va">beta_lsa</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lsa.html">lsa</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Compare dimensions</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"LSS beta dimensions:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_full</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; LSS beta dimensions: 12 25</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"LSA beta dimensions:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_lsa</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; LSA beta dimensions: 12 25</span></span>
+<span></span>
+<span><span class="co"># Compare variance in beta estimates</span></span>
+<span><span class="va">var_lss</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">beta_full</span>, <span class="fl">2</span>, <span class="va">var</span><span class="op">)</span></span>
+<span><span class="va">var_lsa</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">beta_lsa</span>, <span class="fl">2</span>, <span class="va">var</span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"\nMean variance across voxels:\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Mean variance across voxels:</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  LSS:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">var_lss</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   LSS: 1.826826</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  LSA:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">var_lsa</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   LSA: 4.297449</span></span>
+<span></span>
+<span><span class="co"># Plot comparison</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/hist.html" class="external-link">hist</a></span><span class="op">(</span><span class="va">beta_full</span><span class="op">[</span>, <span class="fl">1</span><span class="op">]</span>, main <span class="op">=</span> <span class="st">"LSS: Beta distribution (Voxel 1)"</span>,</span>
+<span>     xlab <span class="op">=</span> <span class="st">"Beta values"</span>, col <span class="op">=</span> <span class="st">"lightblue"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/hist.html" class="external-link">hist</a></span><span class="op">(</span><span class="va">beta_lsa</span><span class="op">[</span>, <span class="fl">1</span><span class="op">]</span>, main <span class="op">=</span> <span class="st">"LSA: Beta distribution (Voxel 1)"</span>,</span>
+<span>     xlab <span class="op">=</span> <span class="st">"Beta values"</span>, col <span class="op">=</span> <span class="st">"lightgreen"</span><span class="op">)</span></span></code></pre></div>
+<p><img src="getting_started_files/figure-html/lsa-comparison-1.png" width="672"></p>
+<p>The comparison reveals important differences between the methods. LSS
+typically produces beta estimates with different variance
+characteristics than LSA, which can be advantageous for certain
+analyses. When should you choose one over the other?</p>
+<p>For MVPA analyses, LSS generally performs better because it reduces
+collinearity between trial estimates, leading to more distinguishable
+patterns. In rapid event-related designs where hemodynamic responses
+overlap substantially, LSS’s approach of isolating each trial helps
+maintain estimate stability. However, for block designs with
+well-separated trials, or when you need to compute group-level contrasts
+that benefit from the stability of simultaneous estimation, LSA might be
+more appropriate. Connectivity analyses that require trial-specific
+estimates particularly benefit from LSS’s approach.</p>
+</div>
+<div class="section level2">
+<h2 id="introducing-the-oasis-method">Introducing the OASIS Method<a class="anchor" aria-label="anchor" href="#introducing-the-oasis-method"></a>
+</h2>
+<p>While the standard LSS implementation is powerful, the package also
+includes the OASIS (Optimized Acquisition and Stimulus Sequencing)
+method, which extends LSS with several sophisticated features. OASIS
+automatically estimates hemodynamic response functions, applies ridge
+regularization for enhanced stability, provides efficient computation
+for complex designs, and includes built-in support for multi-basis HRF
+models. Here’s a taste of what OASIS can do:</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Basic OASIS usage</span></span>
+<span><span class="co"># fmrihrf is now imported automatically</span></span>
+<span><span class="va">beta_oasis</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
+<span>  X <span class="op">=</span> <span class="cn">NULL</span>,  <span class="co"># OASIS builds design internally</span></span>
+<span>  method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
+<span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    design_spec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      sframe <span class="op">=</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span>, TR <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>,</span>
+<span>      cond <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>        onsets <span class="op">=</span> <span class="va">onsets</span>,        <span class="co"># reuse onsets from above</span></span>
+<span>        hrf <span class="op">=</span> <span class="va">HRF_SPMG1</span>,        <span class="co"># HRF model</span></span>
+<span>        span <span class="op">=</span> <span class="fl">30</span></span>
+<span>      <span class="op">)</span></span>
+<span>    <span class="op">)</span>,</span>
+<span>    ridge_mode <span class="op">=</span> <span class="st">"fractional"</span>,</span>
+<span>    ridge_x <span class="op">=</span> <span class="fl">0.01</span>,</span>
+<span>    ridge_b <span class="op">=</span> <span class="fl">0.01</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"OASIS beta dimensions:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_oasis</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; OASIS beta dimensions: 12 25</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="working-with-different-computational-backends">Working with Different Computational Backends<a class="anchor" aria-label="anchor" href="#working-with-different-computational-backends"></a>
+</h2>
+<p>The package provides multiple backends to match your computational
+needs and resources. Each backend implements the same algorithm but with
+different optimization strategies. The naive implementation offers the
+clearest code for understanding the algorithm, while the vectorized and
+optimized R versions provide good performance with pure R code. For
+production work with large datasets, the C++ backend offers the best
+performance, especially when combined with parallel processing.</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Benchmark different methods</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/joshuaulrich/microbenchmark/" class="external-link">microbenchmark</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">methods</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"naive"</span>, <span class="st">"r_vectorized"</span>, <span class="st">"r_optimized"</span>, <span class="st">"cpp_optimized"</span><span class="op">)</span></span>
+<span><span class="va">timings</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">m</span> <span class="kw">in</span> <span class="va">methods</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">timings</span><span class="op">[[</span><span class="va">m</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.time.html" class="external-link">system.time</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>    <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, method <span class="op">=</span> <span class="va">m</span><span class="op">)</span></span>
+<span>  <span class="op">}</span><span class="op">)</span><span class="op">[</span><span class="fl">3</span><span class="op">]</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="co"># Display timing comparison</span></span>
+<span><span class="va">timing_df</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  Method <span class="op">=</span> <span class="va">methods</span>,</span>
+<span>  Time <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/unlist.html" class="external-link">unlist</a></span><span class="op">(</span><span class="va">timings</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">timing_df</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># For large datasets, consider threading for C++ backends</span></span>
+<span><span class="kw">if</span> <span class="op">(</span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">require</a></span><span class="op">(</span><span class="st">"parallel"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">n_cores</span> <span class="op">&lt;-</span> <span class="fu">parallel</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/parallel/detectCores.html" class="external-link">detectCores</a></span><span class="op">(</span><span class="op">)</span> <span class="op">-</span> <span class="fl">1</span></span>
+<span>  <span class="co"># Set OpenMP threads for C++ backend if supported</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>OMP_NUM_THREADS <span class="op">=</span> <span class="va">n_cores</span><span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="handling-complex-experimental-designs">Handling Complex Experimental Designs<a class="anchor" aria-label="anchor" href="#handling-complex-experimental-designs"></a>
+</h2>
+<p>Real experiments often involve multiple conditions, parametric
+modulations, and various covariates. The <code>fmrilss</code> package
+handles these complexities gracefully. When working with multiple
+conditions, you can create separate design matrices for each condition
+and include condition labels as experimental regressors. This allows you
+to model condition-specific effects while still obtaining trial-wise
+estimates within each condition.</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Create design with multiple conditions</span></span>
+<span><span class="va">n_cond</span> <span class="op">&lt;-</span> <span class="fl">3</span></span>
+<span><span class="va">X_multi</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fl">0</span>, <span class="va">n_timepoints</span>, <span class="va">n_trials</span> <span class="op">*</span> <span class="va">n_cond</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Generate a simple HRF for demonstration</span></span>
+<span><span class="va">hrf</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.2</span>, <span class="fl">0.5</span>, <span class="fl">0.8</span>, <span class="fl">1</span>, <span class="fl">0.9</span>, <span class="fl">0.7</span>, <span class="fl">0.5</span>, <span class="fl">0.3</span>, <span class="fl">0.1</span><span class="op">)</span></span>
+<span></span>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">c</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_cond</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">trial_idx</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="op">(</span><span class="va">c</span><span class="op">-</span><span class="fl">1</span><span class="op">)</span> <span class="op">*</span> <span class="va">n_trials</span> <span class="op">+</span> <span class="fl">1</span><span class="op">)</span><span class="op">:</span><span class="op">(</span><span class="va">c</span> <span class="op">*</span> <span class="va">n_trials</span><span class="op">)</span></span>
+<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_trials</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">onset</span> <span class="op">&lt;-</span> <span class="fl">10</span> <span class="op">+</span> <span class="op">(</span><span class="va">trial_idx</span><span class="op">[</span><span class="va">i</span><span class="op">]</span> <span class="op">-</span> <span class="fl">1</span><span class="op">)</span> <span class="op">*</span> <span class="fl">5</span></span>
+<span>    <span class="kw">if</span> <span class="op">(</span><span class="va">onset</span> <span class="op">+</span> <span class="fl">9</span> <span class="op">&lt;=</span> <span class="va">n_timepoints</span><span class="op">)</span> <span class="op">{</span></span>
+<span>      <span class="va">X_multi</span><span class="op">[</span><span class="va">onset</span><span class="op">:</span><span class="op">(</span><span class="va">onset</span> <span class="op">+</span> <span class="fl">9</span><span class="op">)</span>, <span class="va">trial_idx</span><span class="op">[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">hrf</span></span>
+<span>    <span class="op">}</span></span>
+<span>  <span class="op">}</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="co"># Add condition labels as experimental regressors</span></span>
+<span><span class="va">Z_cond</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fl">0</span>, <span class="va">n_timepoints</span>, <span class="va">n_cond</span><span class="op">)</span></span>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">c</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_cond</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">trial_idx</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="op">(</span><span class="va">c</span><span class="op">-</span><span class="fl">1</span><span class="op">)</span> <span class="op">*</span> <span class="va">n_trials</span> <span class="op">+</span> <span class="fl">1</span><span class="op">)</span><span class="op">:</span><span class="op">(</span><span class="va">c</span> <span class="op">*</span> <span class="va">n_trials</span><span class="op">)</span></span>
+<span>  <span class="va">Z_cond</span><span class="op">[</span>, <span class="va">c</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/colSums.html" class="external-link">rowSums</a></span><span class="op">(</span><span class="va">X_multi</span><span class="op">[</span>, <span class="va">trial_idx</span>, drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="co"># Run LSS with condition regressors</span></span>
+<span><span class="va">beta_multi</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X_multi</span>, Z <span class="op">=</span> <span class="va">Z_cond</span>, method <span class="op">=</span> <span class="st">"r_optimized"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Warning in .check_zero_regressors(X): Trial regressor 'Trial_28' appears to be</span></span>
+<span><span class="co">#&gt; zero (norm = 0). This may cause numerical issues or NaN results.</span></span>
+<span><span class="co">#&gt; Warning in .check_zero_regressors(X): Trial regressor 'Trial_29' appears to be</span></span>
+<span><span class="co">#&gt; zero (norm = 0). This may cause numerical issues or NaN results.</span></span>
+<span><span class="co">#&gt; Warning in .check_zero_regressors(X): Trial regressor 'Trial_30' appears to be</span></span>
+<span><span class="co">#&gt; zero (norm = 0). This may cause numerical issues or NaN results.</span></span>
+<span><span class="co">#&gt; Warning in .check_zero_regressors(X): Trial regressor 'Trial_31' appears to be</span></span>
+<span><span class="co">#&gt; zero (norm = 0). This may cause numerical issues or NaN results.</span></span>
+<span><span class="co">#&gt; Warning in .check_zero_regressors(X): Trial regressor 'Trial_32' appears to be</span></span>
+<span><span class="co">#&gt; zero (norm = 0). This may cause numerical issues or NaN results.</span></span>
+<span><span class="co">#&gt; Warning in .check_zero_regressors(X): Trial regressor 'Trial_33' appears to be</span></span>
+<span><span class="co">#&gt; zero (norm = 0). This may cause numerical issues or NaN results.</span></span>
+<span><span class="co">#&gt; Warning in .check_zero_regressors(X): Trial regressor 'Trial_34' appears to be</span></span>
+<span><span class="co">#&gt; zero (norm = 0). This may cause numerical issues or NaN results.</span></span>
+<span><span class="co">#&gt; Warning in .check_zero_regressors(X): Trial regressor 'Trial_35' appears to be</span></span>
+<span><span class="co">#&gt; zero (norm = 0). This may cause numerical issues or NaN results.</span></span>
+<span><span class="co">#&gt; Warning in .check_zero_regressors(X): Trial regressor 'Trial_36' appears to be</span></span>
+<span><span class="co">#&gt; zero (norm = 0). This may cause numerical issues or NaN results.</span></span>
+<span><span class="co">#&gt; Warning in .lss_engine_optimized(dset = dset, bdes = bdes, Y = Y, use_cpp =</span></span>
+<span><span class="co">#&gt; use_cpp): No intercept detected in dmat_base. Consider adding one for proper</span></span>
+<span><span class="co">#&gt; baseline modeling.</span></span></code></pre></div>
+<p>Parametric modulations, where trial responses are weighted by
+continuous variables like reaction time or stimulus intensity, are also
+straightforward to implement. For a quantitative demo, we simulate a
+parametric effect in the data and show recovery with and without the
+modulator:</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Add parametric modulator (e.g., reaction time, stimulus intensity)</span></span>
+<span><span class="va">modulator</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_trials</span>, mean <span class="op">=</span> <span class="fl">0</span>, sd <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>, center <span class="op">=</span> <span class="cn">TRUE</span>, scale <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Create parametrically modulated design (scale each trial by its modulator)</span></span>
+<span><span class="va">X_param</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sweep.html" class="external-link">sweep</a></span><span class="op">(</span><span class="va">X</span>, <span class="fl">2</span>, <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">modulator</span><span class="op">)</span>, <span class="va">`*`</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Simulate data with a parametric effect (reuse fixed and nuisance parts)</span></span>
+<span><span class="va">Y_mod</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="va">Z</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">true_fixed_effects</span><span class="op">)</span> <span class="op">+</span></span>
+<span>         <span class="op">(</span><span class="va">X_param</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">true_trial_betas</span><span class="op">)</span> <span class="op">+</span></span>
+<span>         <span class="op">(</span><span class="va">Nuisance</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">true_nuisance_effects</span><span class="op">)</span> <span class="op">+</span></span>
+<span>         <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_timepoints</span> <span class="op">*</span> <span class="va">n_voxels</span>, <span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, <span class="va">n_timepoints</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Fit models with and without the parametric modulator</span></span>
+<span><span class="va">beta_unmod</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y_mod</span>, <span class="va">X</span>,       Z <span class="op">=</span> <span class="va">Z</span>, method <span class="op">=</span> <span class="st">"r_optimized"</span><span class="op">)</span></span>
+<span><span class="va">beta_param</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y_mod</span>, <span class="va">X_param</span>, Z <span class="op">=</span> <span class="va">Z</span>, method <span class="op">=</span> <span class="st">"r_optimized"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Ground truths for comparison</span></span>
+<span><span class="co"># - For unmodulated design X, the true coefficients are modulator * true_trial_betas</span></span>
+<span><span class="va">true_unmod_coefs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sweep.html" class="external-link">sweep</a></span><span class="op">(</span><span class="va">true_trial_betas</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">modulator</span><span class="op">)</span>, <span class="va">`*`</span><span class="op">)</span></span>
+<span><span class="co"># - For parametrically modulated design X_param, the true coefficients are true_trial_betas</span></span>
+<span></span>
+<span><span class="va">cor_unmod</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">beta_unmod</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">true_unmod_coefs</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">cor_param</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">beta_param</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">true_trial_betas</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Correlation with true coefficients (parametric effect simulated):\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Correlation with true coefficients (parametric effect simulated):</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Using X (no modulator):\t"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">cor_unmod</span>, <span class="fl">3</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   Using X (no modulator):     0.532</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Using X_param (with modulator):"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">cor_param</span>, <span class="fl">3</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   Using X_param (with modulator): 0.37</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="optimizing-performance-for-large-scale-analyses">Optimizing Performance for Large-Scale Analyses<a class="anchor" aria-label="anchor" href="#optimizing-performance-for-large-scale-analyses"></a>
+</h2>
+<p>When working with whole-brain data containing hundreds of thousands
+of voxels, memory management and computational efficiency become
+critical. The package provides several strategies for handling large
+datasets effectively.</p>
+<p>For very large datasets that exceed available memory, you can process
+voxels in chunks. This approach maintains reasonable memory usage while
+still benefiting from vectorized operations within each chunk:</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># For very large datasets, process in chunks</span></span>
+<span><span class="va">chunk_size</span> <span class="op">&lt;-</span> <span class="fl">1000</span></span>
+<span><span class="va">n_chunks</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">ceiling</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span> <span class="op">/</span> <span class="va">chunk_size</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">beta_chunks</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">chunk</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_chunks</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">voxel_idx</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="op">(</span><span class="va">chunk</span> <span class="op">-</span> <span class="fl">1</span><span class="op">)</span> <span class="op">*</span> <span class="va">chunk_size</span> <span class="op">+</span> <span class="fl">1</span><span class="op">)</span><span class="op">:</span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="va">chunk</span> <span class="op">*</span> <span class="va">chunk_size</span>, <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="va">beta_chunks</span><span class="op">[[</span><span class="va">chunk</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span><span class="op">[</span>, <span class="va">voxel_idx</span><span class="op">]</span>, <span class="va">X</span>, method <span class="op">=</span> <span class="st">"cpp_optimized"</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="co"># Combine results</span></span>
+<span><span class="va">beta_full</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">cbind</span>, <span class="va">beta_chunks</span><span class="op">)</span></span></code></pre></div>
+<p>Another optimization strategy involves preprocessing your data to
+remove nuisance signals before running LSS. While LSS can handle
+nuisance regressors internally, preprocessing can be more efficient when
+running multiple analyses:</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Project out nuisance before LSS (when appropriate)</span></span>
+<span><span class="co"># project_confounds returns the projection matrix Q; apply it to both Y and X</span></span>
+<span><span class="va">Q_nuis</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/project_confounds.html">project_confounds</a></span><span class="op">(</span><span class="va">Nuisance</span><span class="op">)</span></span>
+<span><span class="va">Y_clean</span> <span class="op">&lt;-</span> <span class="va">Q_nuis</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">Y</span></span>
+<span><span class="va">X_clean</span> <span class="op">&lt;-</span> <span class="va">Q_nuis</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">X</span></span>
+<span></span>
+<span><span class="co"># This can be faster than including Nuisance in each LSS iteration</span></span>
+<span><span class="va">beta_preprocessed</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y_clean</span>, <span class="va">X_clean</span>, Z <span class="op">=</span> <span class="va">Z</span>, method <span class="op">=</span> <span class="st">"r_optimized"</span><span class="op">)</span></span></code></pre></div>
+<p>Choosing the right backend for your data size is crucial for optimal
+performance. As a rule of thumb, for small datasets with fewer than 100
+voxels, the optimized R implementation is usually fast enough and offers
+the advantage of being easily debuggable. For medium-sized datasets up
+to 10,000 voxels, the C++ backend provides significant speedup. For very
+large whole-brain datasets, consider using OASIS, which implements
+additional optimizations for handling massive design matrices
+efficiently.</p>
+</div>
+<div class="section level2">
+<h2 id="troubleshooting-common-challenges">Troubleshooting Common Challenges<a class="anchor" aria-label="anchor" href="#troubleshooting-common-challenges"></a>
+</h2>
+<p>Even with robust implementations, certain data characteristics can
+cause issues. Understanding how to diagnose and address these problems
+will help you get the most out of your analyses.</p>
+<p>When design matrices become singular or near-singular due to high
+collinearity between regressors, standard least squares solutions become
+unstable. You can detect this by examining the correlation matrix of
+your design:</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Check for collinearity</span></span>
+<span><span class="va">cor_matrix</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="va">X</span><span class="op">)</span></span>
+<span><span class="va">high_cor</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html" class="external-link">which</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">cor_matrix</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0.9</span> <span class="op">&amp;</span> <span class="va">cor_matrix</span> <span class="op">!=</span> <span class="fl">1</span>, arr.ind <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">high_cor</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="kw"><a href="https://rdrr.io/r/base/warning.html" class="external-link">warning</a></span><span class="op">(</span><span class="st">"High correlation between regressors detected"</span><span class="op">)</span></span>
+<span>  <span class="co"># Consider using ridge regression via OASIS</span></span>
+<span>  <span class="va">beta_ridge</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
+<span>                    oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>ridge_mode <span class="op">=</span> <span class="st">"absolute"</span>, ridge_x <span class="op">=</span> <span class="fl">0.1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
+<p>Memory limitations can also pose challenges with large datasets.
+Before starting an analysis, it’s wise to estimate memory requirements
+and adjust your approach accordingly:</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Monitor memory usage</span></span>
+<span><span class="va">mem_required</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/object.size.html" class="external-link">object.size</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span> <span class="op">*</span> <span class="va">n_trials</span> <span class="op">*</span> <span class="fl">2</span>  <span class="co"># Rough estimate</span></span>
+<span><span class="co"># mem_available &lt;- memory.limit()  # Windows only</span></span>
+<span></span>
+<span><span class="co"># if (mem_required &gt; mem_available * 0.8) {</span></span>
+<span><span class="co">#   warning("May run out of memory. Consider chunking or using OASIS.")</span></span>
+<span><span class="co"># }</span></span></code></pre></div>
+<p>If you encounter unexpectedly slow performance, profiling can help
+identify bottlenecks:</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Profile code to find bottlenecks</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/Rprof.html" class="external-link">Rprof</a></span><span class="op">(</span><span class="st">"lss_profile.out"</span><span class="op">)</span></span>
+<span><span class="va">beta_slow</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, method <span class="op">=</span> <span class="st">"naive"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/Rprof.html" class="external-link">Rprof</a></span><span class="op">(</span><span class="cn">NULL</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/summaryRprof.html" class="external-link">summaryRprof</a></span><span class="op">(</span><span class="st">"lss_profile.out"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="where-to-go-from-here">Where to Go From Here<a class="anchor" aria-label="anchor" href="#where-to-go-from-here"></a>
+</h2>
+<p>This vignette has introduced you to the core concepts and
+capabilities of the <code>fmrilss</code> package. You’ve learned how LSS
+addresses the collinearity problem in rapid event-related designs, how
+to choose between different computational backends, and strategies for
+handling complex experimental designs and large datasets.</p>
+<p>To deepen your understanding and explore advanced features, we
+recommend examining the voxel-wise HRF vignette, which demonstrates how
+to model spatial variation in hemodynamic responses across the brain.
+The OASIS method vignette provides comprehensive coverage of this
+powerful extension, including HRF estimation and ridge regression
+techniques. For those interested in hierarchical analyses, the mixed
+models vignette shows how to combine LSS with mixed-effects modeling
+frameworks.</p>
+<p>The <code>fmrilss</code> package represents a comprehensive toolkit
+for trial-wise beta estimation, providing options that range from
+simple, interpretable implementations to highly optimized solutions for
+large-scale analyses. Whether you’re conducting exploratory analyses on
+a laptop or processing massive datasets on a computing cluster, the
+package offers the flexibility and performance you need for modern fMRI
+analysis.</p>
 </div>
 <div class="section level2">
 <h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
