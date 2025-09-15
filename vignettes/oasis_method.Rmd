@@ -28,7 +28,6 @@ This vignette assumes you're comfortable with the basic LSS concepts from our ge
 
 ```{r setup}
 library(fmrilss)
-library(fmrihrf)
 set.seed(42)
 ```
 

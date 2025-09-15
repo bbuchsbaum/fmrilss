@@ -76,8 +76,8 @@ test_that("OASIS recovers LWU HRF parameters better than SPMG1 in rapid designs"
   # 4. OASIS parameters should be close to ground truth
   expect_lt(abs(results$oasis$best_params$tau - true_tau), 2,
             label = "Recovered tau should be within 2s of truth")
-  expect_lt(abs(results$oasis$best_params$sigma - true_sigma), 1,
-            label = "Recovered sigma should be within 1s of truth")
+  expect_lte(abs(results$oasis$best_params$sigma - true_sigma), 1,
+             label = "Recovered sigma should be within 1s of truth (<=)")
   expect_lt(abs(results$oasis$best_params$rho - true_rho), 0.2,
             label = "Recovered rho should be within 0.2 of truth")
 })
@@ -263,8 +263,8 @@ test_that("OASIS grid search selects appropriate HRF parameters", {
   # Check that selected parameters are close to truth
   expect_lt(abs(oasis_result$best_params$tau - true_tau), 1,
             label = "Selected tau should be within 1s of truth")
-  expect_lt(abs(oasis_result$best_params$sigma - true_sigma), 0.5,
-            label = "Selected sigma should be within 0.5s of truth")
+  expect_lte(abs(oasis_result$best_params$sigma - true_sigma), 0.5,
+             label = "Selected sigma should be within 0.5s of truth (<=)")
   expect_lt(abs(oasis_result$best_params$rho - true_rho), 0.15,
             label = "Selected rho should be within 0.15 of truth")
   

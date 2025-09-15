@@ -61,9 +61,7 @@ generate_lwu_data <- function(onsets,
                              seed = NULL) {
   
   if (!is.null(seed)) set.seed(seed)
-  
-  library(fmrihrf)
-  
+
   # Time grid
   time_points <- seq(0, total_time, by = TR)
   n_time <- length(time_points)
@@ -150,9 +148,7 @@ create_lwu_grid <- function(tau_range = c(4, 8),
                            n_tau = 5,
                            n_sigma = 3,
                            n_rho = 3) {
-  
-  library(fmrihrf)
-  
+
   # Create parameter grid
   tau_vals <- seq(tau_range[1], tau_range[2], length.out = n_tau)
   sigma_vals <- seq(sigma_range[1], sigma_range[2], length.out = n_sigma)
@@ -340,9 +336,7 @@ fit_oasis_grid <- function(Y, onsets, sframe, hrf_grid,
 #' @return List with results from all methods
 #' @export
 compare_hrf_recovery <- function(data, hrf_grid = NULL) {
-  
-  library(fmrihrf)
-  
+
   Y <- data$Y
   onsets <- data$onsets
   sframe <- data$sframe
@@ -429,9 +423,7 @@ compare_hrf_recovery <- function(data, hrf_grid = NULL) {
 #' @return Data frame with recovery metrics
 #' @export
 calculate_recovery_metrics <- function(results, true_hrf) {
-  
-  library(fmrihrf)
-  
+
   # Time grid for HRF evaluation
   hrf_times <- seq(0, 30, by = 1)
   true_hrf_eval <- hrf_lwu(
@@ -533,8 +525,7 @@ calculate_recovery_metrics <- function(results, true_hrf) {
 plot_hrf_comparison <- function(results, save_path = NULL) {
   
   library(ggplot2)
-  library(fmrihrf)
-  
+
   # Time grid for plotting
   hrf_times <- seq(0, 30, by = 0.1)
   

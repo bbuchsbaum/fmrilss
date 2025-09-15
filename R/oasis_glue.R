@@ -111,7 +111,7 @@
 
   # 2) Detect K (basis dimension)
   K <- oasis$K %||% {
-    if (!is.null(oasis$design_spec$cond$hrf) && requireNamespace("fmrihrf", quietly=TRUE)) {
+    if (!is.null(oasis$design_spec$cond$hrf)) {
       return(tryCatch(fmrihrf::nbasis(oasis$design_spec$cond$hrf), error = function(e) 1L))
     }
     if (!is.null(oasis$ntrials) && !is.null(X)) {
@@ -333,10 +333,6 @@
 .oasis_build_X_from_events <- function(spec) {
   if (is.null(spec)) stop("design_spec must be provided when X is NULL.")
   
-  if (!requireNamespace("fmrihrf", quietly = TRUE)) {
-    stop("Package 'fmrihrf' is required for event-based design. Please install it.")
-  }
-  
   sframe <- spec$sframe
   times  <- fmrihrf::samples(sframe, global = TRUE)   # global seconds grid
   
@@ -384,10 +380,6 @@
 #' @keywords internal
 .oasis_pick_hrf_lwu_fast <- function(Y, design_spec, hrf_grid, confounds = NULL, 
                                       block_cols = 4096L) {
-  if (!requireNamespace("fmrihrf", quietly = TRUE)) {
-    stop("Package 'fmrihrf' is required for HRF grid selection")
-  }
-  
   # Build aggregate regressor for all trials with each HRF candidate
   sframe <- design_spec$sframe
   times  <- fmrihrf::samples(sframe, global = TRUE)

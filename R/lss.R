@@ -129,9 +129,7 @@
 #' beta_estimates <- result_with_se$beta
 #' standard_errors <- result_with_se$se
 #'
-#' # Building design from event onsets using fmrihrf (if available)
-#' if (requireNamespace("fmrihrf", quietly = TRUE)) {
-#'   library(fmrihrf)
+#' # Building design from event onsets using fmrihrf
 #'   sframe <- sampling_frame(blocklens = 200, TR = 1.0)
 #'
 #'   # OASIS with automatic design construction
@@ -164,7 +162,6 @@
 #'                           K = 3  # Explicit basis dimension
 #'                         ))
 #'   # Returns 15 rows (5 trials * 3 basis functions)
-#' }
 #' }
 #'
 #' @export

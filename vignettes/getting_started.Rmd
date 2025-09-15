@@ -35,7 +35,6 @@ Beyond these two core regressors, LSS models can include experimental regressors
 ## Your First LSS Analysis
 
 ```{r setup}
-library(fmrihrf)
 library(fmrilss)
 
 set.seed(42)
@@ -156,8 +155,7 @@ While the standard LSS implementation is powerful, the package also includes the
 
 ```{r oasis-intro}
 # Basic OASIS usage
-# Requires fmrihrf for event->design construction
-library(fmrihrf)
+# fmrihrf is now imported automatically
 beta_oasis <- lss(
   Y = Y,
   X = NULL,  # OASIS builds design internally

@@ -28,7 +28,6 @@ This vignette will guide you through the process of accounting for HRF variabili
 
 ```{r setup}
 library(fmrilss)
-library(fmrihrf)
 set.seed(123)
 ```
 
