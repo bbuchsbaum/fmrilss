@@ -12,13 +12,71 @@ vignette: >
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  fig.width = 8,
+  fig.height = 6,
+  warning = FALSE,
+  message = FALSE
 )
 ```
 
 ## Motivation
 
-Optimized Analytic Single-pass Inverse Solution (OASIS) extends Least Squares Separate (LSS) estimation with a set of algebraic shortcuts and HRF-aware features. This vignette documents the math behind those shortcuts and ties each derivation back to the implementation in `R/oasis_glue.R` and `src/oasis_core.cpp`. Basic regression facts (QR projection, ridge, etc.) are assumed knowledge; the focus here is on OASIS-specific components.
+Optimized Analytic Single-pass Inverse Solution (OASIS) extends Least Squares Separate (LSS) estimation through algebraic reformulation that enables single-pass computation of all trial estimates. This document provides the mathematical foundation and implementation details.
+
+### Computational Intuition
+
+Standard LSS requires N separate GLM fits for N trials, each involving:
+1. Matrix assembly: O(T²) operations
+2. QR decomposition: O(T³) operations
+3. Back-substitution: O(T²) operations
+
+Total complexity: O(NT³) for N trials
+
+OASIS recognizes that these N models share substantial structure. By factoring out common computations, OASIS reduces complexity to:
+1. Single QR decomposition: O(T³)
+2. Shared projections: O(NT²)
+3. Per-trial solutions: O(N)
+
+Total complexity: O(T³ + NT²), a significant reduction when N is large.
+
+### Visual Comparison of Computational Scaling
+
+```{r complexity-comparison, echo=TRUE, fig.cap="Computational complexity: Classical LSS vs OASIS"}
+# Demonstrate computational scaling
+N_trials <- c(10, 50, 100, 200, 500, 1000)
+T_points <- 200  # Fixed number of timepoints
+
+# Simplified complexity models (arbitrary units)
+classical_ops <- N_trials * T_points^3 / 1e6  # O(NT³)
+oasis_ops <- (T_points^3 + N_trials * T_points^2) / 1e6  # O(T³ + NT²)
+
+# Create comparison plot
+plot(N_trials, classical_ops, type='l', col='red', lwd=2,
+     xlab='Number of Trials', ylab='Computational Operations (millions)',
+     main='Computational Complexity: Classical LSS vs OASIS',
+     ylim=c(0, max(classical_ops)))
+lines(N_trials, oasis_ops, col='blue', lwd=2)
+legend('topleft', c('Classical LSS', 'OASIS'),
+       col=c('red', 'blue'), lwd=2, bty='n')
+
+# Add shaded region showing computational savings
+polygon(c(N_trials, rev(N_trials)),
+        c(classical_ops, rev(oasis_ops)),
+        col=rgb(0.2, 0.8, 0.2, 0.3), border=NA)
+text(500, mean(c(classical_ops[4], oasis_ops[4])),
+     'Computational\nSavings', col='darkgreen')
+```
+
+### Prerequisites
+
+This vignette assumes familiarity with:
+- QR decomposition and orthogonal projection matrices
+- Ridge regression and regularization
+- Matrix calculus and linear algebra
+- The standard LSS formulation
+
+Code references point to `R/oasis_glue.R` and `src/oasis_core.cpp` implementations.
 
 Notation used throughout:
 
@@ -28,7 +86,7 @@ Notation used throughout:
 - \(R = I - QQ^T\): orthogonal projector removing nuisance effects (\(Q\) comes from QR factorisation of \([Z,\text{others}]\))
 - Inner products are denoted \(\langle a, b \rangle = a^T b\)
 
-We first treat the single-basis case (one regressor per trial) before generalising to multi-basis HRFs.
+We first treat the single-basis case (one regressor per trial) before generalizing to multi-basis HRFs.
 
 ## Classical LSS Recap
 
@@ -38,7 +96,7 @@ Classical LSS fits, for each trial \(j\), a GLM with design \([x_j, b_j, Z]\), w
 \hat{\beta}_j = \frac{\langle Rx_j, RY \rangle - \frac{\langle Rx_j, Rb_j \rangle}{\|Rb_j\|^2} \langle Rb_j, RY \rangle}{\|Rx_j\|^2 - \frac{\langle Rx_j, Rb_j \rangle^2}{\|Rb_j\|^2}}.
 \]
 
-OASIS packages the common pieces (projections, norms, cross-products) so every trial can be solved from shared ingredients.
+OASIS extracts and reuses the common computational components (projections, norms, cross-products) across all trials, computing each only once.
 
 ## Single-Basis OASIS Algebra
 

@@ -117,9 +117,9 @@ test_that("OASIS AR(1) whitening works", {
     Y[, v] <- X %*% rnorm(N) + noise
   }
   
-  # Test with AR(1) whitening
+  # Test with AR(1) whitening using new API
   result <- lss(Y, X = X, method = "oasis",
-                oasis = list(whiten = "ar1"))
+                prewhiten = list(method = "ar", p = 1))
   
   expect_true(is.matrix(result))
   expect_equal(nrow(result), N)

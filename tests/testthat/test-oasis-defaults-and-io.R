@@ -63,7 +63,8 @@ test_that("OASIS AR(1) whitening path runs and returns finite betas", {
   for (t in 2:n) E[t,] <- ar*E[t-1,] + rnorm(V, sd=sqrt(1-ar^2))
   Y <- X %*% matrix(rnorm(Tt*V, sd=0.4), Tt, V) + E
 
-  B <- lss(Y = Y, X = X, method = "oasis", oasis = list(whiten = "ar1"))
+  # Use new prewhiten API
+  B <- lss(Y = Y, X = X, method = "oasis", prewhiten = list(method = "ar", p = 1))
   expect_equal(dim(B), c(Tt, V))
   expect_true(all(is.finite(B)))
 })

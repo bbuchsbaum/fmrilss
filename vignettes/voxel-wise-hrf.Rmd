@@ -20,11 +20,9 @@ knitr::opts_chunk$set(
 
 ## Why HRF Variability Matters
 
-Picture this scenario: you're analyzing fMRI data from a study comparing young and older adults performing a memory task. You notice that in certain brain regions, particularly those with known vascular changes in aging, your standard analysis seems to systematically underestimate activation in the older group. Could this be a genuine difference in neural activity, or might it reflect age-related changes in the hemodynamic response itself? This question lies at the heart of voxel-wise HRF modeling.
+Voxel-wise HRF modeling addresses spatial and subject-specific differences in the hemodynamic response that can bias trial-wise estimates. Vascular properties, neurovascular coupling, and acquisition protocols all influence the HRF, so relying on a single canonical shape can misrepresent activation patterns.
 
-The hemodynamic response function represents the complex cascade of physiological processes that translate neural activity into the BOLD signal we measure with fMRI. While we often assume a canonical HRF shape across the entire brain, reality is more nuanced. Different brain regions have different vascular architectures, neural-vascular coupling can vary with age and disease, and even within healthy young adults, there's substantial variability in HRF characteristics across cortical areas and individuals.
-
-This vignette will guide you through the process of accounting for HRF variability in your LSS analyses. We assume you're already familiar with the basic LSS concepts covered in the getting started vignette, understand the fundamentals of the hemodynamic response function, and are comfortable working with matrices in R. With these foundations, we'll explore how voxel-wise HRF modeling can improve the accuracy of your trial-wise beta estimates.
+This vignette shows how to estimate voxel-specific HRFs and incorporate them into LSS analyses. Familiarity with the core LSS workflow and fmrihrf basics is assumed.
 
 ```{r setup}
 library(fmrilss)
@@ -114,12 +112,26 @@ sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
 # Each voxel has slightly different HRF characteristics
 voxel_hrfs <- list()
 for (v in 1:n_vox) {
-  # Vary peak time (tau) and width (sigma) across voxels
-  tau_shift <- (v - 3) * 0.5  # Range: -1 to +1 seconds
-  sigma_scale <- 1 + (v - 3) * 0.1  # Range: 0.8 to 1.2
+  # Vary peak time and width across voxels
+  peak_shift <- (v - 3) * 0.5  # Range: -1 to +1 seconds
+  width_scale <- 1 + (v - 3) * 0.1  # Range: 0.8 to 1.2
 
-  # Create voxel-specific HRF using SPM double gamma with modifications
-  voxel_hrfs[[v]] <- HRF_SPMG1
+  # Create modified HRF parameters
+  # Use SPMG1 as base and modify peak and undershoot
+  base_hrf <- HRF_SPMG1
+
+  # Modify the HRF parameters
+  # SPMG1 uses double gamma with peak around 5s and undershoot around 15s
+  voxel_hrfs[[v]] <- HRF(
+    fun = function(t) {
+      # Shift the peak time
+      t_shifted <- t - peak_shift
+      # Apply width scaling
+      base_response <- base_hrf$fun(t_shifted / width_scale) * width_scale
+      return(base_response)
+    },
+    name = paste0("voxel_", v, "_hrf")
+  )
 }
 
 # Generate true betas for each trial and voxel
@@ -146,15 +158,20 @@ for (v in 1:n_vox) {
   Y[, v] <- dm$X %*% true_betas[, v]
 }
 
-# Add realistic noise
+# Add realistic noise with AR(1) structure
 noise_sd <- 0.5
+ar_coef <- 0.3
 for (v in 1:n_vox) {
-  noise <- rnorm(n_time, sd = noise_sd)
-  # Add AR(1) structure
-  ar_coef <- 0.3
+  # Generate independent innovations
+  innovations <- rnorm(n_time, sd = noise_sd)
+
+  # Apply AR(1) process
+  noise <- numeric(n_time)
+  noise[1] <- innovations[1]
   for (t in 2:n_time) {
-    noise[t] <- ar_coef * noise[t-1] + sqrt(1 - ar_coef^2) * noise[t]
+    noise[t] <- ar_coef * noise[t-1] + sqrt(1 - ar_coef^2) * innovations[t]
   }
+
   Y[, v] <- Y[, v] + noise
 }
 
@@ -191,7 +208,7 @@ cat("Standard LSS beta estimates (first 3 trials, all voxels):\n")
 print(round(standard_betas[1:3, ], 2))
 ```
 
-These estimates assume every voxel has the same HRF shape. When this assumption is violated, we may get biased estimates, particularly for voxels whose true HRF deviates substantially from the canonical form.
+Standard LSS treats every voxel as if it shared the same HRF, so deviations from that template translate into biased betas.
 
 ## Estimating Voxel-Specific HRFs
 
@@ -230,7 +247,7 @@ cat("\nNormalized weights (relative to canonical):\n")
 print(round(hrf_weights_norm, 2))
 ```
 
-The weights tell us how each voxel's HRF differs from the canonical shape. A positive temporal derivative weight suggests a later peak, while a positive dispersion derivative indicates a wider response. These estimates capture the unique hemodynamic characteristics of each voxel.
+The basis weights describe latency and width shifts relative to the canonical HRF: the temporal derivative tracks peak timing and the dispersion derivative tracks response width.
 
 ## Applying Voxel-Specific HRFs in LSS
 
@@ -304,7 +321,7 @@ cat("OASIS beta estimates (canonical component, first 3 trials):\n")
 print(round(oasis_canonical[1:3, ], 2))
 ```
 
-OASIS's integrated approach often provides more stable estimates, particularly in designs with closely spaced trials where traditional two-stage approaches might struggle with collinearity.
+OASIS handles the HRF expansion and LSS solve in one pass, which limits redundant projections in dense event-related designs.
 
 ## Evaluating the Approaches
 
@@ -361,26 +378,21 @@ legend("topleft", legend = paste("Voxel", 1:n_vox),
        col = 1:n_vox, pch = 19, cex = 0.8)
 ```
 
-The scatter plots reveal how accounting for HRF variability can improve beta estimation accuracy. Points closer to the diagonal line indicate better recovery of the true values.
+Points closer to the diagonal line indicate better recovery of the true betas.
 
 ## When to Consider Voxel-wise HRF Modeling
 
-The decision to use voxel-wise HRF modeling involves balancing increased model flexibility against computational cost and the risk of overfitting. Through our experience and the literature, several scenarios particularly benefit from this approach.
-
-When analyzing data from different brain regions with known vascular differences, such as comparing motor and visual cortex, accounting for HRF variability becomes important. The vascular architecture differs substantially across cortical areas, leading to systematic differences in the hemodynamic response that can bias standard analyses if ignored.
-
-Clinical populations present another compelling use case. Aging, neurological disorders, and psychiatric conditions can all affect neurovascular coupling. Even medications can alter the hemodynamic response. In these cases, assuming a canonical HRF derived from young, healthy adults may lead to systematic misestimation of neural activity.
-
-The advent of high-resolution fMRI has revealed fine-scale variations in the hemodynamic response. Sub-millimeter resolution can distinguish between cortical layers and columns, each potentially having distinct vascular properties. At these scales, assuming spatial homogeneity of the HRF becomes increasingly untenable.
-
-Long experimental sessions introduce temporal considerations. Habituation, fatigue, and attention fluctuations can cause the hemodynamic response to evolve over time. Voxel-wise approaches that can adapt to these changes may provide more accurate estimates throughout the session.
+Use voxel-wise HRF modeling when:
+- regions differ in vascular architecture (e.g., motor vs. visual cortex);
+- cohorts show altered neurovascular coupling (aging, clinical populations, medication effects);
+- high-resolution acquisitions expose layer or column specific responses;
+- sessions are long enough for HRF characteristics to drift over time.
 
 ## Computational Strategies for Large-Scale Analysis
 
-While voxel-wise HRF modeling offers theoretical advantages, it can be computationally demanding when applied to whole-brain data. The package provides several strategies to make this feasible:
+Whole-brain analyses are expensive, so match the backend to the workload:
 
 ```{r computational-tips, eval=FALSE}
-# For large datasets, use optimized backends
 # C++ backend for medium-sized data
 betas_cpp <- lss(Y, X, method = "cpp_optimized")
 
@@ -392,37 +404,30 @@ betas_oasis <- lss(Y, X = NULL, method = "oasis",
                    oasis = list(design_spec = design_spec))
 ```
 
-The choice of backend depends on your data size and computational resources. For exploratory analyses on a subset of regions, the standard R implementation may suffice. When scaling to whole-brain analysis with hundreds of thousands of voxels, the C++ backend or OASIS method become essential.
+Choose the backend according to data size and available hardware: R implementations work for pilot subsets, while whole-brain studies typically require the optimized C++ path or OASIS.
 
 ## Choosing the Right Method for Your Study
 
-Selecting between standard LSS, voxel-wise HRF LSS, and OASIS depends on your specific research context and constraints. Standard LSS remains appropriate when you have reason to believe the HRF is relatively homogeneous across your regions of interest, when computational resources are limited, or when you need the simplicity of a single-stage approach for easier interpretation.
-
-Voxel-wise HRF modeling becomes valuable when you expect spatial HRF variability due to anatomical or pathological factors, when you need maximum accuracy for pattern classification or decoding analyses, or when pilot data suggests substantial HRF differences across regions or subjects.
-
-OASIS offers particular advantages for rapid event-related designs with substantial response overlap, when you want to explore different HRF models without committing to a specific parameterization, or when you need the computational efficiency of a unified estimation framework. Its built-in ridge regression also helps with designs that might otherwise suffer from collinearity.
+Method selection guidelines:
+- `lss()` with a canonical HRF is sufficient when responses are expected to be homogeneous and compute needs are modest;
+- voxel-wise HRF LSS prioritizes accuracy when anatomy or pathology implies heterogeneous responses;
+- OASIS is preferred for rapid-event designs or when you want a single-step solve with HRF flexibility and ridge control.
 
 ## Practical Recommendations
 
-Based on our experience implementing and using these methods, we offer several practical recommendations. First, always validate your HRF assumptions using independent data when possible. This might involve using separate localizer runs to estimate HRF parameters or comparing different models on held-out data.
-
-Second, consider the signal-to-noise ratio in your data. Voxel-wise HRF estimation requires sufficient data quality to reliably estimate additional parameters. In low SNR situations, the bias from assuming a canonical HRF might be preferable to the variance introduced by estimating voxel-specific parameters.
-
-Third, remember that more complex models aren't always better. Start with standard approaches and add complexity only when justified by your research questions or when simpler models show clear inadequacies.
-
-Finally, document your choices carefully. HRF modeling decisions can substantially affect results, so transparency about these choices is essential for reproducibility and interpretation.
+Practical recommendations:
+- validate HRF assumptions with independent data or held-out runs;
+- check that the signal-to-noise ratio supports estimation of additional HRF parameters;
+- add complexity only after simpler models prove insufficient;
+- record HRF modeling choices for reproducibility.
 
 ## Looking Forward
 
-This vignette has demonstrated how voxel-wise HRF modeling can improve the accuracy of trial-wise beta estimation in fMRI analysis. By accounting for spatial variability in the hemodynamic response, these methods help separate neural from vascular sources of signal variation.
-
-The field continues to evolve, with ongoing research into adaptive HRF estimation, nonparametric approaches, and methods for handling even more complex sources of variability. The `fmrilss` package provides a flexible framework for incorporating these advances as they emerge.
-
-For deeper exploration of the topics covered here, we recommend reviewing the getting started vignette for LSS fundamentals, the OASIS method vignette for advanced features of that approach, and consulting the `fmrihrf` package documentation for details on available HRF models. The theoretical foundations can be found in Mumford et al. (2012) for LSS basics and the growing literature on HRF variability in fMRI.
+Voxel-wise HRF modeling improves trial-wise beta estimation by accounting for spatial variability in the hemodynamic response. The fmrilss pipeline is designed to incorporate newer HRF estimation strategies as they appear in the literature.
 
 ## Further Reading
 
-See `vignette("getting_started")` for LSS basics
-See `vignette("oasis_method")` for advanced OASIS features
-Consult the `fmrihrf` package documentation for HRF model options
-Review Mumford et al. (2012) for theoretical background on LSS
+- `vignette("getting_started")` for LSS basics
+- `vignette("oasis_method")` for advanced OASIS features
+- `?fmrihrf` for HRF model options
+- Mumford et al. (2012) for core LSS theory

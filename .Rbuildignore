@@ -10,3 +10,7 @@ docs
 repomix-output.xml
 ^doc$
 ^Meta$
+^\.claude$
+^CLAUDE\.md$
+^data-raw$
+^examples$

@@ -28,6 +28,7 @@
 #' @param block_size An integer specifying the voxel block size for parallel
 #'   processing, only applicable when `method = "cpp_optimized"`. Defaults to 96.
 #' @param oasis A list of options for the OASIS method. See Details for available options.
+#' @param prewhiten A list of prewhitening options using fmriAR. See Details for available options.
 #'
 #' @return A numeric matrix of size T × V containing the trial-wise beta estimates.
 #'   Note: Currently only returns estimates for the trial regressors (X). Beta
@@ -72,6 +73,23 @@
 #'   \item \code{hrf_grid}: Vector of HRF indices for grid-based HRF selection (advanced use).
 #'     Allows testing multiple HRF shapes simultaneously.
 #' }
+#'
+#' When using the \code{prewhiten} parameter, the following options are available:
+#' \itemize{
+#'   \item \code{method}: Character, "ar" (default), "arma", or "none" for the noise model type.
+#'   \item \code{p}: Integer or "auto" for AR order (default "auto").
+#'   \item \code{q}: Integer for MA order in ARMA models (default 0).
+#'   \item \code{p_max}: Maximum AR order when p="auto" (default 6).
+#'   \item \code{pooling}: Character, "global" (default), "voxel", "run", or "parcel" for parameter estimation strategy.
+#'   \item \code{runs}: Integer vector of run identifiers for run-aware estimation.
+#'   \item \code{parcels}: Integer vector of parcel memberships for parcel-based pooling.
+#'   \item \code{exact_first}: Character, "ar1" or "none" for exact AR(1) scaling at segment starts.
+#' }
+#'
+#' Prewhitening is applied before the LSS analysis to account for temporal autocorrelation in the
+#' fMRI time series. The fmriAR package provides flexible AR/ARMA modeling with various pooling
+#' strategies. For backward compatibility, the old \code{oasis$whiten = "ar1"} syntax is still
+#' supported and will be converted to the equivalent prewhiten settings.
 #'
 #' The OASIS method provides a mathematically equivalent but computationally optimized version
 #' of standard LSS. It reformulates the per-trial GLM fitting as a single matrix operation,
@@ -165,18 +183,27 @@
 #' }
 #'
 #' @export
-lss <- function(Y, X, Z = NULL, Nuisance = NULL, 
+lss <- function(Y, X, Z = NULL, Nuisance = NULL,
                 method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive", "oasis"),
-                block_size = 96, oasis = list()) {
+                block_size = 96, oasis = list(), prewhiten = NULL) {
   
   method <- match.arg(method)
   
+  # Handle backward compatibility: convert oasis$whiten to prewhiten
+  if (!is.null(oasis$whiten) && is.null(prewhiten)) {
+    legacy_prewhiten <- .convert_legacy_whiten(oasis)
+    if (!is.null(legacy_prewhiten)) {
+      message("Note: oasis$whiten is deprecated. Use the prewhiten parameter instead.")
+      prewhiten <- legacy_prewhiten
+    }
+  }
+
   # Fast-path to OASIS: it has its own coercion/validation and supports Matrix inputs
   if (method == "oasis") {
     if (is.null(X) && is.null(oasis$design_spec)) {
       stop("For method='oasis', either X or oasis$design_spec must be provided")
     }
-    return(.lss_oasis(Y, X, Z, Nuisance, oasis))
+    return(.lss_oasis(Y, X, Z, Nuisance, oasis, prewhiten))
   }
   
   # Coerce S4 Matrix/data.frame to base matrices for non-OASIS methods
@@ -219,11 +246,20 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   # Check for zero or near-zero regressors
   .check_zero_regressors(X)
   
-  # Step 1: Project out nuisance regressors if provided
+  # Step 1: Apply prewhitening if requested
+  if (!is.null(prewhiten) && !is.null(prewhiten$method) && prewhiten$method != "none") {
+    whitened <- .prewhiten_data(Y, X, Z, Nuisance, prewhiten)
+    Y <- whitened$Y_whitened
+    X <- whitened$X_whitened
+    if (!is.null(whitened$Z_whitened)) Z <- whitened$Z_whitened
+    if (!is.null(whitened$Nuisance_whitened)) Nuisance <- whitened$Nuisance_whitened
+  }
+
+  # Step 2: Project out nuisance regressors if provided
   if (!is.null(Nuisance)) {
     # Create full nuisance design matrix
     X_nuisance <- cbind(Z, Nuisance)
-    
+
     # Project out nuisance from Y and X
     proj_result <- .project_out_nuisance(Y, X, X_nuisance)
     Y_clean <- proj_result$Y_residual
@@ -232,8 +268,8 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
     Y_clean <- Y
     X_clean <- X
   }
-  
-  # Step 2: Run LSS analysis with the chosen method
+
+  # Step 3: Run LSS analysis with the chosen method
   result <- switch(method,
     "r_optimized" = .lss_r_optimized(Y_clean, X_clean, Z),
     "cpp_optimized" = .lss_cpp_optimized(Y_clean, X_clean, Z, block_size = block_size),

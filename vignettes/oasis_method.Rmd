@@ -20,11 +20,13 @@ knitr::opts_chunk$set(
 
 ## The Computational Challenge of Modern fMRI
 
-Imagine you're working with a cutting-edge fMRI dataset: sub-millimeter resolution, thousands of trials, complex overlapping designs, and you need trial-specific estimates for each of hundreds of thousands of voxels. The standard LSS approach, while theoretically sound, requires fitting separate models for each trial at each voxel—potentially millions of model fits. With large datasets, this computational burden becomes significant. What if there was a way to achieve the same theoretical results more efficiently?
+Modern fMRI datasets with sub-millimeter resolution and thousands of trials require millions of model fits when using standard LSS approaches. For datasets with 100,000 voxels and 500 trials, traditional LSS requires 50 million separate GLM fits, each involving matrix inversion and parameter estimation.
 
-Enter OASIS—Optimized Analytic Single-pass Inverse Solution—a method that reimagines how we compute LSS estimates. Rather than iterating through trials one by one, OASIS leverages clever mathematical reformulations to compute all trial estimates simultaneously in a single, highly optimized pass. But OASIS is more than just a speed improvement; it brings sophisticated features like automatic HRF estimation, ridge regularization for numerical stability, and seamless handling of multi-basis HRF models that would be cumbersome to implement in traditional frameworks.
+OASIS (Optimized Analytic Single-pass Inverse Solution) addresses this computational challenge through mathematical reformulation. Instead of iterating through trials sequentially, OASIS exploits the shared structure across LSS models to compute all trial estimates simultaneously. The method reduces computational complexity from O(NT³) to O(T³ + NTV) where N = number of trials, T = timepoints, and V = voxels.
 
-This vignette assumes you're comfortable with the basic LSS concepts from our getting started guide, understand HRF models and basis functions from working with neuroimaging data, have some familiarity with ridge regression and regularization concepts, and know the basics of the `fmrihrf` package for HRF modeling. With this foundation, we'll explore how OASIS can transform your approach to trial-wise beta estimation.
+OASIS also provides: automatic HRF estimation with multi-basis functions, ridge regularization for numerical stability, efficient handling of complex experimental designs, and integration with prewhitening for autocorrelation correction.
+
+Prerequisites: familiarity with LSS concepts, HRF models and basis functions, ridge regression principles, and the `fmrihrf` package.
 
 ```{r setup}
 library(fmrihrf)
@@ -91,7 +93,7 @@ design_matrix <- function(sframe, conditions, tr_per_trial = FALSE) {
 
 ## Understanding the OASIS Innovation
 
-The key algebra that OASIS leverages is the special structure of LSS: although naïvely it looks like N separate GLMs (one per trial), the per‑trial designs share components that let you factor the computation and reuse them across trials. Note this factoring is already exploited by fmrilss’s optimized backends (e.g., the fused single‑pass solver that residualizes once and reuses totals and cross‑products across trials). OASIS uses the same core solve but wraps it in a richer, HRF-aware workflow: automatic design construction from event specs, built-in ridge scaling, AR(1) whitening, SE/diagnostic reporting, and native support for multi-basis or FIR HRFs.
+OASIS exploits the mathematical structure of LSS: the N separate GLMs share computational components that can be factored and reused across trials. Note this factoring is already exploited by fmrilss’s optimized backends (e.g., the fused single‑pass solver that residualizes once and reuses totals and cross‑products across trials). OASIS uses the same core solve but wraps it in a richer, HRF-aware workflow: automatic design construction from event specs, built-in ridge scaling, AR(1) whitening, SE/diagnostic reporting, and native support for multi-basis or FIR HRFs.
 
 Beyond computational efficiency, OASIS adds features that the generic LSS path does not expose: built‑in ridge regularization (absolute and fractional) on the two‑regressor Gram per trial, optional AR(1) whitening, analytical standard errors and diagnostics, and a blocked multi‑basis solver that treats K>1 HRF bases as 2K×2K closed‑form systems per trial.
 
@@ -372,9 +374,6 @@ The FIR approach reveals the actual shape of the hemodynamic response without pa
 When you're unsure which HRF model best fits your data, OASIS can efficiently evaluate multiple candidates. This exploratory approach helps identify the optimal HRF parameters for your specific dataset and brain regions:
 
 ```{r hrf-grid-search}
-# Source HRF recovery functions (from previous vignette)
-source("../R/oasis_hrf_recovery.R")
-
 # Create a grid of HRF models with varying parameters
 hrf_grid <- create_lwu_grid(
   tau_range = c(4, 8),      # Peak time
@@ -447,7 +446,7 @@ Grid search reveals which HRF parameters best explain your data. This data-drive
 
 ## Handling Complex Experimental Designs
 
-Real experiments often involve multiple conditions, with some trials of interest and others serving as nuisance events. OASIS elegantly handles these complex scenarios:
+Real experiments often involve multiple conditions, with some trials of interest and others serving as nuisance events. OASIS handles these scenarios through structured condition specification:
 
 ```{r multiple-conditions}
 # Create design with two conditions
@@ -839,7 +838,7 @@ beta_blocked <- lss(Y, X = NULL, method = "oasis", oasis = oasis_config)
 fMRI data exhibits temporal autocorrelation that can bias standard errors. OASIS can apply AR(1) prewhitening:
 
 ```{r ar1-whitening}
-# OASIS with AR(1) prewhitening
+# OASIS with AR(1) prewhitening using new fmriAR integration
 beta_whitened <- lss(
   Y = Y[, 1:10],
   X = NULL,
@@ -848,16 +847,100 @@ beta_whitened <- lss(
     design_spec = list(
       sframe = sframe,
       cond = list(onsets = onsets[1:10], hrf = HRF_SPMG1, span = 30)
-    ),
-    whiten = "ar1"  # Enable AR(1) whitening
+    )
+  ),
+  prewhiten = list(
+    method = "ar",
+    p = 1  # AR(1) model
   )
 )
 
-cat("AR(1) whitening applied\n")
+cat("AR(1) whitening applied using fmriAR\n")
 cat("  Beta dimensions:", dim(beta_whitened), "\n")
+
+# Advanced: Auto-select AR order
+beta_auto_ar <- lss(
+  Y = Y[, 1:10],
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(onsets = onsets[1:10], hrf = HRF_SPMG1, span = 30)
+    )
+  ),
+  prewhiten = list(
+    method = "ar",
+    p = "auto",  # Automatically select optimal AR order
+    p_max = 4    # Maximum order to consider
+  )
+)
+
+cat("\nAuto AR order selection applied\n")
+cat("  Beta dimensions:", dim(beta_auto_ar), "\n")
 ```
 
 Prewhitening improves the validity of statistical inference, particularly for standard errors and hypothesis tests.
+
+### Advanced Prewhitening with fmriAR
+
+The integration with fmriAR provides sophisticated noise modeling capabilities beyond simple AR(1):
+
+```{r advanced-prewhitening, eval=FALSE}
+# Voxel-specific AR parameters
+beta_voxel_ar <- lss(
+  Y = Y,
+  X = X,
+  method = "oasis",
+  prewhiten = list(
+    method = "ar",
+    p = 1,
+    pooling = "voxel"  # Estimate separate AR(1) for each voxel
+  )
+)
+
+# Run-aware AR estimation for multi-run data
+runs <- rep(1:2, each = n_timepoints/2)
+beta_run_ar <- lss(
+  Y = Y,
+  X = X,
+  method = "oasis",
+  prewhiten = list(
+    method = "ar",
+    p = "auto",
+    pooling = "run",  # Separate parameters per run
+    runs = runs
+  )
+)
+
+# ARMA models for complex noise structure
+beta_arma <- lss(
+  Y = Y,
+  X = X,
+  method = "oasis",
+  prewhiten = list(
+    method = "arma",
+    p = 2,  # AR order
+    q = 1   # MA order
+  )
+)
+
+# Parcel-based pooling for spatial regularization
+parcels <- kmeans(t(Y), centers = 10)$cluster  # Example parcellation
+beta_parcel <- lss(
+  Y = Y,
+  X = X,
+  method = "oasis",
+  prewhiten = list(
+    method = "ar",
+    p = "auto",
+    pooling = "parcel",
+    parcels = parcels
+  )
+)
+```
+
+These advanced options provide better noise modeling for complex experimental designs and data structures.
 
 ## When OASIS Shines: Use Case Recommendations
 

@@ -6,10 +6,8 @@ library(fmrilss)
 
 test_that("OASIS recovers LWU HRF parameters better than SPMG1 in rapid designs", {
   skip_on_cran()
+  skip_if_not_installed("fmrihrf")
   set.seed(42)
-  
-  # Source helper functions
-  source(system.file("R", "oasis_hrf_recovery.R", package = "fmrilss"))
   
   # Test parameters
   true_tau <- 7      # Non-canonical peak time
@@ -83,9 +81,8 @@ test_that("OASIS recovers LWU HRF parameters better than SPMG1 in rapid designs"
 
 test_that("OASIS performance degrades gracefully with noise", {
   skip_on_cran()
+  skip_if_not_installed("fmrihrf")
   set.seed(789)
-  
-  source(system.file("R", "oasis_hrf_recovery.R", package = "fmrilss"))
   
   # Test parameters
   true_tau <- 6.5
@@ -146,9 +143,8 @@ test_that("OASIS performance degrades gracefully with noise", {
 
 test_that("OASIS outperforms SPMG models for overlapping HRFs", {
   skip_on_cran()
+  skip_if_not_installed("fmrihrf")
   set.seed(321)
-  
-  source(system.file("R", "oasis_hrf_recovery.R", package = "fmrilss"))
   
   # Very rapid design to ensure overlapping HRFs
   onsets <- generate_rapid_design(
@@ -210,9 +206,8 @@ test_that("OASIS outperforms SPMG models for overlapping HRFs", {
 
 test_that("OASIS grid search selects appropriate HRF parameters", {
   skip_on_cran()
+  skip_if_not_installed("fmrihrf")
   set.seed(555)
-  
-  source(system.file("R", "oasis_hrf_recovery.R", package = "fmrilss"))
   
   # Test with canonical-like parameters
   true_tau <- 6
@@ -275,10 +270,10 @@ test_that("OASIS grid search selects appropriate HRF parameters", {
 # Run comprehensive simulation test
 test_that("OASIS shows consistent improvement across parameter space", {
   skip_on_cran()
+  skip_if_not_installed("fmrihrf")
   skip_if_not(interactive(), "Skipping comprehensive test in non-interactive mode")
   
   set.seed(1234)
-  source(system.file("R", "oasis_hrf_recovery.R", package = "fmrilss"))
   
   # Test multiple parameter combinations
   test_params <- expand.grid(

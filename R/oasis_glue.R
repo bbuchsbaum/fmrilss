@@ -21,11 +21,12 @@
 #'    - block_cols: voxel block size (default 4096)
 #'    - return_se: logical (default FALSE)
 #'    - return_diag: logical (default FALSE)
-#'    - whiten: "none" | "ar1" (default "none"); if "ar1", prewhiten Y and design first
+#'    - whiten: "none" | "ar1" (default "none"); if "ar1", prewhiten Y and design first (DEPRECATED: use prewhiten parameter)
+#' @param prewhiten list of prewhitening options using fmriAR (see ?lss for details)
 #'
 #' @return by default: (N_trials x V) matrix of betas; if `return_se` or `return_diag`, a list
 #' @keywords internal
-.lss_oasis <- function(Y, X = NULL, Z = NULL, Nuisance = NULL, oasis = list()) {
+.lss_oasis <- function(Y, X = NULL, Z = NULL, Nuisance = NULL, oasis = list(), prewhiten = NULL) {
   # Coerce to base matrices early & validate ---------------------------------
   to_mat <- function(M) {
     if (is.null(M)) return(NULL)
@@ -144,7 +145,15 @@
   N_nuis <- cbind(if (!is.null(Z)) Z, if (!is.null(Nuisance)) Nuisance, X_other)
 
   # 4) Whitening hook (optional)
-  if (isTRUE(tolower(oasis$whiten %||% "none") == "ar1")) {
+  # Check if we should use fmriAR for advanced features
+  if (!is.null(prewhiten) && .needs_advanced_prewhitening(prewhiten)) {
+    # Use fmriAR for advanced prewhitening
+    whitened <- .prewhiten_data(Y, X, NULL, N_nuis, prewhiten)
+    Y <- whitened$Y_whitened
+    X <- whitened$X_whitened
+    if (!is.null(whitened$Nuisance_whitened)) N_nuis <- whitened$Nuisance_whitened
+  } else if (isTRUE(tolower(oasis$whiten %||% "none") == "ar1")) {
+    # Keep simple AR(1) for backward compatibility
     w <- .oasis_ar1_whitener(Y, X_nuis = N_nuis)
     Y <- w$Wy
     if (!is.null(N_nuis) && ncol(N_nuis) > 0) N_nuis <- w$W_apply(N_nuis)

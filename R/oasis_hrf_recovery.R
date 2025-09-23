@@ -13,6 +13,7 @@
 #' @param max_isi Maximum inter-stimulus interval in seconds
 #' @param seed Random seed for reproducibility
 #' @return Numeric vector of event onset times
+#' @importFrom stats runif
 #' @export
 generate_rapid_design <- function(n_events = 25, 
                                  total_time = 300,
@@ -48,6 +49,7 @@ generate_rapid_design <- function(n_events = 25,
 #' @param noise_sd Standard deviation of noise
 #' @param seed Random seed
 #' @return List with Y (data matrix), true_hrf, true_betas, and design info
+#' @importFrom stats rnorm
 #' @export
 generate_lwu_data <- function(onsets,
                              tau = 6,
@@ -524,10 +526,14 @@ calculate_recovery_metrics <- function(results, true_hrf) {
 #'
 #' @param results Output from compare_hrf_recovery
 #' @param save_path Optional path to save plot
+#' @importFrom ggplot2 ggplot aes geom_line scale_color_manual scale_linetype_manual labs theme_minimal theme ggsave
 #' @export
 plot_hrf_comparison <- function(results, save_path = NULL) {
   
-  library(ggplot2)
+  time <- hrf <- method <- NULL
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package 'ggplot2' is required for plotting", call. = FALSE)
+  }
 
   # Time grid for plotting
   hrf_times <- seq(0, 30, by = 0.1)
@@ -562,17 +568,17 @@ plot_hrf_comparison <- function(results, save_path = NULL) {
   )
   
   # Create plot
-  p <- ggplot(plot_data, aes(x = time, y = hrf, color = method, linetype = method)) +
-    geom_line(size = 1.2) +
-    scale_color_manual(values = c("True" = "black", 
+  p <- ggplot2::ggplot(plot_data, ggplot2::aes(x = time, y = hrf, color = method, linetype = method)) +
+    ggplot2::geom_line(size = 1.2) +
+    ggplot2::scale_color_manual(values = c("True" = "black", 
                                  "OASIS" = "red",
                                  "SPMG1" = "blue", 
                                  "SPMG3" = "green")) +
-    scale_linetype_manual(values = c("True" = "solid",
+    ggplot2::scale_linetype_manual(values = c("True" = "solid",
                                     "OASIS" = "dashed",
                                     "SPMG1" = "dotted",
                                     "SPMG3" = "dotdash")) +
-    labs(title = "HRF Recovery Comparison",
+    ggplot2::labs(title = "HRF Recovery Comparison",
          subtitle = sprintf("True params: tau=%.1f, sigma=%.1f, rho=%.2f | OASIS: tau=%.1f, sigma=%.1f, rho=%.2f",
                            results$true_params$tau, results$true_params$sigma, results$true_params$rho,
                            results$oasis$best_params$tau, results$oasis$best_params$sigma, results$oasis$best_params$rho),
@@ -580,11 +586,11 @@ plot_hrf_comparison <- function(results, save_path = NULL) {
          y = "Normalized Response",
          color = "Method",
          linetype = "Method") +
-    theme_minimal() +
-    theme(legend.position = "bottom")
+    ggplot2::theme_minimal() +
+    ggplot2::theme(legend.position = "bottom")
   
   if (!is.null(save_path)) {
-    ggsave(save_path, p, width = 10, height = 6)
+    ggplot2::ggsave(save_path, p, width = 10, height = 6)
   }
   
   return(p)

@@ -4,7 +4,14 @@
 \alias{.lss_oasis}
 \title{OASIS backend for fmrilss::lss (internal entry)}
 \usage{
-.lss_oasis(Y, X = NULL, Z = NULL, Nuisance = NULL, oasis = list())
+.lss_oasis(
+  Y,
+  X = NULL,
+  Z = NULL,
+  Nuisance = NULL,
+  oasis = list(),
+  prewhiten = NULL
+)
 }
 \arguments{
 \item{Y}{(T x V) numeric matrix}
@@ -23,7 +30,9 @@
 - block_cols: voxel block size (default 4096)
 - return_se: logical (default FALSE)
 - return_diag: logical (default FALSE)
-- whiten: "none" | "ar1" (default "none"); if "ar1", prewhiten Y and design first}
+- whiten: "none" | "ar1" (default "none"); if "ar1", prewhiten Y and design first (DEPRECATED: use prewhiten parameter)}
+
+\item{prewhiten}{list of prewhitening options using fmriAR (see ?lss for details)}
 }
 \value{
 by default: (N_trials x V) matrix of betas; if `return_se` or `return_diag`, a list

@@ -142,6 +142,7 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL) {
 #' betas <- lss_with_hrf(Y, events, est, verbose = FALSE, engine = "R")
 #' dim(betas)
 #' }
+#' @importFrom bigmemory filebacked.big.matrix
 #' @export
 lss_with_hrf <- function(Y, events, hrf_estimates, nuisance_regs = NULL,
                          engine = "R", chunk_size = 5000, verbose = TRUE,

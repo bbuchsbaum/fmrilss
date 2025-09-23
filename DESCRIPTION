@@ -15,8 +15,10 @@ Depends: R (>= 3.5.0)
 Imports:
     MASS,
     Rcpp (>= 0.12.0),
-    roptim,
-    fmrihrf (>= 0.1.0)
+    fmrihrf (>= 0.1.0),
+    fmriAR (>= 0.0.0.9000),
+    bigmemory,
+    ggplot2
 LinkingTo:
     Rcpp,
     RcppArmadillo,
@@ -29,10 +31,10 @@ Suggests:
     rmarkdown,
     pkgdown,
     progress
-Remotes: 
-    bbuchsbaum/fmrihrf
+Remotes:
+    bbuchsbaum/fmrihrf,
+    bbuchsbaum/fmriAR
 VignetteBuilder: knitr
-SystemRequirements: C++11
 RoxygenNote: 7.3.2.9000
 Config/testthat/edition: 3
 URL: https://bbuchsbaum.github.io/fmrilss/

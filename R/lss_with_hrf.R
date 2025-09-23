@@ -155,13 +155,13 @@ lss_with_hrf_pure_r <- function(
         
         # Call the appropriate backend
         betas_cpp <- switch(try_method,
-          cpp_omp = fmrilss:::lss_engine_vox_hrf_omp(
+          cpp_omp = lss_engine_vox_hrf_omp(
             Y, coefficients, basis_convolved, Z_use
           ),
-          cpp_arma = fmrilss:::lss_engine_vox_hrf_arma(
+          cpp_arma = lss_engine_vox_hrf_arma(
             Y, coefficients, basis_convolved, Z_use
           ),
-          cpp = fmrilss:::lss_engine_vox_hrf_cpp(
+          cpp = lss_engine_vox_hrf_cpp(
             Y, coefficients, basis_convolved, Z_use
           )
         )

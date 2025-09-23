@@ -20,15 +20,21 @@ knitr::opts_chunk$set(
 
 ## The Challenge of Event-Related fMRI Analysis
 
-Imagine you're analyzing an fMRI experiment where participants view different images in rapid succession, with only a few seconds between each stimulus. You want to estimate the brain's response to each individual image, but there's a problem: the hemodynamic response unfolds slowly over 10-15 seconds, causing responses from consecutive trials to overlap substantially. Traditional approaches that model all trials simultaneously in a single general linear model (GLM) can suffer from collinearity, especially when trials occur close together. This collinearity makes it difficult to obtain reliable, trial-specific activation estimates that are essential for techniques like multivariate pattern analysis (MVPA) or trial-by-trial connectivity analyses.
+In event-related fMRI experiments with rapid stimulus presentation, hemodynamic responses from consecutive trials overlap substantially due to the slow temporal dynamics of the BOLD signal (10-15 seconds). Traditional general linear models (GLMs) that estimate all trials simultaneously suffer from collinearity when inter-stimulus intervals are short (< 4 seconds), resulting in unstable trial-specific activation estimates. These unstable estimates compromise downstream analyses including multivariate pattern analysis (MVPA), representational similarity analysis (RSA), and trial-by-trial connectivity methods.
 
-The Least Squares Separate (LSS) approach, introduced by Mumford and colleagues in 2012, offers an elegant solution to this problem. Rather than estimating all trials at once, LSS fits a separate GLM for each trial, dramatically reducing collinearity and producing more reliable trial-specific estimates. The `fmrilss` package brings you a fast, flexible implementation of this powerful method, with modern enhancements that make it practical for large-scale analyses.
+The Least Squares Separate (LSS) approach (Mumford et al., 2012) addresses this collinearity problem by fitting a separate GLM for each trial. In each model, one regressor represents the trial of interest while a second regressor aggregates all other trials, reducing collinearity and improving estimate stability. The `fmrilss` package provides optimized implementations of LSS with extensions including automatic HRF estimation, ridge regularization, and parallel computation across multiple CPU cores.
 
 ## Understanding the LSS Approach
 
-Before diving into the implementation, let's build an intuition for how LSS works. This vignette assumes you're familiar with basic fMRI analysis concepts like the general linear model, design matrices, and the hemodynamic response function (HRF). You should also be comfortable with R programming and basic matrix operations, as we'll be working with these throughout.
+This vignette assumes familiarity with fMRI general linear models, design matrices, hemodynamic response functions, and R matrix operations.
 
-In a standard GLM analysis (often called Least Squares All or LSA), we create a design matrix with separate columns for each trial and estimate all beta coefficients simultaneously. When trials are closely spaced, these columns become highly correlated, leading to unstable estimates. LSS takes a different approach: for each trial of interest, it creates a simplified model with just two main regressors. The first regressor models the trial we're currently interested in, while the second aggregates all other trials into a single regressor. This process repeats for every trial, yielding a unique, more stable beta estimate for each one.
+Standard GLM analysis (Least Squares All, LSA) estimates all trial coefficients simultaneously by solving: β = (X'X)^(-1)X'Y. When trials occur in rapid succession, the design matrix columns exhibit high correlation (condition number > 30), producing unstable estimates with inflated variance.
+
+LSS reformulates the problem by fitting N separate models, where N is the number of trials. For trial i, the design matrix contains: (1) a regressor for trial i, (2) a single regressor aggregating all other trials, and (3) any nuisance or baseline regressors. This reduces the effective condition number and produces more stable single-trial estimates. Mathematically, for trial i:
+
+β_i = (X_i'X_i)^(-1)X_i'Y
+
+where X_i = [x_i | Σ(j≠i) x_j | Z | N], with x_i the trial regressor, Z experimental covariates, and N nuisance regressors.
 
 Beyond these two core regressors, LSS models can include experimental regressors that capture session-wide effects like linear trends or block effects, which we want to model but don't need trial-specific estimates for. The model can also incorporate nuisance regressors such as motion parameters or physiological noise, which are projected out before the analysis begins.
 
@@ -44,11 +50,11 @@ n_trials <- 12
 n_voxels <- 25
 ```
 
-Let's walk through a complete example that demonstrates the power of LSS. We'll start by creating synthetic data that mimics a typical rapid event-related design, then compare different analysis approaches to see how LSS performs.
+The following example demonstrates LSS analysis using synthetic data from a rapid event-related design.
 
 ### Creating the Experimental Design
 
-The foundation of any fMRI analysis is the design matrix, which encodes when stimuli were presented and how we expect the brain to respond. In our example, we'll simulate an experiment with trials occurring at regular intervals, which is common in many cognitive neuroscience studies.
+The design matrix encodes stimulus timing and expected hemodynamic responses.
 
 ```{r design}
 # Trial design matrix (X)
@@ -67,11 +73,11 @@ Z <- cbind(Intercept = 1, LinearTrend = as.vector(scale(1:n_timepoints, center =
 Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)
 ```
 
-The trial matrix `X` represents the expected BOLD response for each trial, typically convolved with an HRF (though we're using a simplified box-car function here for clarity). The experimental regressors in `Z` capture effects that vary across the session but not trial-by-trial, such as baseline activation levels or linear drift. The nuisance matrix contains signals we want to remove, like head motion or breathing artifacts.
+Matrix `X` contains trial regressors (here using box-car functions for simplicity, though HRF convolution is standard). Matrix `Z` contains experimental covariates (intercept and linear trend). The nuisance matrix models unwanted variance (e.g., motion parameters).
 
 ### Visualizing Regressors
 
-Before fitting models, it helps to quickly inspect the experimental and nuisance regressors. Below are clean plots of the session‑wide experimental effects (excluding the intercept) and the nuisance regressors, standardized for comparability. If `ggplot2` is available, we use it for polished visuals; otherwise we fall back to base R.
+The following visualizations show experimental regressors (excluding intercept) and nuisance regressors, standardized for comparability.
 
 ```{r plot-regressors, fig.width=8, fig.height=6, echo=FALSE}
 # Pretty plotting helper
@@ -154,7 +160,7 @@ plot_regressors(Z, Nuisance)
 
 ### Single-Trial Regressors
 
-A compact way to view the per‑trial regressors is as a heatmap (time × trial). This makes overlaps and spacing immediately visible.
+Trial regressor structure visualized as a time × trial heatmap:
 
 ```{r plot-trial-regressors, fig.width=8, fig.height=4, echo=FALSE}
 if (requireNamespace("ggplot2", quietly = TRUE)) {
@@ -216,6 +222,35 @@ beta_full <- lss(Y, X, Z = Z, Nuisance = Nuisance)
 dim(beta_full)
 ```
 
+## Handling Temporal Autocorrelation with Prewhitening
+
+fMRI time series exhibit temporal autocorrelation that can affect statistical inference. The `fmrilss` package now integrates with `fmriAR` to provide sophisticated prewhitening capabilities:
+
+```{r prewhitening}
+# Basic AR(1) prewhitening
+beta_ar1 <- lss(Y, X, Z = Z, Nuisance = Nuisance,
+                prewhiten = list(method = "ar", p = 1))
+
+# Automatic AR order selection
+beta_auto <- lss(Y, X, Z = Z, Nuisance = Nuisance,
+                prewhiten = list(method = "ar", p = "auto", p_max = 4))
+
+# The prewhitened estimates account for temporal dependencies
+dim(beta_ar1)
+```
+
+For more advanced noise modeling, you can use voxel-specific parameters or ARMA models:
+
+```{r advanced_prewhitening, eval=FALSE}
+# Voxel-specific AR parameters
+beta_voxel <- lss(Y, X, Z = Z, Nuisance = Nuisance,
+                  prewhiten = list(method = "ar", p = 1, pooling = "voxel"))
+
+# ARMA model for complex noise
+beta_arma <- lss(Y, X, Z = Z, Nuisance = Nuisance,
+                prewhiten = list(method = "arma", p = 2, q = 1))
+```
+
 ## Choosing the Right Computational Backend
 
 The `fmrilss` package offers multiple computational backends, each optimized for different scenarios. While the default R implementation is well-optimized and readable, making it excellent for understanding the algorithm and debugging, you'll often want to use the high-performance C++ backend for real analyses, especially with large datasets. The C++ implementation leverages Armadillo for efficient linear algebra and OpenMP for parallel processing across multiple CPU cores:
@@ -226,13 +261,18 @@ beta_fast <- lss(Y, X, Z = Z, Nuisance = Nuisance, method = "cpp_optimized")
 
 # The results are numerically identical to the R version
 all.equal(beta_full, beta_fast, tolerance = 1e-8)
+
+# Combine prewhitening with fast computation
+beta_fast_ar <- lss(Y, X, Z = Z, Nuisance = Nuisance,
+                    method = "cpp_optimized",
+                    prewhiten = list(method = "ar", p = 1))
 ```
 
-The beauty of this design is that you can seamlessly switch between backends without changing any other code, allowing you to use the readable R implementation during development and the optimized C++ version for production analyses.
+This modular design allows seamless switching between backends without code changes. The R implementation facilitates debugging and development, while the C++ version provides production performance.
 
 ## LSS versus Traditional GLM: When Each Shines
 
-To understand when LSS offers advantages over traditional approaches, let's compare it with the standard Least Squares All (LSA) method that estimates all trials simultaneously:
+Comparison between LSS and standard Least Squares All (LSA) methods:
 
 ```{r lsa-comparison}
 # LSA: Standard GLM with all trials in one model
@@ -258,13 +298,23 @@ hist(beta_lsa[, 1], main = "LSA: Beta distribution (Voxel 1)",
      xlab = "Beta values", col = "lightgreen")
 ```
 
-The comparison reveals important differences between the methods. LSS typically produces beta estimates with different variance characteristics than LSA, which can be advantageous for certain analyses. When should you choose one over the other?
+LSS produces beta estimates with different variance characteristics than LSA. Method selection criteria:
 
-For MVPA analyses, LSS generally performs better because it reduces collinearity between trial estimates, leading to more distinguishable patterns. In rapid event-related designs where hemodynamic responses overlap substantially, LSS's approach of isolating each trial helps maintain estimate stability. However, for block designs with well-separated trials, or when you need to compute group-level contrasts that benefit from the stability of simultaneous estimation, LSA might be more appropriate. Connectivity analyses that require trial-specific estimates particularly benefit from LSS's approach.
+**Use LSS for:**
+- MVPA and pattern classification analyses
+- Rapid event-related designs (ISI < 4 seconds)
+- Trial-by-trial connectivity analyses
+- Representational similarity analysis (RSA)
+
+**Use LSA for:**
+- Block designs with well-separated trials
+- Group-level contrast estimation
+- Designs with ISI > 6 seconds
+- When computational efficiency is critical
 
 ## Introducing the OASIS Method
 
-While the standard LSS implementation is powerful, the package also includes the OASIS (Optimized Analytic Single-pass Inverse Solution) method, which extends LSS with several sophisticated features. OASIS automatically estimates hemodynamic response functions, applies ridge regularization for enhanced stability, provides efficient computation for complex designs, and includes built-in support for multi-basis HRF models. Here's a taste of what OASIS can do:
+The OASIS (Optimized Analytic Single-pass Inverse Solution) method extends LSS with: automatic HRF estimation, ridge regularization for stability, single-pass computation for all trials, and multi-basis HRF model support.
 
 ```{r oasis-intro}
 # Basic OASIS usage
