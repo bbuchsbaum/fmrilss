@@ -62,7 +62,7 @@
                         <h4 data-toc-skip class="author">fmrilss
 Development Team</h4>
             
-            <h4 data-toc-skip class="date">2025-09-15</h4>
+            <h4 data-toc-skip class="date">2025-09-24</h4>
       
 
       <div class="d-none name"><code>oasis_theory.Rmd</code></div>
@@ -74,12 +74,64 @@ Development Team</h4>
 <h2 id="motivation">Motivation<a class="anchor" aria-label="anchor" href="#motivation"></a>
 </h2>
 <p>Optimized Analytic Single-pass Inverse Solution (OASIS) extends Least
-Squares Separate (LSS) estimation with a set of algebraic shortcuts and
-HRF-aware features. This vignette documents the math behind those
-shortcuts and ties each derivation back to the implementation in
-<code>R/oasis_glue.R</code> and <code>src/oasis_core.cpp</code>. Basic
-regression facts (QR projection, ridge, etc.) are assumed knowledge; the
-focus here is on OASIS-specific components.</p>
+Squares Separate (LSS) estimation through algebraic reformulation that
+enables single-pass computation of all trial estimates. This document
+provides the mathematical foundation and implementation details.</p>
+<div class="section level3">
+<h3 id="computational-intuition">Computational Intuition<a class="anchor" aria-label="anchor" href="#computational-intuition"></a>
+</h3>
+<p>Standard LSS requires N separate GLM fits for N trials, each
+involving: 1. Matrix assembly: O(T²) operations 2. QR decomposition:
+O(T³) operations 3. Back-substitution: O(T²) operations</p>
+<p>Total complexity: O(NT³) for N trials</p>
+<p>OASIS recognizes that these N models share substantial structure. By
+factoring out common computations, OASIS reduces complexity to: 1.
+Single QR decomposition: O(T³) 2. Shared projections: O(NT²) 3.
+Per-trial solutions: O(N)</p>
+<p>Total complexity: O(T³ + NT²), a significant reduction when N is
+large.</p>
+</div>
+<div class="section level3">
+<h3 id="visual-comparison-of-computational-scaling">Visual Comparison of Computational Scaling<a class="anchor" aria-label="anchor" href="#visual-comparison-of-computational-scaling"></a>
+</h3>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Demonstrate computational scaling</span></span>
+<span><span class="va">N_trials</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">50</span>, <span class="fl">100</span>, <span class="fl">200</span>, <span class="fl">500</span>, <span class="fl">1000</span><span class="op">)</span></span>
+<span><span class="va">T_points</span> <span class="op">&lt;-</span> <span class="fl">200</span>  <span class="co"># Fixed number of timepoints</span></span>
+<span></span>
+<span><span class="co"># Simplified complexity models (arbitrary units)</span></span>
+<span><span class="va">classical_ops</span> <span class="op">&lt;-</span> <span class="va">N_trials</span> <span class="op">*</span> <span class="va">T_points</span><span class="op">^</span><span class="fl">3</span> <span class="op">/</span> <span class="fl">1e6</span>  <span class="co"># O(NT³)</span></span>
+<span><span class="va">oasis_ops</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="va">T_points</span><span class="op">^</span><span class="fl">3</span> <span class="op">+</span> <span class="va">N_trials</span> <span class="op">*</span> <span class="va">T_points</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span> <span class="op">/</span> <span class="fl">1e6</span>  <span class="co"># O(T³ + NT²)</span></span>
+<span></span>
+<span><span class="co"># Create comparison plot</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">N_trials</span>, <span class="va">classical_ops</span>, type<span class="op">=</span><span class="st">'l'</span>, col<span class="op">=</span><span class="st">'red'</span>, lwd<span class="op">=</span><span class="fl">2</span>,</span>
+<span>     xlab<span class="op">=</span><span class="st">'Number of Trials'</span>, ylab<span class="op">=</span><span class="st">'Computational Operations (millions)'</span>,</span>
+<span>     main<span class="op">=</span><span class="st">'Computational Complexity: Classical LSS vs OASIS'</span>,</span>
+<span>     ylim<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">classical_ops</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/lines.html" class="external-link">lines</a></span><span class="op">(</span><span class="va">N_trials</span>, <span class="va">oasis_ops</span>, col<span class="op">=</span><span class="st">'blue'</span>, lwd<span class="op">=</span><span class="fl">2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">'topleft'</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">'Classical LSS'</span>, <span class="st">'OASIS'</span><span class="op">)</span>,</span>
+<span>       col<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">'red'</span>, <span class="st">'blue'</span><span class="op">)</span>, lwd<span class="op">=</span><span class="fl">2</span>, bty<span class="op">=</span><span class="st">'n'</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Add shaded region showing computational savings</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/polygon.html" class="external-link">polygon</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">N_trials</span>, <span class="fu"><a href="https://rdrr.io/r/base/rev.html" class="external-link">rev</a></span><span class="op">(</span><span class="va">N_trials</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>        <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">classical_ops</span>, <span class="fu"><a href="https://rdrr.io/r/base/rev.html" class="external-link">rev</a></span><span class="op">(</span><span class="va">oasis_ops</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>        col<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/grDevices/rgb.html" class="external-link">rgb</a></span><span class="op">(</span><span class="fl">0.2</span>, <span class="fl">0.8</span>, <span class="fl">0.2</span>, <span class="fl">0.3</span><span class="op">)</span>, border<span class="op">=</span><span class="cn">NA</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/text.html" class="external-link">text</a></span><span class="op">(</span><span class="fl">500</span>, <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">classical_ops</span><span class="op">[</span><span class="fl">4</span><span class="op">]</span>, <span class="va">oasis_ops</span><span class="op">[</span><span class="fl">4</span><span class="op">]</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>     <span class="st">'Computational\nSavings'</span>, col<span class="op">=</span><span class="st">'darkgreen'</span><span class="op">)</span></span></code></pre></div>
+<div class="figure">
+<img src="oasis_theory_files/figure-html/complexity-comparison-1.png" alt="Computational complexity: Classical LSS vs OASIS" width="768"><p class="caption">
+Computational complexity: Classical LSS vs OASIS
+</p>
+</div>
+</div>
+<div class="section level3">
+<h3 id="prerequisites">Prerequisites<a class="anchor" aria-label="anchor" href="#prerequisites"></a>
+</h3>
+<p>This vignette assumes familiarity with: - QR decomposition and
+orthogonal projection matrices - Ridge regression and regularization -
+Matrix calculus and linear algebra - The standard LSS formulation</p>
+<p>Code references point to <code>R/oasis_glue.R</code> and
+<code>src/oasis_core.cpp</code> implementations.</p>
 <p>Notation used throughout:</p>
 <ul>
 <li>
@@ -106,7 +158,8 @@ comes from QR factorisation of
 </li>
 </ul>
 <p>We first treat the single-basis case (one regressor per trial) before
-generalising to multi-basis HRFs.</p>
+generalizing to multi-basis HRFs.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="classical-lss-recap">Classical LSS Recap<a class="anchor" aria-label="anchor" href="#classical-lss-recap"></a>
@@ -124,8 +177,9 @@ expressed as</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover><mi>β</mi><mo accent="true">̂</mo></mover><mi>j</mi></msub><mo>=</mo><mfrac><mrow><mo stretchy="false" form="prefix">⟨</mo><mi>R</mi><msub><mi>x</mi><mi>j</mi></msub><mo>,</mo><mi>R</mi><mi>Y</mi><mo stretchy="false" form="postfix">⟩</mo><mo>−</mo><mfrac><mrow><mo stretchy="false" form="prefix">⟨</mo><mi>R</mi><msub><mi>x</mi><mi>j</mi></msub><mo>,</mo><mi>R</mi><msub><mi>b</mi><mi>j</mi></msub><mo stretchy="false" form="postfix">⟩</mo></mrow><mrow><mo stretchy="false" form="postfix">∥</mo><mi>R</mi><msub><mi>b</mi><mi>j</mi></msub><msup><mo stretchy="false" form="postfix">∥</mo><mn>2</mn></msup></mrow></mfrac><mo stretchy="false" form="prefix">⟨</mo><mi>R</mi><msub><mi>b</mi><mi>j</mi></msub><mo>,</mo><mi>R</mi><mi>Y</mi><mo stretchy="false" form="postfix">⟩</mo></mrow><mrow><mo stretchy="false" form="postfix">∥</mo><mi>R</mi><msub><mi>x</mi><mi>j</mi></msub><msup><mo stretchy="false" form="postfix">∥</mo><mn>2</mn></msup><mo>−</mo><mfrac><mrow><mo stretchy="false" form="prefix">⟨</mo><mi>R</mi><msub><mi>x</mi><mi>j</mi></msub><mo>,</mo><mi>R</mi><msub><mi>b</mi><mi>j</mi></msub><msup><mo stretchy="false" form="postfix">⟩</mo><mn>2</mn></msup></mrow><mrow><mo stretchy="false" form="postfix">∥</mo><mi>R</mi><msub><mi>b</mi><mi>j</mi></msub><msup><mo stretchy="false" form="postfix">∥</mo><mn>2</mn></msup></mrow></mfrac></mrow></mfrac><mi>.</mi></mrow><annotation encoding="application/x-tex">
 \hat{\beta}_j = \frac{\langle Rx_j, RY \rangle - \frac{\langle Rx_j, Rb_j \rangle}{\|Rb_j\|^2} \langle Rb_j, RY \rangle}{\|Rx_j\|^2 - \frac{\langle Rx_j, Rb_j \rangle^2}{\|Rb_j\|^2}}.
 </annotation></semantics></math></p>
-<p>OASIS packages the common pieces (projections, norms, cross-products)
-so every trial can be solved from shared ingredients.</p>
+<p>OASIS extracts and reuses the common computational components
+(projections, norms, cross-products) across all trials, computing each
+only once.</p>
 </div>
 <div class="section level2">
 <h2 id="single-basis-oasis-algebra">Single-Basis OASIS Algebra<a class="anchor" aria-label="anchor" href="#single-basis-oasis-algebra"></a>
@@ -399,7 +453,7 @@ multivoxel pattern classification analyses. <em>NeuroImage</em>, 59(3),
 <li>fmrilss source files <code>R/oasis_glue.R</code> and
 <code>src/oasis_core.cpp</code> (for implementation alignment).</li>
 </ul>
-<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/sessionInfo.html" class="external-link">sessionInfo</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; R version 4.5.1 (2025-06-13)</span></span>
 <span><span class="co">#&gt; Platform: x86_64-pc-linux-gnu</span></span>

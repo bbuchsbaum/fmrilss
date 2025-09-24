@@ -62,7 +62,7 @@
                         <h4 data-toc-skip class="author">fmrilss
 Development Team</h4>
             
-            <h4 data-toc-skip class="date">2025-09-15</h4>
+            <h4 data-toc-skip class="date">2025-09-24</h4>
       
 
       <div class="d-none name"><code>getting_started.Rmd</code></div>
@@ -73,44 +73,45 @@ Development Team</h4>
 <div class="section level2">
 <h2 id="the-challenge-of-event-related-fmri-analysis">The Challenge of Event-Related fMRI Analysis<a class="anchor" aria-label="anchor" href="#the-challenge-of-event-related-fmri-analysis"></a>
 </h2>
-<p>Imagine you’re analyzing an fMRI experiment where participants view
-different images in rapid succession, with only a few seconds between
-each stimulus. You want to estimate the brain’s response to each
-individual image, but there’s a problem: the hemodynamic response
-unfolds slowly over 10-15 seconds, causing responses from consecutive
-trials to overlap substantially. Traditional approaches that model all
-trials simultaneously in a single general linear model (GLM) can suffer
-from collinearity, especially when trials occur close together. This
-collinearity makes it difficult to obtain reliable, trial-specific
-activation estimates that are essential for techniques like multivariate
-pattern analysis (MVPA) or trial-by-trial connectivity analyses.</p>
-<p>The Least Squares Separate (LSS) approach, introduced by Mumford and
-colleagues in 2012, offers an elegant solution to this problem. Rather
-than estimating all trials at once, LSS fits a separate GLM for each
-trial, dramatically reducing collinearity and producing more reliable
-trial-specific estimates. The <code>fmrilss</code> package brings you a
-fast, flexible implementation of this powerful method, with modern
-enhancements that make it practical for large-scale analyses.</p>
+<p>In event-related fMRI experiments with rapid stimulus presentation,
+hemodynamic responses from consecutive trials overlap substantially due
+to the slow temporal dynamics of the BOLD signal (10-15 seconds).
+Traditional general linear models (GLMs) that estimate all trials
+simultaneously suffer from collinearity when inter-stimulus intervals
+are short (&lt; 4 seconds), resulting in unstable trial-specific
+activation estimates. These unstable estimates compromise downstream
+analyses including multivariate pattern analysis (MVPA),
+representational similarity analysis (RSA), and trial-by-trial
+connectivity methods.</p>
+<p>The Least Squares Separate (LSS) approach (Mumford et al., 2012)
+addresses this collinearity problem by fitting a separate GLM for each
+trial. In each model, one regressor represents the trial of interest
+while a second regressor aggregates all other trials, reducing
+collinearity and improving estimate stability. The <code>fmrilss</code>
+package provides optimized implementations of LSS with extensions
+including automatic HRF estimation, ridge regularization, and parallel
+computation across multiple CPU cores.</p>
 </div>
 <div class="section level2">
 <h2 id="understanding-the-lss-approach">Understanding the LSS Approach<a class="anchor" aria-label="anchor" href="#understanding-the-lss-approach"></a>
 </h2>
-<p>Before diving into the implementation, let’s build an intuition for
-how LSS works. This vignette assumes you’re familiar with basic fMRI
-analysis concepts like the general linear model, design matrices, and
-the hemodynamic response function (HRF). You should also be comfortable
-with R programming and basic matrix operations, as we’ll be working with
-these throughout.</p>
-<p>In a standard GLM analysis (often called Least Squares All or LSA),
-we create a design matrix with separate columns for each trial and
-estimate all beta coefficients simultaneously. When trials are closely
-spaced, these columns become highly correlated, leading to unstable
-estimates. LSS takes a different approach: for each trial of interest,
-it creates a simplified model with just two main regressors. The first
-regressor models the trial we’re currently interested in, while the
-second aggregates all other trials into a single regressor. This process
-repeats for every trial, yielding a unique, more stable beta estimate
-for each one.</p>
+<p>This vignette assumes familiarity with fMRI general linear models,
+design matrices, hemodynamic response functions, and R matrix
+operations.</p>
+<p>Standard GLM analysis (Least Squares All, LSA) estimates all trial
+coefficients simultaneously by solving: β = (X’X)^(-1)X’Y. When trials
+occur in rapid succession, the design matrix columns exhibit high
+correlation (condition number &gt; 30), producing unstable estimates
+with inflated variance.</p>
+<p>LSS reformulates the problem by fitting N separate models, where N is
+the number of trials. For trial i, the design matrix contains: (1) a
+regressor for trial i, (2) a single regressor aggregating all other
+trials, and (3) any nuisance or baseline regressors. This reduces the
+effective condition number and produces more stable single-trial
+estimates. Mathematically, for trial i:</p>
+<p>β_i = (X_i’X_i)^(-1)X_i’Y</p>
+<p>where X_i = [x_i | Σ(j≠i) x_j | Z | N], with x_i the trial regressor,
+Z experimental covariates, and N nuisance regressors.</p>
 <p>Beyond these two core regressors, LSS models can include experimental
 regressors that capture session-wide effects like linear trends or block
 effects, which we want to model but don’t need trial-specific estimates
@@ -134,18 +135,13 @@ analysis begins.</p>
 <span><span class="va">n_timepoints</span> <span class="op">&lt;-</span> <span class="fl">150</span></span>
 <span><span class="va">n_trials</span> <span class="op">&lt;-</span> <span class="fl">12</span></span>
 <span><span class="va">n_voxels</span> <span class="op">&lt;-</span> <span class="fl">25</span></span></code></pre></div>
-<p>Let’s walk through a complete example that demonstrates the power of
-LSS. We’ll start by creating synthetic data that mimics a typical rapid
-event-related design, then compare different analysis approaches to see
-how LSS performs.</p>
+<p>The following example demonstrates LSS analysis using synthetic data
+from a rapid event-related design.</p>
 <div class="section level3">
 <h3 id="creating-the-experimental-design">Creating the Experimental Design<a class="anchor" aria-label="anchor" href="#creating-the-experimental-design"></a>
 </h3>
-<p>The foundation of any fMRI analysis is the design matrix, which
-encodes when stimuli were presented and how we expect the brain to
-respond. In our example, we’ll simulate an experiment with trials
-occurring at regular intervals, which is common in many cognitive
-neuroscience studies.</p>
+<p>The design matrix encodes stimulus timing and expected hemodynamic
+responses.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Trial design matrix (X)</span></span>
 <span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fl">0</span>, <span class="va">n_timepoints</span>, <span class="va">n_trials</span><span class="op">)</span></span>
@@ -161,30 +157,23 @@ neuroscience studies.</p>
 <span></span>
 <span><span class="co"># Nuisance regressors - e.g., 6 motion parameters</span></span>
 <span><span class="va">Nuisance</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_timepoints</span> <span class="op">*</span> <span class="fl">6</span><span class="op">)</span>, <span class="va">n_timepoints</span>, <span class="fl">6</span><span class="op">)</span></span></code></pre></div>
-<p>The trial matrix <code>X</code> represents the expected BOLD response
-for each trial, typically convolved with an HRF (though we’re using a
-simplified box-car function here for clarity). The experimental
-regressors in <code>Z</code> capture effects that vary across the
-session but not trial-by-trial, such as baseline activation levels or
-linear drift. The nuisance matrix contains signals we want to remove,
-like head motion or breathing artifacts.</p>
+<p>Matrix <code>X</code> contains trial regressors (here using box-car
+functions for simplicity, though HRF convolution is standard). Matrix
+<code>Z</code> contains experimental covariates (intercept and linear
+trend). The nuisance matrix models unwanted variance (e.g., motion
+parameters).</p>
 </div>
 <div class="section level3">
 <h3 id="visualizing-regressors">Visualizing Regressors<a class="anchor" aria-label="anchor" href="#visualizing-regressors"></a>
 </h3>
-<p>Before fitting models, it helps to quickly inspect the experimental
-and nuisance regressors. Below are clean plots of the session‑wide
-experimental effects (excluding the intercept) and the nuisance
-regressors, standardized for comparability. If <code>ggplot2</code> is
-available, we use it for polished visuals; otherwise we fall back to
-base R.</p>
+<p>The following visualizations show experimental regressors (excluding
+intercept) and nuisance regressors, standardized for comparability.</p>
 <p><img src="getting_started_files/figure-html/plot-regressors-1.png" width="768"><img src="getting_started_files/figure-html/plot-regressors-2.png" width="768"></p>
 </div>
 <div class="section level3">
 <h3 id="single-trial-regressors">Single-Trial Regressors<a class="anchor" aria-label="anchor" href="#single-trial-regressors"></a>
 </h3>
-<p>A compact way to view the per‑trial regressors is as a heatmap (time
-× trial). This makes overlaps and spacing immediately visible.</p>
+<p>Trial regressor structure visualized as a time × trial heatmap:</p>
 <p><img src="getting_started_files/figure-html/plot-trial-regressors-1.png" width="768"></p>
 </div>
 <div class="section level3">
@@ -229,6 +218,36 @@ and design matrix before estimating trial-specific betas:</p>
 </div>
 </div>
 <div class="section level2">
+<h2 id="handling-temporal-autocorrelation-with-prewhitening">Handling Temporal Autocorrelation with Prewhitening<a class="anchor" aria-label="anchor" href="#handling-temporal-autocorrelation-with-prewhitening"></a>
+</h2>
+<p>fMRI time series exhibit temporal autocorrelation that can affect
+statistical inference. The <code>fmrilss</code> package now integrates
+with <code>fmriAR</code> to provide sophisticated prewhitening
+capabilities:</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Basic AR(1) prewhitening</span></span>
+<span><span class="va">beta_ar1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
+<span>                prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Automatic AR order selection</span></span>
+<span><span class="va">beta_auto</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
+<span>                prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="st">"auto"</span>, p_max <span class="op">=</span> <span class="fl">4</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># The prewhitened estimates account for temporal dependencies</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_ar1</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 12 25</span></span></code></pre></div>
+<p>For more advanced noise modeling, you can use voxel-specific
+parameters or ARMA models:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Voxel-specific AR parameters</span></span>
+<span><span class="va">beta_voxel</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
+<span>                  prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="fl">1</span>, pooling <span class="op">=</span> <span class="st">"voxel"</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># ARMA model for complex noise</span></span>
+<span><span class="va">beta_arma</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
+<span>                prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"arma"</span>, p <span class="op">=</span> <span class="fl">2</span>, q <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
 <h2 id="choosing-the-right-computational-backend">Choosing the Right Computational Backend<a class="anchor" aria-label="anchor" href="#choosing-the-right-computational-backend"></a>
 </h2>
 <p>The <code>fmrilss</code> package offers multiple computational
@@ -239,25 +258,28 @@ high-performance C++ backend for real analyses, especially with large
 datasets. The C++ implementation leverages Armadillo for efficient
 linear algebra and OpenMP for parallel processing across multiple CPU
 cores:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Run the same analysis with the high-performance C++ engine</span></span>
 <span><span class="va">beta_fast</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>, method <span class="op">=</span> <span class="st">"cpp_optimized"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># The results are numerically identical to the R version</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/all.equal.html" class="external-link">all.equal</a></span><span class="op">(</span><span class="va">beta_full</span>, <span class="va">beta_fast</span>, tolerance <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
-<p>The beauty of this design is that you can seamlessly switch between
-backends without changing any other code, allowing you to use the
-readable R implementation during development and the optimized C++
-version for production analyses.</p>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span></span>
+<span><span class="co"># Combine prewhitening with fast computation</span></span>
+<span><span class="va">beta_fast_ar</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
+<span>                    method <span class="op">=</span> <span class="st">"cpp_optimized"</span>,</span>
+<span>                    prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p>This modular design allows seamless switching between backends
+without code changes. The R implementation facilitates debugging and
+development, while the C++ version provides production performance.</p>
 </div>
 <div class="section level2">
 <h2 id="lss-versus-traditional-glm-when-each-shines">LSS versus Traditional GLM: When Each Shines<a class="anchor" aria-label="anchor" href="#lss-versus-traditional-glm-when-each-shines"></a>
 </h2>
-<p>To understand when LSS offers advantages over traditional approaches,
-let’s compare it with the standard Least Squares All (LSA) method that
-estimates all trials simultaneously:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<p>Comparison between LSS and standard Least Squares All (LSA)
+methods:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># LSA: Standard GLM with all trials in one model</span></span>
 <span><span class="va">beta_lsa</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lsa.html">lsa</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span><span class="op">)</span></span>
 <span></span>
@@ -286,31 +308,24 @@ estimates all trials simultaneously:</p>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/hist.html" class="external-link">hist</a></span><span class="op">(</span><span class="va">beta_lsa</span><span class="op">[</span>, <span class="fl">1</span><span class="op">]</span>, main <span class="op">=</span> <span class="st">"LSA: Beta distribution (Voxel 1)"</span>,</span>
 <span>     xlab <span class="op">=</span> <span class="st">"Beta values"</span>, col <span class="op">=</span> <span class="st">"lightgreen"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="getting_started_files/figure-html/lsa-comparison-1.png" width="672"></p>
-<p>The comparison reveals important differences between the methods. LSS
-typically produces beta estimates with different variance
-characteristics than LSA, which can be advantageous for certain
-analyses. When should you choose one over the other?</p>
-<p>For MVPA analyses, LSS generally performs better because it reduces
-collinearity between trial estimates, leading to more distinguishable
-patterns. In rapid event-related designs where hemodynamic responses
-overlap substantially, LSS’s approach of isolating each trial helps
-maintain estimate stability. However, for block designs with
-well-separated trials, or when you need to compute group-level contrasts
-that benefit from the stability of simultaneous estimation, LSA might be
-more appropriate. Connectivity analyses that require trial-specific
-estimates particularly benefit from LSS’s approach.</p>
+<p>LSS produces beta estimates with different variance characteristics
+than LSA. Method selection criteria:</p>
+<p><strong>Use LSS for:</strong> - MVPA and pattern classification
+analyses - Rapid event-related designs (ISI &lt; 4 seconds) -
+Trial-by-trial connectivity analyses - Representational similarity
+analysis (RSA)</p>
+<p><strong>Use LSA for:</strong> - Block designs with well-separated
+trials - Group-level contrast estimation - Designs with ISI &gt; 6
+seconds - When computational efficiency is critical</p>
 </div>
 <div class="section level2">
 <h2 id="introducing-the-oasis-method">Introducing the OASIS Method<a class="anchor" aria-label="anchor" href="#introducing-the-oasis-method"></a>
 </h2>
-<p>While the standard LSS implementation is powerful, the package also
-includes the OASIS (Optimized Analytic Single-pass Inverse Solution)
-method, which extends LSS with several sophisticated features. OASIS
-automatically estimates hemodynamic response functions, applies ridge
-regularization for enhanced stability, provides efficient computation
-for complex designs, and includes built-in support for multi-basis HRF
-models. Here’s a taste of what OASIS can do:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<p>The OASIS (Optimized Analytic Single-pass Inverse Solution) method
+extends LSS with: automatic HRF estimation, ridge regularization for
+stability, single-pass computation for all trials, and multi-basis HRF
+model support.</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Basic OASIS usage</span></span>
 <span><span class="co"># fmrihrf is now imported automatically</span></span>
 <span><span class="va">beta_oasis</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
@@ -357,7 +372,7 @@ clearest code for understanding the algorithm, while the vectorized and
 optimized R versions provide good performance with pure R code. For
 production work with large datasets, the C++ backend offers the best
 performance, especially when combined with parallel processing.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Benchmark different methods</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/joshuaulrich/microbenchmark/" class="external-link">microbenchmark</a></span><span class="op">)</span></span>
 <span></span>
@@ -394,7 +409,7 @@ conditions, you can create separate design matrices for each condition
 and include condition labels as experimental regressors. This allows you
 to model condition-specific effects while still obtaining trial-wise
 estimates within each condition.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create design with multiple conditions</span></span>
 <span><span class="va">n_cond</span> <span class="op">&lt;-</span> <span class="fl">3</span></span>
 <span><span class="va">X_multi</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fl">0</span>, <span class="va">n_timepoints</span>, <span class="va">n_trials</span> <span class="op">*</span> <span class="va">n_cond</span><span class="op">)</span></span>
@@ -447,7 +462,7 @@ continuous variables like reaction time or stimulus intensity, are also
 straightforward to implement. For a quantitative demo, we simulate a
 parametric effect in the data and show recovery with and without the
 modulator:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Add parametric modulator (e.g., reaction time, stimulus intensity)</span></span>
 <span><span class="va">modulator</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_trials</span>, mean <span class="op">=</span> <span class="fl">0</span>, sd <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>, center <span class="op">=</span> <span class="cn">TRUE</span>, scale <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
@@ -489,7 +504,7 @@ datasets effectively.</p>
 <p>For very large datasets that exceed available memory, you can process
 voxels in chunks. This approach maintains reasonable memory usage while
 still benefiting from vectorized operations within each chunk:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># For very large datasets, process in chunks</span></span>
 <span><span class="va">chunk_size</span> <span class="op">&lt;-</span> <span class="fl">1000</span></span>
 <span><span class="va">n_chunks</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">ceiling</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span> <span class="op">/</span> <span class="va">chunk_size</span><span class="op">)</span></span>
@@ -506,7 +521,7 @@ still benefiting from vectorized operations within each chunk:</p>
 remove nuisance signals before running LSS. While LSS can handle
 nuisance regressors internally, preprocessing can be more efficient when
 running multiple analyses:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Project out nuisance before LSS (when appropriate)</span></span>
 <span><span class="co"># project_confounds returns the projection matrix Q; apply it to both Y and X</span></span>
 <span><span class="va">Q_nuis</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/project_confounds.html">project_confounds</a></span><span class="op">(</span><span class="va">Nuisance</span><span class="op">)</span></span>
@@ -539,7 +554,7 @@ will help you get the most out of your analyses.</p>
 collinearity between regressors, standard least squares solutions become
 unstable. You can detect this by examining the correlation matrix of
 your design:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Check for collinearity</span></span>
 <span><span class="va">cor_matrix</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="va">X</span><span class="op">)</span></span>
 <span><span class="va">high_cor</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html" class="external-link">which</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">cor_matrix</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0.9</span> <span class="op">&amp;</span> <span class="va">cor_matrix</span> <span class="op">!=</span> <span class="fl">1</span>, arr.ind <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
@@ -553,7 +568,7 @@ your design:</p>
 <p>Memory limitations can also pose challenges with large datasets.
 Before starting an analysis, it’s wise to estimate memory requirements
 and adjust your approach accordingly:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Monitor memory usage</span></span>
 <span><span class="va">mem_required</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/object.size.html" class="external-link">object.size</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span> <span class="op">*</span> <span class="va">n_trials</span> <span class="op">*</span> <span class="fl">2</span>  <span class="co"># Rough estimate</span></span>
 <span><span class="co"># mem_available &lt;- memory.limit()  # Windows only</span></span>
@@ -563,7 +578,7 @@ and adjust your approach accordingly:</p>
 <span><span class="co"># }</span></span></code></pre></div>
 <p>If you encounter unexpectedly slow performance, profiling can help
 identify bottlenecks:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Profile code to find bottlenecks</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/Rprof.html" class="external-link">Rprof</a></span><span class="op">(</span><span class="st">"lss_profile.out"</span><span class="op">)</span></span>
 <span><span class="va">beta_slow</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, method <span class="op">=</span> <span class="st">"naive"</span><span class="op">)</span></span>

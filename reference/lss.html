@@ -58,7 +58,8 @@ with the trial of interest and all other trials as separate regressors.</p>
 <span>  Nuisance <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"r_optimized"</span>, <span class="st">"cpp_optimized"</span>, <span class="st">"r_vectorized"</span>, <span class="st">"cpp"</span>, <span class="st">"naive"</span>, <span class="st">"oasis"</span><span class="op">)</span>,</span>
 <span>  block_size <span class="op">=</span> <span class="fl">96</span>,</span>
-<span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  prewhiten <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -108,6 +109,10 @@ processing, only applicable when `method = "cpp_optimized"`. Defaults to 96.</p>
 <dt id="arg-oasis">oasis<a class="anchor" aria-label="anchor" href="#arg-oasis"></a></dt>
 <dd><p>A list of options for the OASIS method. See Details for available options.</p></dd>
 
+
+<dt id="arg-prewhiten">prewhiten<a class="anchor" aria-label="anchor" href="#arg-prewhiten"></a></dt>
+<dd><p>A list of prewhitening options using fmriAR. See Details for available options.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -147,7 +152,19 @@ Y and X using standard linear regression residualization.</p>
     If not provided, calculated as ncol(X) / K.</p></li>
 <li><p><code>hrf_grid</code>: Vector of HRF indices for grid-based HRF selection (advanced use).
     Allows testing multiple HRF shapes simultaneously.</p></li>
-</ul><p>The OASIS method provides a mathematically equivalent but computationally optimized version
+</ul><p>When using the <code>prewhiten</code> parameter, the following options are available:</p><ul><li><p><code>method</code>: Character, "ar" (default), "arma", or "none" for the noise model type.</p></li>
+<li><p><code>p</code>: Integer or "auto" for AR order (default "auto").</p></li>
+<li><p><code>q</code>: Integer for MA order in ARMA models (default 0).</p></li>
+<li><p><code>p_max</code>: Maximum AR order when p="auto" (default 6).</p></li>
+<li><p><code>pooling</code>: Character, "global" (default), "voxel", "run", or "parcel" for parameter estimation strategy.</p></li>
+<li><p><code>runs</code>: Integer vector of run identifiers for run-aware estimation.</p></li>
+<li><p><code>parcels</code>: Integer vector of parcel memberships for parcel-based pooling.</p></li>
+<li><p><code>exact_first</code>: Character, "ar1" or "none" for exact AR(1) scaling at segment starts.</p></li>
+</ul><p>Prewhitening is applied before the LSS analysis to account for temporal autocorrelation in the
+fMRI time series. The fmriAR package provides flexible AR/ARMA modeling with various pooling
+strategies. For backward compatibility, the old <code>oasis$whiten = "ar1"</code> syntax is still
+supported and will be converted to the equivalent prewhiten settings.</p>
+<p>The OASIS method provides a mathematically equivalent but computationally optimized version
 of standard LSS. It reformulates the per-trial GLM fitting as a single matrix operation,
 eliminating redundant computations. This is particularly beneficial for designs with many
 trials or when processing large datasets. When K &gt; 1 (multi-basis HRFs), the output will

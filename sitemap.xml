@@ -1,5 +1,6 @@
 <urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/404.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/fmrilss/CLAUDE.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/articles/getting_started.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/articles/index.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.html</loc></url>
@@ -14,8 +15,11 @@
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/calculate_recovery_metrics.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/compare_hrf_recovery.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/create_lwu_grid.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/fmrilss/reference/dot-convert_legacy_whiten.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/dot-lss_oasis.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/dot-mixed_solve_cpp.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/fmrilss/reference/dot-needs_advanced_prewhitening.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/fmrilss/reference/dot-prewhiten_data.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/estimate_voxel_hrf.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/fast_reml_lambda.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/fit_oasis_grid.html</loc></url>

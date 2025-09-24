@@ -62,7 +62,7 @@
                         <h4 data-toc-skip class="author">fmrilss
 Development Team</h4>
             
-            <h4 data-toc-skip class="date">2025-09-15</h4>
+            <h4 data-toc-skip class="date">2025-09-24</h4>
       
 
       <div class="d-none name"><code>voxel-wise-hrf.Rmd</code></div>
@@ -73,29 +73,14 @@ Development Team</h4>
 <div class="section level2">
 <h2 id="why-hrf-variability-matters">Why HRF Variability Matters<a class="anchor" aria-label="anchor" href="#why-hrf-variability-matters"></a>
 </h2>
-<p>Picture this scenario: you’re analyzing fMRI data from a study
-comparing young and older adults performing a memory task. You notice
-that in certain brain regions, particularly those with known vascular
-changes in aging, your standard analysis seems to systematically
-underestimate activation in the older group. Could this be a genuine
-difference in neural activity, or might it reflect age-related changes
-in the hemodynamic response itself? This question lies at the heart of
-voxel-wise HRF modeling.</p>
-<p>The hemodynamic response function represents the complex cascade of
-physiological processes that translate neural activity into the BOLD
-signal we measure with fMRI. While we often assume a canonical HRF shape
-across the entire brain, reality is more nuanced. Different brain
-regions have different vascular architectures, neural-vascular coupling
-can vary with age and disease, and even within healthy young adults,
-there’s substantial variability in HRF characteristics across cortical
-areas and individuals.</p>
-<p>This vignette will guide you through the process of accounting for
-HRF variability in your LSS analyses. We assume you’re already familiar
-with the basic LSS concepts covered in the getting started vignette,
-understand the fundamentals of the hemodynamic response function, and
-are comfortable working with matrices in R. With these foundations,
-we’ll explore how voxel-wise HRF modeling can improve the accuracy of
-your trial-wise beta estimates.</p>
+<p>Voxel-wise HRF modeling addresses spatial and subject-specific
+differences in the hemodynamic response that can bias trial-wise
+estimates. Vascular properties, neurovascular coupling, and acquisition
+protocols all influence the HRF, so relying on a single canonical shape
+can misrepresent activation patterns.</p>
+<p>This vignette shows how to estimate voxel-specific HRFs and
+incorporate them into LSS analyses. Familiarity with the core LSS
+workflow and fmrihrf basics is assumed.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrilss/">fmrilss</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/" class="external-link">fmrihrf</a></span><span class="op">)</span></span>
@@ -193,12 +178,28 @@ vascular properties:</p>
 <span><span class="co"># Each voxel has slightly different HRF characteristics</span></span>
 <span><span class="va">voxel_hrfs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="kw">for</span> <span class="op">(</span><span class="va">v</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_vox</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="co"># Vary peak time (tau) and width (sigma) across voxels</span></span>
-<span>  <span class="va">tau_shift</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="va">v</span> <span class="op">-</span> <span class="fl">3</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span>  <span class="co"># Range: -1 to +1 seconds</span></span>
-<span>  <span class="va">sigma_scale</span> <span class="op">&lt;-</span> <span class="fl">1</span> <span class="op">+</span> <span class="op">(</span><span class="va">v</span> <span class="op">-</span> <span class="fl">3</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.1</span>  <span class="co"># Range: 0.8 to 1.2</span></span>
+<span>  <span class="co"># Vary peak time and width across voxels</span></span>
+<span>  <span class="va">peak_shift</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="va">v</span> <span class="op">-</span> <span class="fl">3</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span>  <span class="co"># Range: -1 to +1 seconds</span></span>
+<span>  <span class="va">width_scale</span> <span class="op">&lt;-</span> <span class="fl">1</span> <span class="op">+</span> <span class="op">(</span><span class="va">v</span> <span class="op">-</span> <span class="fl">3</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.1</span>  <span class="co"># Range: 0.8 to 1.2</span></span>
 <span></span>
-<span>  <span class="co"># Create voxel-specific HRF using SPM double gamma with modifications</span></span>
-<span>  <span class="va">voxel_hrfs</span><span class="op">[[</span><span class="va">v</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">HRF_SPMG1</span></span>
+<span>  <span class="co"># Create modified HRF parameters</span></span>
+<span>  <span class="co"># Use SPMG1 as base and modify peak and undershoot</span></span>
+<span>  <span class="va">base_hrf</span> <span class="op">&lt;-</span> <span class="va">HRF_SPMG1</span></span>
+<span></span>
+<span>  <span class="co"># Modify the HRF parameters</span></span>
+<span>  <span class="co"># SPMG1 uses double gamma with peak around 5s and undershoot around 15s</span></span>
+<span>  <span class="va">voxel_hrfs</span><span class="op">[[</span><span class="va">v</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/HRF-class.html" class="external-link">HRF</a></span><span class="op">(</span></span>
+<span>    fun <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span><span class="op">)</span> <span class="op">{</span></span>
+<span>      <span class="co"># Shift the peak time</span></span>
+<span>      <span class="va">t_shifted</span> <span class="op">&lt;-</span> <span class="va">t</span> <span class="op">-</span> <span class="va">peak_shift</span></span>
+<span>      <span class="co"># Apply width scaling (preserve area by multiplying by scale)</span></span>
+<span>      <span class="va">base_response</span> <span class="op">&lt;-</span> <span class="fu">base_hrf</span><span class="op">(</span><span class="va">t_shifted</span> <span class="op">/</span> <span class="va">width_scale</span><span class="op">)</span> <span class="op">*</span> <span class="va">width_scale</span></span>
+<span>      <span class="va">base_response</span></span>
+<span>    <span class="op">}</span>,</span>
+<span>    name <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"voxel_"</span>, <span class="va">v</span>, <span class="st">"_hrf"</span><span class="op">)</span>,</span>
+<span>    span <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">base_hrf</span>, <span class="st">"span"</span><span class="op">)</span>,</span>
+<span>    nbasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">base_hrf</span>, <span class="st">"nbasis"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span></span>
 <span><span class="co"># Generate true betas for each trial and voxel</span></span>
@@ -225,15 +226,20 @@ vascular properties:</p>
 <span>  <span class="va">Y</span><span class="op">[</span>, <span class="va">v</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">dm</span><span class="op">$</span><span class="va">X</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">true_betas</span><span class="op">[</span>, <span class="va">v</span><span class="op">]</span></span>
 <span><span class="op">}</span></span>
 <span></span>
-<span><span class="co"># Add realistic noise</span></span>
+<span><span class="co"># Add realistic noise with AR(1) structure</span></span>
 <span><span class="va">noise_sd</span> <span class="op">&lt;-</span> <span class="fl">0.5</span></span>
+<span><span class="va">ar_coef</span> <span class="op">&lt;-</span> <span class="fl">0.3</span></span>
 <span><span class="kw">for</span> <span class="op">(</span><span class="va">v</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_vox</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">noise</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_time</span>, sd <span class="op">=</span> <span class="va">noise_sd</span><span class="op">)</span></span>
-<span>  <span class="co"># Add AR(1) structure</span></span>
-<span>  <span class="va">ar_coef</span> <span class="op">&lt;-</span> <span class="fl">0.3</span></span>
+<span>  <span class="co"># Generate independent innovations</span></span>
+<span>  <span class="va">innovations</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_time</span>, sd <span class="op">=</span> <span class="va">noise_sd</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="co"># Apply AR(1) process</span></span>
+<span>  <span class="va">noise</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">numeric</a></span><span class="op">(</span><span class="va">n_time</span><span class="op">)</span></span>
+<span>  <span class="va">noise</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">innovations</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span></span>
 <span>  <span class="kw">for</span> <span class="op">(</span><span class="va">t</span> <span class="kw">in</span> <span class="fl">2</span><span class="op">:</span><span class="va">n_time</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">noise</span><span class="op">[</span><span class="va">t</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">ar_coef</span> <span class="op">*</span> <span class="va">noise</span><span class="op">[</span><span class="va">t</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">ar_coef</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span> <span class="op">*</span> <span class="va">noise</span><span class="op">[</span><span class="va">t</span><span class="op">]</span></span>
+<span>    <span class="va">noise</span><span class="op">[</span><span class="va">t</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">ar_coef</span> <span class="op">*</span> <span class="va">noise</span><span class="op">[</span><span class="va">t</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">ar_coef</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span> <span class="op">*</span> <span class="va">innovations</span><span class="op">[</span><span class="va">t</span><span class="op">]</span></span>
 <span>  <span class="op">}</span></span>
+<span></span>
 <span>  <span class="va">Y</span><span class="op">[</span>, <span class="va">v</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">Y</span><span class="op">[</span>, <span class="va">v</span><span class="op">]</span> <span class="op">+</span> <span class="va">noise</span></span>
 <span><span class="op">}</span></span>
 <span></span>
@@ -249,7 +255,7 @@ vascular properties:</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Voxels:"</span>, <span class="va">n_vox</span>, <span class="st">"\n"</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   Voxels: 5</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Signal-to-noise ratio:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">var</a></span><span class="op">(</span><span class="va">Y</span><span class="op">[</span>,<span class="fl">1</span><span class="op">]</span> <span class="op">-</span> <span class="va">noise</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">var</a></span><span class="op">(</span><span class="va">noise</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   Signal-to-noise ratio: 3.06</span></span></code></pre></div>
+<span><span class="co">#&gt;   Signal-to-noise ratio: 3.62</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
@@ -277,13 +283,11 @@ Let’s see what happens:</p>
 <span><span class="co">#&gt; Standard LSS beta estimates (first 3 trials, all voxels):</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">standard_betas</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span>, <span class="op">]</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;           V1   V2   V3   V4   V5</span></span>
-<span><span class="co">#&gt; Trial_1 0.72 1.69 0.84 1.07 0.75</span></span>
-<span><span class="co">#&gt; Trial_2 1.03 1.19 1.22 0.64 0.94</span></span>
-<span><span class="co">#&gt; Trial_3 1.21 0.81 0.55 0.91 0.69</span></span></code></pre></div>
-<p>These estimates assume every voxel has the same HRF shape. When this
-assumption is violated, we may get biased estimates, particularly for
-voxels whose true HRF deviates substantially from the canonical
-form.</p>
+<span><span class="co">#&gt; Trial_1 0.57 1.59 0.71 0.93 0.61</span></span>
+<span><span class="co">#&gt; Trial_2 0.90 1.05 1.11 0.49 0.81</span></span>
+<span><span class="co">#&gt; Trial_3 1.13 0.68 0.42 0.79 0.53</span></span></code></pre></div>
+<p>Standard LSS treats every voxel as if it shared the same HRF, so
+deviations from that template translate into biased betas.</p>
 </div>
 <div class="section level2">
 <h2 id="estimating-voxel-specific-hrfs">Estimating Voxel-Specific HRFs<a class="anchor" aria-label="anchor" href="#estimating-voxel-specific-hrfs"></a>
@@ -321,10 +325,10 @@ and its dispersion derivative (capturing changes in width):</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Estimated HRF basis weights (3 bases x"</span>, <span class="va">n_vox</span>, <span class="st">"voxels):\n"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Estimated HRF basis weights (3 bases x 5 voxels):</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">hrf_weights</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;       [,1]  [,2]  [,3] [,4]  [,5]</span></span>
-<span><span class="co">#&gt; [1,]  0.92  1.07  0.87 1.12  1.03</span></span>
-<span><span class="co">#&gt; [2,] -0.01 -0.05 -0.04 0.13 -0.25</span></span>
-<span><span class="co">#&gt; [3,] -0.23 -0.01  0.35 0.36 -0.05</span></span>
+<span><span class="co">#&gt;       [,1]  [,2]  [,3]  [,4]  [,5]</span></span>
+<span><span class="co">#&gt; [1,]  1.21  1.37  1.12  1.42  1.31</span></span>
+<span><span class="co">#&gt; [2,] -1.80 -1.91 -1.57 -1.78 -1.99</span></span>
+<span><span class="co">#&gt; [3,]  1.45  1.73  1.78  2.15  1.58</span></span>
 <span></span>
 <span><span class="co"># Normalize weights (optional, for interpretation)</span></span>
 <span><span class="va">hrf_weights_norm</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sweep.html" class="external-link">sweep</a></span><span class="op">(</span><span class="va">hrf_weights</span>, <span class="fl">2</span>, <span class="va">hrf_weights</span><span class="op">[</span><span class="fl">1</span>,<span class="op">]</span>, <span class="st">"/"</span><span class="op">)</span></span>
@@ -332,15 +336,13 @@ and its dispersion derivative (capturing changes in width):</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Normalized weights (relative to canonical):</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">hrf_weights_norm</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;       [,1]  [,2]  [,3] [,4]  [,5]</span></span>
-<span><span class="co">#&gt; [1,]  1.00  1.00  1.00 1.00  1.00</span></span>
-<span><span class="co">#&gt; [2,] -0.01 -0.04 -0.05 0.12 -0.24</span></span>
-<span><span class="co">#&gt; [3,] -0.25 -0.01  0.40 0.32 -0.05</span></span></code></pre></div>
-<p>The weights tell us how each voxel’s HRF differs from the canonical
-shape. A positive temporal derivative weight suggests a later peak,
-while a positive dispersion derivative indicates a wider response. These
-estimates capture the unique hemodynamic characteristics of each
-voxel.</p>
+<span><span class="co">#&gt;       [,1]  [,2]  [,3]  [,4]  [,5]</span></span>
+<span><span class="co">#&gt; [1,]  1.00  1.00  1.00  1.00  1.00</span></span>
+<span><span class="co">#&gt; [2,] -1.49 -1.39 -1.41 -1.25 -1.53</span></span>
+<span><span class="co">#&gt; [3,]  1.20  1.26  1.59  1.51  1.21</span></span></code></pre></div>
+<p>The basis weights describe latency and width shifts relative to the
+canonical HRF: the temporal derivative tracks peak timing and the
+dispersion derivative tracks response width.</p>
 </div>
 <div class="section level2">
 <h2 id="applying-voxel-specific-hrfs-in-lss">Applying Voxel-Specific HRFs in LSS<a class="anchor" aria-label="anchor" href="#applying-voxel-specific-hrfs-in-lss"></a>
@@ -384,9 +386,9 @@ trial-wise estimation:</p>
 <span><span class="co">#&gt; Voxel-wise HRF LSS beta estimates (first 3 trials, all voxels):</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">voxel_betas</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span>, <span class="op">]</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;      [,1] [,2] [,3] [,4] [,5]</span></span>
-<span><span class="co">#&gt; [1,] 0.74 1.57 1.06 1.04 0.74</span></span>
-<span><span class="co">#&gt; [2,] 1.07 1.11 1.49 0.63 0.90</span></span>
-<span><span class="co">#&gt; [3,] 1.28 0.75 0.67 0.85 0.69</span></span></code></pre></div>
+<span><span class="co">#&gt; [1,] 0.81 1.30 1.01 0.94 0.74</span></span>
+<span><span class="co">#&gt; [2,] 1.00 1.04 1.25 0.56 0.80</span></span>
+<span><span class="co">#&gt; [3,] 1.20 0.77 0.57 0.94 0.68</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="the-oasis-alternative">The OASIS Alternative<a class="anchor" aria-label="anchor" href="#the-oasis-alternative"></a>
@@ -424,12 +426,11 @@ estimation process, often with improved computational efficiency:</p>
 <span><span class="co">#&gt; OASIS beta estimates (canonical component, first 3 trials):</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">oasis_canonical</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span>, <span class="op">]</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;           V1   V2   V3   V4   V5</span></span>
-<span><span class="co">#&gt; Trial_1 0.73 1.48 0.98 1.29 0.75</span></span>
-<span><span class="co">#&gt; Trial_4 1.03 1.14 1.24 0.66 0.86</span></span>
-<span><span class="co">#&gt; Trial_7 1.05 0.87 0.53 0.91 0.72</span></span></code></pre></div>
-<p>OASIS’s integrated approach often provides more stable estimates,
-particularly in designs with closely spaced trials where traditional
-two-stage approaches might struggle with collinearity.</p>
+<span><span class="co">#&gt; Trial_1 0.76 1.64 0.99 1.38 0.76</span></span>
+<span><span class="co">#&gt; Trial_4 1.08 1.23 1.32 0.69 0.92</span></span>
+<span><span class="co">#&gt; Trial_7 1.24 0.96 0.54 1.03 0.70</span></span></code></pre></div>
+<p>OASIS handles the HRF expansion and LSS solve in one pass, which
+limits redundant projections in dense event-related designs.</p>
 </div>
 <div class="section level2">
 <h2 id="evaluating-the-approaches">Evaluating the Approaches<a class="anchor" aria-label="anchor" href="#evaluating-the-approaches"></a>
@@ -456,9 +457,9 @@ beta values we used to generate our synthetic data:</p>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">comparison</span><span class="op">)</span></span>
 <span><span class="co">#&gt;           Method Correlation  RMSE</span></span>
-<span><span class="co">#&gt; 1   Standard LSS       0.859 0.177</span></span>
-<span><span class="co">#&gt; 2 Voxel-wise HRF       0.815 0.190</span></span>
-<span><span class="co">#&gt; 3          OASIS       0.829 0.203</span></span>
+<span><span class="co">#&gt; 1   Standard LSS       0.875 0.249</span></span>
+<span><span class="co">#&gt; 2 Voxel-wise HRF       0.847 0.197</span></span>
+<span><span class="co">#&gt; 3          OASIS       0.877 0.207</span></span>
 <span></span>
 <span><span class="co"># Visualization</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">3</span><span class="op">)</span>, mar <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">4</span>, <span class="fl">4</span>, <span class="fl">3</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
@@ -490,49 +491,26 @@ beta values we used to generate our synthetic data:</p>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">"topleft"</span>, legend <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="st">"Voxel"</span>, <span class="fl">1</span><span class="op">:</span><span class="va">n_vox</span><span class="op">)</span>,</span>
 <span>       col <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_vox</span>, pch <span class="op">=</span> <span class="fl">19</span>, cex <span class="op">=</span> <span class="fl">0.8</span><span class="op">)</span></span></code></pre></div>
 <p><img src="voxel-wise-hrf_files/figure-html/compare-methods-1.png" width="672"></p>
-<p>The scatter plots reveal how accounting for HRF variability can
-improve beta estimation accuracy. Points closer to the diagonal line
-indicate better recovery of the true values.</p>
+<p>Points closer to the diagonal line indicate better recovery of the
+true betas.</p>
 </div>
 <div class="section level2">
 <h2 id="when-to-consider-voxel-wise-hrf-modeling">When to Consider Voxel-wise HRF Modeling<a class="anchor" aria-label="anchor" href="#when-to-consider-voxel-wise-hrf-modeling"></a>
 </h2>
-<p>The decision to use voxel-wise HRF modeling involves balancing
-increased model flexibility against computational cost and the risk of
-overfitting. Through our experience and the literature, several
-scenarios particularly benefit from this approach.</p>
-<p>When analyzing data from different brain regions with known vascular
-differences, such as comparing motor and visual cortex, accounting for
-HRF variability becomes important. The vascular architecture differs
-substantially across cortical areas, leading to systematic differences
-in the hemodynamic response that can bias standard analyses if
-ignored.</p>
-<p>Clinical populations present another compelling use case. Aging,
-neurological disorders, and psychiatric conditions can all affect
-neurovascular coupling. Even medications can alter the hemodynamic
-response. In these cases, assuming a canonical HRF derived from young,
-healthy adults may lead to systematic misestimation of neural
-activity.</p>
-<p>The advent of high-resolution fMRI has revealed fine-scale variations
-in the hemodynamic response. Sub-millimeter resolution can distinguish
-between cortical layers and columns, each potentially having distinct
-vascular properties. At these scales, assuming spatial homogeneity of
-the HRF becomes increasingly untenable.</p>
-<p>Long experimental sessions introduce temporal considerations.
-Habituation, fatigue, and attention fluctuations can cause the
-hemodynamic response to evolve over time. Voxel-wise approaches that can
-adapt to these changes may provide more accurate estimates throughout
-the session.</p>
+<p>Use voxel-wise HRF modeling when: - regions differ in vascular
+architecture (e.g., motor vs. visual cortex); - cohorts show altered
+neurovascular coupling (aging, clinical populations, medication
+effects); - high-resolution acquisitions expose layer or column specific
+responses; - sessions are long enough for HRF characteristics to drift
+over time.</p>
 </div>
 <div class="section level2">
 <h2 id="computational-strategies-for-large-scale-analysis">Computational Strategies for Large-Scale Analysis<a class="anchor" aria-label="anchor" href="#computational-strategies-for-large-scale-analysis"></a>
 </h2>
-<p>While voxel-wise HRF modeling offers theoretical advantages, it can
-be computationally demanding when applied to whole-brain data. The
-package provides several strategies to make this feasible:</p>
+<p>Whole-brain analyses are expensive, so match the backend to the
+workload:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># For large datasets, use optimized backends</span></span>
-<span><span class="co"># C++ backend for medium-sized data</span></span>
+<code class="sourceCode R"><span><span class="co"># C++ backend for medium-sized data</span></span>
 <span><span class="va">betas_cpp</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, method <span class="op">=</span> <span class="st">"cpp_optimized"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># For very large data with multiple cores</span></span>
@@ -541,82 +519,50 @@ package provides several strategies to make this feasible:</p>
 <span><span class="co"># OASIS method is often fastest for complex designs</span></span>
 <span><span class="va">betas_oasis</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, X <span class="op">=</span> <span class="cn">NULL</span>, method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
 <span>                   oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>design_spec <span class="op">=</span> <span class="va">design_spec</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p>The choice of backend depends on your data size and computational
-resources. For exploratory analyses on a subset of regions, the standard
-R implementation may suffice. When scaling to whole-brain analysis with
-hundreds of thousands of voxels, the C++ backend or OASIS method become
-essential.</p>
+<p>Choose the backend according to data size and available hardware: R
+implementations work for pilot subsets, while whole-brain studies
+typically require the optimized C++ path or OASIS.</p>
 </div>
 <div class="section level2">
 <h2 id="choosing-the-right-method-for-your-study">Choosing the Right Method for Your Study<a class="anchor" aria-label="anchor" href="#choosing-the-right-method-for-your-study"></a>
 </h2>
-<p>Selecting between standard LSS, voxel-wise HRF LSS, and OASIS depends
-on your specific research context and constraints. Standard LSS remains
-appropriate when you have reason to believe the HRF is relatively
-homogeneous across your regions of interest, when computational
-resources are limited, or when you need the simplicity of a single-stage
-approach for easier interpretation.</p>
-<p>Voxel-wise HRF modeling becomes valuable when you expect spatial HRF
-variability due to anatomical or pathological factors, when you need
-maximum accuracy for pattern classification or decoding analyses, or
-when pilot data suggests substantial HRF differences across regions or
-subjects.</p>
-<p>OASIS offers particular advantages for rapid event-related designs
-with substantial response overlap, when you want to explore different
-HRF models without committing to a specific parameterization, or when
-you need the computational efficiency of a unified estimation framework.
-Its built-in ridge regression also helps with designs that might
-otherwise suffer from collinearity.</p>
+<p>Method selection guidelines: - <code><a href="../reference/lss.html">lss()</a></code> with a canonical
+HRF is sufficient when responses are expected to be homogeneous and
+compute needs are modest; - voxel-wise HRF LSS prioritizes accuracy when
+anatomy or pathology implies heterogeneous responses; - OASIS is
+preferred for rapid-event designs or when you want a single-step solve
+with HRF flexibility and ridge control.</p>
 </div>
 <div class="section level2">
 <h2 id="practical-recommendations">Practical Recommendations<a class="anchor" aria-label="anchor" href="#practical-recommendations"></a>
 </h2>
-<p>Based on our experience implementing and using these methods, we
-offer several practical recommendations. First, always validate your HRF
-assumptions using independent data when possible. This might involve
-using separate localizer runs to estimate HRF parameters or comparing
-different models on held-out data.</p>
-<p>Second, consider the signal-to-noise ratio in your data. Voxel-wise
-HRF estimation requires sufficient data quality to reliably estimate
-additional parameters. In low SNR situations, the bias from assuming a
-canonical HRF might be preferable to the variance introduced by
-estimating voxel-specific parameters.</p>
-<p>Third, remember that more complex models aren’t always better. Start
-with standard approaches and add complexity only when justified by your
-research questions or when simpler models show clear inadequacies.</p>
-<p>Finally, document your choices carefully. HRF modeling decisions can
-substantially affect results, so transparency about these choices is
-essential for reproducibility and interpretation.</p>
+<p>Practical recommendations: - validate HRF assumptions with
+independent data or held-out runs; - check that the signal-to-noise
+ratio supports estimation of additional HRF parameters; - add complexity
+only after simpler models prove insufficient; - record HRF modeling
+choices for reproducibility.</p>
 </div>
 <div class="section level2">
 <h2 id="looking-forward">Looking Forward<a class="anchor" aria-label="anchor" href="#looking-forward"></a>
 </h2>
-<p>This vignette has demonstrated how voxel-wise HRF modeling can
-improve the accuracy of trial-wise beta estimation in fMRI analysis. By
-accounting for spatial variability in the hemodynamic response, these
-methods help separate neural from vascular sources of signal
-variation.</p>
-<p>The field continues to evolve, with ongoing research into adaptive
-HRF estimation, nonparametric approaches, and methods for handling even
-more complex sources of variability. The <code>fmrilss</code> package
-provides a flexible framework for incorporating these advances as they
-emerge.</p>
-<p>For deeper exploration of the topics covered here, we recommend
-reviewing the getting started vignette for LSS fundamentals, the OASIS
-method vignette for advanced features of that approach, and consulting
-the <code>fmrihrf</code> package documentation for details on available
-HRF models. The theoretical foundations can be found in Mumford et
-al. (2012) for LSS basics and the growing literature on HRF variability
-in fMRI.</p>
+<p>Voxel-wise HRF modeling improves trial-wise beta estimation by
+accounting for spatial variability in the hemodynamic response. The
+fmrilss pipeline is designed to incorporate newer HRF estimation
+strategies as they appear in the literature.</p>
 </div>
 <div class="section level2">
 <h2 id="further-reading">Further Reading<a class="anchor" aria-label="anchor" href="#further-reading"></a>
 </h2>
-<p>See <code><a href="../articles/getting_started.html">vignette("getting_started")</a></code> for LSS basics See
-<code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code> for advanced OASIS features
-Consult the <code>fmrihrf</code> package documentation for HRF model
-options Review Mumford et al. (2012) for theoretical background on
-LSS</p>
+<ul>
+<li>
+<code><a href="../articles/getting_started.html">vignette("getting_started")</a></code> for LSS basics</li>
+<li>
+<code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code> for advanced OASIS
+features</li>
+<li>
+<code><a href="https://bbuchsbaum.github.io/fmrihrf/reference/fmrihrf-package.html" class="external-link">?fmrihrf</a></code> for HRF model options</li>
+<li>Mumford et al. (2012) for core LSS theory</li>
+</ul>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

@@ -62,7 +62,7 @@
                         <h4 data-toc-skip class="author">fmrilss
 Development Team</h4>
             
-            <h4 data-toc-skip class="date">2025-09-15</h4>
+            <h4 data-toc-skip class="date">2025-09-24</h4>
       
 
       <div class="d-none name"><code>oasis_method.Rmd</code></div>
@@ -73,30 +73,25 @@ Development Team</h4>
 <div class="section level2">
 <h2 id="the-computational-challenge-of-modern-fmri">The Computational Challenge of Modern fMRI<a class="anchor" aria-label="anchor" href="#the-computational-challenge-of-modern-fmri"></a>
 </h2>
-<p>Imagine you’re working with a cutting-edge fMRI dataset:
-sub-millimeter resolution, thousands of trials, complex overlapping
-designs, and you need trial-specific estimates for each of hundreds of
-thousands of voxels. The standard LSS approach, while theoretically
-sound, requires fitting separate models for each trial at each
-voxel—potentially millions of model fits. With large datasets, this
-computational burden becomes significant. What if there was a way to
-achieve the same theoretical results more efficiently?</p>
-<p>Enter OASIS—Optimized Analytic Single-pass Inverse Solution—a method
-that reimagines how we compute LSS estimates. Rather than iterating
-through trials one by one, OASIS leverages clever mathematical
-reformulations to compute all trial estimates simultaneously in a
-single, highly optimized pass. But OASIS is more than just a speed
-improvement; it brings sophisticated features like automatic HRF
-estimation, ridge regularization for numerical stability, and seamless
-handling of multi-basis HRF models that would be cumbersome to implement
-in traditional frameworks.</p>
-<p>This vignette assumes you’re comfortable with the basic LSS concepts
-from our getting started guide, understand HRF models and basis
-functions from working with neuroimaging data, have some familiarity
-with ridge regression and regularization concepts, and know the basics
-of the <code>fmrihrf</code> package for HRF modeling. With this
-foundation, we’ll explore how OASIS can transform your approach to
-trial-wise beta estimation.</p>
+<p>Modern fMRI datasets with sub-millimeter resolution and thousands of
+trials require millions of model fits when using standard LSS
+approaches. For datasets with 100,000 voxels and 500 trials, traditional
+LSS requires 50 million separate GLM fits, each involving matrix
+inversion and parameter estimation.</p>
+<p>OASIS (Optimized Analytic Single-pass Inverse Solution) addresses
+this computational challenge through mathematical reformulation. Instead
+of iterating through trials sequentially, OASIS exploits the shared
+structure across LSS models to compute all trial estimates
+simultaneously. The method reduces computational complexity from O(NT³)
+to O(T³ + NTV) where N = number of trials, T = timepoints, and V =
+voxels.</p>
+<p>OASIS also provides: automatic HRF estimation with multi-basis
+functions, ridge regularization for numerical stability, efficient
+handling of complex experimental designs, and integration with
+prewhitening for autocorrelation correction.</p>
+<p>Prerequisites: familiarity with LSS concepts, HRF models and basis
+functions, ridge regression principles, and the <code>fmrihrf</code>
+package.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/" class="external-link">fmrihrf</a></span><span class="op">)</span></span>
 <span><span class="co">#&gt; </span></span>
@@ -167,16 +162,15 @@ trial-wise beta estimation.</p>
 <div class="section level2">
 <h2 id="understanding-the-oasis-innovation">Understanding the OASIS Innovation<a class="anchor" aria-label="anchor" href="#understanding-the-oasis-innovation"></a>
 </h2>
-<p>The key algebra that OASIS leverages is the special structure of LSS:
-although naïvely it looks like N separate GLMs (one per trial), the
-per‑trial designs share components that let you factor the computation
-and reuse them across trials. Note this factoring is already exploited
-by fmrilss’s optimized backends (e.g., the fused single‑pass solver that
-residualizes once and reuses totals and cross‑products across trials).
-OASIS uses the same core solve but wraps it in a richer, HRF-aware
-workflow: automatic design construction from event specs, built-in ridge
-scaling, AR(1) whitening, SE/diagnostic reporting, and native support
-for multi-basis or FIR HRFs.</p>
+<p>OASIS exploits the mathematical structure of LSS: the N separate GLMs
+share computational components that can be factored and reused across
+trials. Note this factoring is already exploited by fmrilss’s optimized
+backends (e.g., the fused single‑pass solver that residualizes once and
+reuses totals and cross‑products across trials). OASIS uses the same
+core solve but wraps it in a richer, HRF-aware workflow: automatic
+design construction from event specs, built-in ridge scaling, AR(1)
+whitening, SE/diagnostic reporting, and native support for multi-basis
+or FIR HRFs.</p>
 <p>Beyond computational efficiency, OASIS adds features that the generic
 LSS path does not expose: built‑in ridge regularization (absolute and
 fractional) on the two‑regressor Gram per trial, optional AR(1)
@@ -533,10 +527,7 @@ efficiently evaluate multiple candidates. This exploratory approach
 helps identify the optimal HRF parameters for your specific dataset and
 brain regions:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Source HRF recovery functions (from previous vignette)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"../R/oasis_hrf_recovery.R"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Create a grid of HRF models with varying parameters</span></span>
+<code class="sourceCode R"><span><span class="co"># Create a grid of HRF models with varying parameters</span></span>
 <span><span class="va">hrf_grid</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/create_lwu_grid.html">create_lwu_grid</a></span><span class="op">(</span></span>
 <span>  tau_range <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">4</span>, <span class="fl">8</span><span class="op">)</span>,      <span class="co"># Peak time</span></span>
 <span>  sigma_range <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">3.5</span><span class="op">)</span>,  <span class="co"># Width</span></span>
@@ -615,8 +606,8 @@ hemodynamic response in your specific experimental context.</p>
 <h2 id="handling-complex-experimental-designs">Handling Complex Experimental Designs<a class="anchor" aria-label="anchor" href="#handling-complex-experimental-designs"></a>
 </h2>
 <p>Real experiments often involve multiple conditions, with some trials
-of interest and others serving as nuisance events. OASIS elegantly
-handles these complex scenarios:</p>
+of interest and others serving as nuisance events. OASIS handles these
+scenarios through structured condition specification:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create design with two conditions</span></span>
 <span><span class="va">onsets_cond1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">280</span>, by <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
@@ -791,15 +782,15 @@ dataset sizes:</p>
 <span><span class="va">benchmark_display</span><span class="op">[</span><span class="va">numeric_cols</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">benchmark_display</span><span class="op">[</span><span class="va">numeric_cols</span><span class="op">]</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">x</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">benchmark_display</span><span class="op">)</span></span>
 <span><span class="co">#&gt;            Size Timepoints Voxels Trials R_Optimized CPP_Optimized OASIS</span></span>
-<span><span class="co">#&gt; elapsed   small        300    500     30       0.005         0.030 0.003</span></span>
-<span><span class="co">#&gt; elapsed1 medium        400   2000     40       0.015         0.264 0.010</span></span>
-<span><span class="co">#&gt; elapsed2  large        600   8000     60       0.076         0.280 0.054</span></span>
-<span><span class="co">#&gt; elapsed3 xlarge        800  16000     60       0.171         0.274 0.130</span></span>
+<span><span class="co">#&gt; elapsed   small        300    500     30       0.005         0.013 0.003</span></span>
+<span><span class="co">#&gt; elapsed1 medium        400   2000     40       0.014         0.075 0.008</span></span>
+<span><span class="co">#&gt; elapsed2  large        600   8000     60       0.075         0.357 0.049</span></span>
+<span><span class="co">#&gt; elapsed3 xlarge        800  16000     60       0.162         0.285 0.117</span></span>
 <span><span class="co">#&gt;          OASIS_with_design Speedup_vs_R Speedup_vs_CPP Design_Build_Overhead</span></span>
-<span><span class="co">#&gt; elapsed              0.017        1.667         10.000                 0.014</span></span>
-<span><span class="co">#&gt; elapsed1             0.033        1.500         26.400                 0.023</span></span>
-<span><span class="co">#&gt; elapsed2             0.089        1.407          5.185                 0.035</span></span>
-<span><span class="co">#&gt; elapsed3             0.173        1.315          2.108                 0.043</span></span>
+<span><span class="co">#&gt; elapsed              0.016        1.667          4.333                 0.013</span></span>
+<span><span class="co">#&gt; elapsed1             0.031        1.750          9.375                 0.023</span></span>
+<span><span class="co">#&gt; elapsed2             0.082        1.531          7.286                 0.033</span></span>
+<span><span class="co">#&gt; elapsed3             0.159        1.385          2.436                 0.042</span></span>
 <span></span>
 <span><span class="co"># Visualize scaling</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
@@ -1056,7 +1047,7 @@ blocks:</p>
 <p>fMRI data exhibits temporal autocorrelation that can bias standard
 errors. OASIS can apply AR(1) prewhitening:</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># OASIS with AR(1) prewhitening</span></span>
+<code class="sourceCode R"><span><span class="co"># OASIS with AR(1) prewhitening using new fmriAR integration</span></span>
 <span><span class="va">beta_whitened</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>  Y <span class="op">=</span> <span class="va">Y</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">]</span>,</span>
 <span>  X <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -1065,17 +1056,104 @@ errors. OASIS can apply AR(1) prewhitening:</p>
 <span>    design_spec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>      sframe <span class="op">=</span> <span class="va">sframe</span>,</span>
 <span>      cond <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>onsets <span class="op">=</span> <span class="va">onsets</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">]</span>, hrf <span class="op">=</span> <span class="va">HRF_SPMG1</span>, span <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
-<span>    <span class="op">)</span>,</span>
-<span>    whiten <span class="op">=</span> <span class="st">"ar1"</span>  <span class="co"># Enable AR(1) whitening</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    method <span class="op">=</span> <span class="st">"ar"</span>,</span>
+<span>    p <span class="op">=</span> <span class="fl">1</span>  <span class="co"># AR(1) model</span></span>
 <span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"AR(1) whitening applied\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; AR(1) whitening applied</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"AR(1) whitening applied using fmriAR\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; AR(1) whitening applied using fmriAR</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Beta dimensions:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_whitened</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   Beta dimensions: 10 10</span></span>
+<span></span>
+<span><span class="co"># Advanced: Auto-select AR order</span></span>
+<span><span class="va">beta_auto_ar</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>  Y <span class="op">=</span> <span class="va">Y</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">]</span>,</span>
+<span>  X <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
+<span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    design_spec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      sframe <span class="op">=</span> <span class="va">sframe</span>,</span>
+<span>      cond <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>onsets <span class="op">=</span> <span class="va">onsets</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">]</span>, hrf <span class="op">=</span> <span class="va">HRF_SPMG1</span>, span <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    method <span class="op">=</span> <span class="st">"ar"</span>,</span>
+<span>    p <span class="op">=</span> <span class="st">"auto"</span>,  <span class="co"># Automatically select optimal AR order</span></span>
+<span>    p_max <span class="op">=</span> <span class="fl">4</span>    <span class="co"># Maximum order to consider</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"\nAuto AR order selection applied\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Auto AR order selection applied</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Beta dimensions:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_auto_ar</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   Beta dimensions: 10 10</span></span></code></pre></div>
 <p>Prewhitening improves the validity of statistical inference,
 particularly for standard errors and hypothesis tests.</p>
+</div>
+<div class="section level3">
+<h3 id="advanced-prewhitening-with-fmriar">Advanced Prewhitening with fmriAR<a class="anchor" aria-label="anchor" href="#advanced-prewhitening-with-fmriar"></a>
+</h3>
+<p>The integration with fmriAR provides sophisticated noise modeling
+capabilities beyond simple AR(1):</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Voxel-specific AR parameters</span></span>
+<span><span class="va">beta_voxel_ar</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
+<span>  X <span class="op">=</span> <span class="va">X</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
+<span>  prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    method <span class="op">=</span> <span class="st">"ar"</span>,</span>
+<span>    p <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>    pooling <span class="op">=</span> <span class="st">"voxel"</span>  <span class="co"># Estimate separate AR(1) for each voxel</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Run-aware AR estimation for multi-run data</span></span>
+<span><span class="va">runs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, each <span class="op">=</span> <span class="va">n_timepoints</span><span class="op">/</span><span class="fl">2</span><span class="op">)</span></span>
+<span><span class="va">beta_run_ar</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
+<span>  X <span class="op">=</span> <span class="va">X</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
+<span>  prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    method <span class="op">=</span> <span class="st">"ar"</span>,</span>
+<span>    p <span class="op">=</span> <span class="st">"auto"</span>,</span>
+<span>    pooling <span class="op">=</span> <span class="st">"run"</span>,  <span class="co"># Separate parameters per run</span></span>
+<span>    runs <span class="op">=</span> <span class="va">runs</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># ARMA models for complex noise structure</span></span>
+<span><span class="va">beta_arma</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
+<span>  X <span class="op">=</span> <span class="va">X</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
+<span>  prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    method <span class="op">=</span> <span class="st">"arma"</span>,</span>
+<span>    p <span class="op">=</span> <span class="fl">2</span>,  <span class="co"># AR order</span></span>
+<span>    q <span class="op">=</span> <span class="fl">1</span>   <span class="co"># MA order</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Parcel-based pooling for spatial regularization</span></span>
+<span><span class="va">parcels</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/kmeans.html" class="external-link">kmeans</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span>, centers <span class="op">=</span> <span class="fl">10</span><span class="op">)</span><span class="op">$</span><span class="va">cluster</span>  <span class="co"># Example parcellation</span></span>
+<span><span class="va">beta_parcel</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
+<span>  X <span class="op">=</span> <span class="va">X</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
+<span>  prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    method <span class="op">=</span> <span class="st">"ar"</span>,</span>
+<span>    p <span class="op">=</span> <span class="st">"auto"</span>,</span>
+<span>    pooling <span class="op">=</span> <span class="st">"parcel"</span>,</span>
+<span>    parcels <span class="op">=</span> <span class="va">parcels</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>These advanced options provide better noise modeling for complex
+experimental designs and data structures.</p>
 </div>
 </div>
 <div class="section level2">
