@@ -122,15 +122,17 @@ for (v in 1:n_vox) {
 
   # Modify the HRF parameters
   # SPMG1 uses double gamma with peak around 5s and undershoot around 15s
-  voxel_hrfs[[v]] <- HRF(
+  voxel_hrfs[[v]] <- fmrihrf::HRF(
     fun = function(t) {
       # Shift the peak time
       t_shifted <- t - peak_shift
-      # Apply width scaling
-      base_response <- base_hrf$fun(t_shifted / width_scale) * width_scale
-      return(base_response)
+      # Apply width scaling (preserve area by multiplying by scale)
+      base_response <- base_hrf(t_shifted / width_scale) * width_scale
+      base_response
     },
-    name = paste0("voxel_", v, "_hrf")
+    name = paste0("voxel_", v, "_hrf"),
+    span = attr(base_hrf, "span"),
+    nbasis = attr(base_hrf, "nbasis")
   )
 }
 
