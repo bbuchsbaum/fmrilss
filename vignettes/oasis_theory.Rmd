@@ -15,6 +15,8 @@ knitr::opts_chunk$set(
   comment = "#>",
   fig.width = 8,
   fig.height = 6,
+  dev = "png",
+  dpi = 150,
   warning = FALSE,
   message = FALSE
 )
@@ -22,7 +24,7 @@ knitr::opts_chunk$set(
 
 ## Motivation
 
-Optimized Analytic Single-pass Inverse Solution (OASIS) extends Least Squares Separate (LSS) estimation through algebraic reformulation that enables single-pass computation of all trial estimates. This document provides the mathematical foundation and implementation details.
+Optimized Analytic Single-pass Inverse Solution (OASIS) extends Least Squares Separate (LSS) estimation through algebraic reformulation that enables single-pass computation of all trial estimates. For a single-basis HRF (K = 1) without ridge, OASIS reduces exactly to the closed-form LSS solution; the per‑trial 2x2 normal equations are the same. The value of OASIS is in batching those solves efficiently and generalizing the same algebra to multi‑basis HRFs (2Kx2K) with optional ridge and diagnostics. This document provides the mathematical foundation and implementation details.
 
 ### Computational Intuition
 
@@ -108,7 +110,7 @@ After residualising against nuisance regressors we define:
 - \(\alpha_j = \langle a_j, s - a_j \rangle\)
 - \(s_j = \|s - a_j\|^2\)
 
-Let \(n_{jv} = \langle a_j, RY_{\cdot v} \rangle\) and \(m_v = \langle s, RY_{\cdot v} \rangle\). The pair \((\beta_j, \gamma_j)\) solving the 2×2 system for trial \(j\) and voxel \(v\) is obtained from
+Let \(n_{jv} = \langle a_j, RY_{\cdot v} \rangle\) and \(m_v = \langle s, RY_{\cdot v} \rangle\). The pair \((\beta_j, \gamma_j)\) solving the 2x2 system for trial \(j\) and voxel \(v\) is obtained from
 
 \[
 G_j \begin{bmatrix} \beta_{jv} \\ \gamma_{jv} \end{bmatrix} = \begin{bmatrix} n_{jv} \\ m_v - n_{jv} \end{bmatrix},
@@ -170,7 +172,7 @@ SY_v - N1_{jv}
 \end{bmatrix},
 \]
 
-where \(B_{jv} \in \mathbb{R}^K\). `oasisk_betas()` solves this 2K×2K system via Cholesky factorisation. Ridge again adds \(\lambda_x I\) and \(\lambda_b I\) to the block diagonals. Compared to the single-basis path, only the shapes of the cached matrices differ; the solve is still analytic per trial/voxel block.
+where \(B_{jv} \in \mathbb{R}^K\). `oasisk_betas()` solves this 2Kx2K system via Cholesky factorisation. Ridge again adds \(\lambda_x I\) and \(\lambda_b I\) to the block diagonals. Compared to the single-basis path, only the shapes of the cached matrices differ; the solve is still analytic per trial/voxel block.
 
 The companion `oasisk_betas_se()` extends the SSE/variance calculation to the multi-basis case, using the same building blocks.
 
@@ -224,7 +226,7 @@ The multi-basis path swaps steps 2–5 for their block equivalents. In both case
 - Projection / whitening: \(\mathcal{O}(T V K_z)\) arithmetic, \(\mathcal{O}(T K_z)\) memory for confounds
 - Precomputation: \(\mathcal{O}(T N)\)
 - Products (blocked): \(\mathcal{O}(T V)\) with block size tuning
-- Closed-form solves: \(\mathcal{O}(N V)\) with negligible constants (2×2 or 2K×2K systems)
+- Closed-form solves: \(\mathcal{O}(N V)\) with negligible constants (2x2 or 2Kx2K systems)
 
 Compared to classical LSS (\(N\) separate regressions), OASIS shaves off repeated projections and linear solves, yielding substantial speedups when \(N\) or \(V\) is large.
 

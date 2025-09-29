@@ -14,7 +14,11 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.width = 7,
-  fig.height = 5
+  fig.height = 5,
+  dev = "png",
+  dpi = 150,
+  warning = FALSE,
+  message = FALSE
 )
 ```
 
@@ -28,11 +32,11 @@ The Least Squares Separate (LSS) approach (Mumford et al., 2012) addresses this 
 
 This vignette assumes familiarity with fMRI general linear models, design matrices, hemodynamic response functions, and R matrix operations.
 
-Standard GLM analysis (Least Squares All, LSA) estimates all trial coefficients simultaneously by solving: β = (X'X)^(-1)X'Y. When trials occur in rapid succession, the design matrix columns exhibit high correlation (condition number > 30), producing unstable estimates with inflated variance.
+Standard GLM analysis (Least Squares All, LSA) estimates all trial coefficients simultaneously by solving: beta = (X'X)^(-1)X'Y. When trials occur in rapid succession, the design matrix columns exhibit high correlation (condition number > 30), producing unstable trial estimates with inflated variance.
 
 LSS reformulates the problem by fitting N separate models, where N is the number of trials. For trial i, the design matrix contains: (1) a regressor for trial i, (2) a single regressor aggregating all other trials, and (3) any nuisance or baseline regressors. This reduces the effective condition number and produces more stable single-trial estimates. Mathematically, for trial i:
 
-β_i = (X_i'X_i)^(-1)X_i'Y
+beta_i = (X_i'X_i)^(-1)X_i'Y
 
 where X_i = [x_i | Σ(j≠i) x_j | Z | N], with x_i the trial regressor, Z experimental covariates, and N nuisance regressors.
 
@@ -79,7 +83,7 @@ Matrix `X` contains trial regressors (here using box-car functions for simplicit
 
 The following visualizations show experimental regressors (excluding intercept) and nuisance regressors, standardized for comparability.
 
-```{r plot-regressors, fig.width=8, fig.height=6, echo=FALSE}
+```{r plot-regressors, fig.width=8, fig.height=6, echo=FALSE, eval=Sys.getenv("IN_PKGDOWN") != "true"}
 # Pretty plotting helper
 plot_regressors <- function(Z, Nuisance) {
   # Ensure Z has column names
@@ -94,7 +98,17 @@ plot_regressors <- function(Z, Nuisance) {
   # Standardize (z-score) for comparability
   N_std <- scale(Nuisance)
 
-  if (requireNamespace("ggplot2", quietly = TRUE)) {
+  if (requireNamespace("ggplot2", quietly = TRUE) && !isTRUE(try(pkgdown::in_pkgdown(), silent = TRUE))) {
+    # Guard against intermittent graphics device/font issues under pkgdown HTML
+    safe_print <- function(plot_expr, fallback) {
+      tryCatch({
+        p <- plot_expr()
+        print(p)
+      }, error = function(e) {
+        message("ggplot render failed; using base fallback: ", conditionMessage(e))
+        fallback()
+      })
+    }
     ggplot2::theme_set(ggplot2::theme_minimal(base_size = 12))
 
     # Experimental regressors (standardized)
@@ -105,14 +119,24 @@ plot_regressors <- function(Z, Nuisance) {
         Regressor = rep(colnames(z_std), each = nrow(z_std)),
         Value = as.vector(z_std)
       )
-      pz <- ggplot2::ggplot(z_df, ggplot2::aes(Time, Value, color = Regressor)) +
-        ggplot2::geom_line(linewidth = 0.9) +
-        ggplot2::labs(
-          title = "Experimental regressors (standardized; intercept omitted)",
-          x = "Time (TR)", y = "Z-score"
-        ) +
-        ggplot2::theme(legend.position = "top", legend.title = ggplot2::element_blank())
-      print(pz)
+      safe_print(
+        plot_expr = function() {
+          ggplot2::ggplot(z_df, ggplot2::aes(Time, Value, color = Regressor)) +
+            ggplot2::geom_line(linewidth = 0.9) +
+            ggplot2::labs(
+              title = "Experimental regressors (standardized; intercept omitted)",
+              x = "Time (TR)", y = "Z-score"
+            ) +
+            ggplot2::theme(legend.position = "top", legend.title = ggplot2::element_blank())
+        },
+        fallback = function() {
+          op <- par(no.readonly = TRUE); on.exit(par(op), add = TRUE)
+          matplot(z_std, type = "l", lty = 1, lwd = 1,
+                  xlab = "Time (TR)", ylab = "Z-score",
+                  main = "Experimental regressors (standardized; intercept omitted)")
+          legend("topright", legend = colnames(z_std), col = seq_len(ncol(z_std)), lty = 1, bty = "n", cex = 0.8)
+        }
+      )
     }
 
     # Nuisance regressors (standardized), small multiples
@@ -121,15 +145,28 @@ plot_regressors <- function(Z, Nuisance) {
       Regressor = rep(paste0("N", seq_len(ncol(N_std))), each = nrow(N_std)),
       Value = as.vector(N_std)
     )
-    pn <- ggplot2::ggplot(n_df, ggplot2::aes(Time, Value)) +
-      ggplot2::geom_line(color = "#2c7fb8", linewidth = 0.6) +
-      ggplot2::facet_wrap(~ Regressor, ncol = 3) +
-      ggplot2::labs(
-        title = "Nuisance regressors (standardized)",
-        x = "Time (TR)", y = "Z-score"
-      ) +
-      ggplot2::theme(strip.background = ggplot2::element_rect(fill = "#f5f5f5", color = NA))
-    print(pn)
+    safe_print(
+      plot_expr = function() {
+        ggplot2::ggplot(n_df, ggplot2::aes(Time, Value)) +
+          ggplot2::geom_line(color = "#2c7fb8", linewidth = 0.6) +
+          ggplot2::facet_wrap(~ Regressor, ncol = 3) +
+          ggplot2::labs(
+            title = "Nuisance regressors (standardized)",
+            x = "Time (TR)", y = "Z-score"
+          ) +
+          ggplot2::theme(strip.background = ggplot2::element_rect(fill = "#f5f5f5", color = NA))
+      },
+      fallback = function() {
+        op <- par(no.readonly = TRUE); on.exit(par(op), add = TRUE)
+        par(mfrow = c(3, 2), mar = c(3, 3, 2, 1))
+        for (i in seq_len(ncol(N_std))) {
+          plot(N_std[, i], type = "l", col = "#2c7fb8", lwd = 1.5,
+               xlab = "Time (TR)", ylab = "Z-score", main = paste0("N", i))
+          abline(h = 0, col = "#cccccc", lty = 3)
+        }
+        par(mfrow = c(1, 1))
+      }
+    )
 
   } else {
     # Base plotting fallback
@@ -160,9 +197,9 @@ plot_regressors(Z, Nuisance)
 
 ### Single-Trial Regressors
 
-Trial regressor structure visualized as a time × trial heatmap:
+Trial regressor structure visualized as a time x trial heatmap:
 
-```{r plot-trial-regressors, fig.width=8, fig.height=4, echo=FALSE}
+```{r plot-trial-regressors, fig.width=8, fig.height=4, echo=FALSE, eval=Sys.getenv("IN_PKGDOWN") != "true"}
 if (requireNamespace("ggplot2", quietly = TRUE)) {
   dfX <- data.frame(
     Time = rep(seq_len(nrow(X)), times = ncol(X)),
@@ -172,7 +209,7 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
   pX <- ggplot2::ggplot(dfX, ggplot2::aes(Time, Trial, fill = Value)) +
     ggplot2::geom_tile() +
     ggplot2::scale_fill_viridis_c(option = "C") +
-    ggplot2::labs(title = "Single-trial regressors (time × trial)",
+    ggplot2::labs(title = "Single-trial regressors (time x trial)",
                   x = "Time (TR)", y = "Trial", fill = "Value") +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(legend.position = "right")
@@ -180,7 +217,7 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
 } else {
   op <- par(no.readonly = TRUE); on.exit(par(op), add = TRUE)
   image(t(X), col = hcl.colors(64, "BluGrn"), axes = FALSE,
-        main = "Single-trial regressors (time × trial)")
+        main = "Single-trial regressors (time x trial)")
   axis(1, at = c(0, 1), labels = c("0", nrow(X)))
   axis(2, at = c(0, 1), labels = c("1", ncol(X)))
   box()
@@ -212,6 +249,12 @@ The `lss()` function provides a clean, modern interface that adapts to your need
 beta_basic <- lss(Y, X)
 # The result is a trials-by-voxels matrix
 dim(beta_basic)
+```
+
+## Session Info
+
+```{r session-info, echo=FALSE}
+sessionInfo()
 ```
 
 For a more complete analysis that accounts for experimental effects and removes nuisance signals, we include our `Z` and `Nuisance` matrices. The function handles the nuisance regression efficiently, projecting these signals out of both the data and design matrix before estimating trial-specific betas:
@@ -274,7 +317,7 @@ This modular design allows seamless switching between backends without code chan
 
 Comparison between LSS and standard Least Squares All (LSA) methods:
 
-```{r lsa-comparison}
+```{r lsa-comparison, fig.alt="Beta distributions for LSS vs LSA (example voxel), with variance comparison across voxels."}
 # LSA: Standard GLM with all trials in one model
 beta_lsa <- lsa(Y, X, Z = Z, Nuisance = Nuisance)
 

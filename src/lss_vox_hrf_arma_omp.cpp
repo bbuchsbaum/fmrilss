@@ -6,17 +6,30 @@
 // [[Rcpp::depends(RcppArmadillo)]]
 using namespace Rcpp;
 
+// Safe coercion to base double matrix; falls back to as.matrix for S4 Matrix, etc.
+static Rcpp::NumericMatrix coerce_dense_matrix(SEXP x, int nr, int nc, const char* label) {
+  if (Rf_isMatrix(x) && TYPEOF(x) == REALSXP) {
+    Rcpp::NumericMatrix M(x);
+    if (M.nrow() != nr || M.ncol() != nc) {
+      Rcpp::stop("%s has shape %d x %d, expected %d x %d", label, M.nrow(), M.ncol(), nr, nc);
+    }
+    return M;
+  }
+  Rcpp::Function as_matrix("as.matrix");
+  Rcpp::NumericMatrix M = Rcpp::as<Rcpp::NumericMatrix>(as_matrix(x));
+  if (M.nrow() != nr || M.ncol() != nc) {
+    Rcpp::stop("%s has shape %d x %d, expected %d x %d", label, M.nrow(), M.ncol(), nr, nc);
+  }
+  return M;
+}
+
 // Convert an R list of matrices into a vector of Armadillo views (no copies).
 static std::vector<arma::Mat<double>> as_arma_list(const List& L, int expected_rows, int expected_cols) {
   const int K = L.size();
   std::vector<arma::Mat<double>> out;
   out.reserve(K);
   for (int k = 0; k < K; ++k) {
-    NumericMatrix Mk = as<NumericMatrix>(L[k]);
-    if (Mk.nrow() != expected_rows || Mk.ncol() != expected_cols) {
-      stop("basis_convolved[[%d]] has inconsistent dimensions: expected %d x %d, got %d x %d",
-           k + 1, expected_rows, expected_cols, Mk.nrow(), Mk.ncol());
-    }
+    Rcpp::NumericMatrix Mk = coerce_dense_matrix(L[k], expected_rows, expected_cols, "basis_convolved[[k]]");
     arma::Mat<double> Vk(Mk.begin(), Mk.nrow(), Mk.ncol(), /*copy_aux_mem=*/false, /*strict=*/true);
     out.push_back(Vk);
   }

@@ -22,7 +22,7 @@ List mixed_solve_internal(NumericVector y_in,
   // Identify non-NA indices
   std::vector<int> not_NA_indices;
   for (size_t i = 0; i < y_full.n_elem; ++i) {
-    if (!arma::is_finite(y_full[i])) continue;
+    if (!std::isfinite(y_full[i])) continue;
     not_NA_indices.push_back(i);
   }
   

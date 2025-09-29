@@ -14,7 +14,11 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.width = 8,
-  fig.height = 6
+  fig.height = 6,
+  dev = "png",
+  dpi = 150,
+  warning = FALSE,
+  message = FALSE
 )
 ```
 
@@ -22,7 +26,7 @@ knitr::opts_chunk$set(
 
 Modern fMRI datasets with sub-millimeter resolution and thousands of trials require millions of model fits when using standard LSS approaches. For datasets with 100,000 voxels and 500 trials, traditional LSS requires 50 million separate GLM fits, each involving matrix inversion and parameter estimation.
 
-OASIS (Optimized Analytic Single-pass Inverse Solution) addresses this computational challenge through mathematical reformulation. Instead of iterating through trials sequentially, OASIS exploits the shared structure across LSS models to compute all trial estimates simultaneously. The method reduces computational complexity from O(NT³) to O(T³ + NTV) where N = number of trials, T = timepoints, and V = voxels.
+OASIS (Optimized Analytic Single-pass Inverse Solution) addresses this computational challenge through mathematical reformulation. Instead of iterating through trials sequentially, OASIS exploits the shared structure across LSS models to compute all trial estimates simultaneously. Compared to the naive per-trial GLM approach (O(N·T³)), the factored approach reduces the dominant work to a single decomposition plus shared projections (roughly O(T³ + N·T·V)). Note that fmrilss’s optimized LSS backends already exploit this same factoring; OASIS packages the same estimator and extends it to HRF-aware design building and multi-basis solves.
 
 OASIS also provides: automatic HRF estimation with multi-basis functions, ridge regularization for numerical stability, efficient handling of complex experimental designs, and integration with prewhitening for autocorrelation correction.
 
@@ -33,79 +37,57 @@ library(fmrihrf)
 library(fmrilss)
 set.seed(42)
 
-# Helper function to create design matrix using fmrihrf API
-# (design_matrix is not exported from fmrihrf, so we create a wrapper)
-design_matrix <- function(sframe, conditions, tr_per_trial = FALSE) {
-  # Helper to safely extract condition fields without partial matching
-  cond_field <- function(cond, name, default = NULL) {
-    if (!is.null(cond[[name]])) cond[[name]] else default
-  }
-
-  if (tr_per_trial) {
-    # Create trial-wise design (one column per trial)
-    X_list <- list()
-    for (cond in conditions) {
-      onsets <- cond_field(cond, "onsets")
-      n_trials <- length(onsets)
-      # Each trial gets its own regressor
-      X_trial <- fmrihrf::regressor_design(
-        onsets = onsets,
-        fac = factor(seq_len(n_trials)),  # Each trial is its own level
-        block = rep(1L, n_trials),        # Assume single block for simplicity
-        sframe = sframe,
-        hrf = cond_field(cond, "hrf", fmrihrf::HRF_SPMG1),
-        duration = cond_field(cond, "duration", 0),
-        span = cond_field(cond, "span", 30),
-        precision = cond_field(cond, "precision", 0.1),
-        method = cond_field(cond, "method", "conv"),
-        summate = FALSE  # Don't sum across trials
-      )
-      X_list[[length(X_list) + 1]] <- X_trial
-    }
-    X <- do.call(cbind, X_list)
-  } else {
-    # Create aggregate design (one column per condition)
-    X_list <- list()
-    for (cond in conditions) {
-      onsets <- cond_field(cond, "onsets")
-      n_trials <- length(onsets)
-      # All trials in same condition get summed
-      X_cond <- fmrihrf::regressor_design(
-        onsets = onsets,
-        fac = factor(rep(1L, n_trials)),  # All trials same level
-        block = rep(1L, n_trials),
-        sframe = sframe,
-        hrf = cond_field(cond, "hrf", fmrihrf::HRF_SPMG1),
-        duration = cond_field(cond, "duration", 0),
-        span = cond_field(cond, "span", 30),
-        precision = cond_field(cond, "precision", 0.1),
-        method = cond_field(cond, "method", "conv"),
-        summate = TRUE  # Sum across trials in condition
-      )
-      X_list[[length(X_list) + 1]] <- X_cond
-    }
-    X <- do.call(cbind, X_list)
-  }
-
-  list(X = as.matrix(X))
-}
+# Note: we build designs inline with fmrihrf primitives (regressor_set + evaluate)
+# to keep examples short and readable.
 ```
 
 ## Understanding the OASIS Innovation
 
-OASIS exploits the mathematical structure of LSS: the N separate GLMs share computational components that can be factored and reused across trials. Note this factoring is already exploited by fmrilss’s optimized backends (e.g., the fused single‑pass solver that residualizes once and reuses totals and cross‑products across trials). OASIS uses the same core solve but wraps it in a richer, HRF-aware workflow: automatic design construction from event specs, built-in ridge scaling, AR(1) whitening, SE/diagnostic reporting, and native support for multi-basis or FIR HRFs.
+OASIS exploits the mathematical structure of LSS: the N separate GLMs share computational components that can be factored and reused across trials. Note this factoring is already exploited by fmrilss's optimized backends (e.g., the fused single-pass solver that residualizes once and reuses totals and cross-products across trials). Importantly, for a single-basis HRF (K = 1) and no ridge (ridge_x = ridge_b = 0), OASIS is mathematically identical to the core LSS estimator; it simply computes the same betas in one batched pass. OASIS then wraps this core solve in a richer, HRF-aware workflow: automatic design construction from event specs, optional ridge scaling, AR(1) whitening, SE/diagnostic reporting, and native support for multi-basis or FIR HRFs.
 
-Beyond computational efficiency, OASIS adds features that the generic LSS path does not expose: built‑in ridge regularization (absolute and fractional) on the two‑regressor Gram per trial, optional AR(1) whitening, analytical standard errors and diagnostics, and a blocked multi‑basis solver that treats K>1 HRF bases as 2K×2K closed‑form systems per trial.
+Beyond computational efficiency, OASIS adds features that the generic LSS path does not expose: built-in ridge regularization (absolute and fractional) on the two-regressor Gram per trial, optional AR(1) whitening, analytical standard errors and diagnostics, and a blocked multi-basis solver that treats K>1 HRF bases as 2Kx2K closed-form systems per trial.
 
-Finally, OASIS integrates directly with fmrihrf: it builds trial‑wise designs from event specs (including multi‑condition aggregates), auto‑detects basis dimension K, supports FIR/non‑parametric bases, and can run fast HRF grid selection before fitting. This removes manual design construction while preserving exact LSS equivalence.
+Finally, OASIS integrates directly with fmrihrf: it builds trial-wise designs from event specs (including multi-condition aggregates), auto-detects basis dimension K, supports FIR/non-parametric bases, and can run fast HRF grid selection before fitting. This removes manual design construction while preserving exact LSS equivalence.
 
 ### What OASIS Adds Over Optimized LSS
 
-- HRF‑aware design: Builds `X` from events via `fmrihrf` (single and multi‑basis), with optional HRF grid search.
+- HRF-aware design: Builds `X` from events via `fmrihrf` (single and multi-basis), with optional HRF grid search.
 - Stabilization: Ridge regularization on per‑trial Gram (absolute and fractional scaling by design energy).
 - Inference: Optional standard errors and design diagnostics without extra passes.
 - Whitening: Optional AR(1) prewhitening applied consistently to data and design.
-- Multi‑basis efficiency: Blocked products and 2K×2K closed‑form solves for K>1 bases.
+- Multi-basis efficiency: Blocked products and 2Kx2K closed-form solves for K>1 bases.
+
+### Equivalence to LSS (K = 1, no ridge)
+
+When you already have a single-basis trial-wise design `X` and you do not use ridge, `lss(..., method = "oasis")` returns the same coefficients as the optimized LSS path. This quick check verifies numerical equivalence up to floating-point tolerance:
+
+```{r oasis-equivalence, eval=Sys.getenv("IN_PKGDOWN") != "true"}
+set.seed(1)
+n <- 120; n_trials <- 15; V <- 8
+X <- matrix(rnorm(n * n_trials), n, n_trials)
+Z <- cbind(1, scale(1:n))
+N <- matrix(rnorm(n * 3), n, 3)
+Y <- matrix(rnorm(n * V), n, V)
+
+b_lss  <- lss(Y, X, Z = Z, Nuisance = N, method = "cpp_optimized")
+b_oasis <- lss(Y, X, Z = Z, Nuisance = N, method = "oasis", oasis = list(ridge_x = 0, ridge_b = 0))
+
+max(abs(b_lss - b_oasis))
+```
+
+Use the plain LSS backends when you have a fixed single-basis `X` and want the leanest dependency surface. Prefer OASIS when you want built-in HRF design construction, multi-basis HRFs (K > 1), ridge control, or standard errors/diagnostics in one call.
+
+### When To Use Which
+
+- Use `lss(..., method = "cpp_optimized")` when:
+  - You already have a trial-wise single-basis `X`.
+  - You do not need ridge, SEs, or HRF grid search.
+  - You want the minimal dependency surface and maximum simplicity.
+- Use `lss(..., method = "oasis")` when:
+  - You want to build `X` directly from event specs/HRFs in the call.
+  - You need multi-basis HRFs (K > 1) or FIR.
+  - You want ridge regularization, SEs/diagnostics, or AR(1) whitening in one pass.
+  - You want optional HRF grid search and design diagnostics.
 
 ## Starting with OASIS: A Simple Example
 
@@ -117,8 +99,11 @@ n_time <- 300
 n_voxels <- 100
 TR <- 1.0
 
-# Generate event onsets (rapid design)
-onsets <- seq(10, 280, by = 15)  # Events every 15 seconds
+# Generate event onsets (rapid, jittered ISIs ~ U(3, 9) s)
+start_time <- 10
+isi <- runif(500, min = 3, max = 9)                  # generous upper bound
+onsets_cont <- c(start_time, start_time + cumsum(isi))
+onsets <- onsets_cont[onsets_cont < (n_time - 20)]    # leave tail for HRF span
 n_trials <- length(onsets)
 
 # Create sampling frame
@@ -132,15 +117,18 @@ true_betas <- matrix(rnorm(n_trials * n_voxels, mean = 1, sd = 0.5),
                      n_trials, n_voxels)
 
 # Create signal using canonical HRF
-dm <- design_matrix(
-  sframe = sframe,
-  conditions = list(
-    list(onsets = onsets, hrf = fmrihrf::HRF_SPMG1, name = "task")
-  ),
-  tr_per_trial = TRUE
+grid <- fmrihrf::samples(sframe, global = TRUE)
+rset <- fmrihrf::regressor_set(
+  onsets   = onsets,
+  fac      = factor(seq_len(n_trials)),  # one column per trial
+  hrf      = fmrihrf::HRF_SPMG1,
+  duration = 0,
+  span     = 30,
+  summate  = FALSE
 )
+X_trials <- fmrihrf::evaluate(rset, grid = grid, precision = 0.1, method = "conv")
 
-Y <- Y + dm$X %*% true_betas
+Y <- Y + X_trials %*% true_betas
 
 # Run OASIS
 beta_oasis <- lss(
@@ -163,6 +151,29 @@ cat("OASIS results:\n")
 cat("  Beta dimensions:", dim(beta_oasis), "\n")
 cat("  Mean beta:", round(mean(beta_oasis), 3), "\n")
 cat("  Beta SD:", round(sd(beta_oasis), 3), "\n")
+```
+
+### Visualizing the Design
+
+```{r design-viz, fig.alt="Trial-wise design matrix heatmap (time x trial) for the SPMG1 HRF."}
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  dfX <- data.frame(
+    Time  = rep(seq_len(nrow(X_trials)), times = ncol(X_trials)),
+    Trial = factor(rep(seq_len(ncol(X_trials)), each = nrow(X_trials))),
+    Value = as.vector(X_trials)
+  )
+  ggplot2::ggplot(dfX, ggplot2::aes(Time, Trial, fill = Value)) +
+    ggplot2::geom_tile() +
+    ggplot2::scale_fill_viridis_c(option = "C") +
+    ggplot2::labs(title = "Trial-wise design (SPMG1)", x = "Time (TR)", y = "Trial", fill = "") +
+    ggplot2::theme_minimal(base_size = 12)
+}
+```
+
+## Session Info
+
+```{r session-info, echo=FALSE}
+sessionInfo()
 ```
 
 Notice how OASIS takes a design specification rather than a pre-built design matrix. This allows it to construct the optimal internal representation for efficient computation. The results are identical to what you'd get from standard LSS, but computed much more efficiently.
@@ -241,7 +252,7 @@ Real hemodynamic responses rarely match the canonical HRF perfectly. They might 
 
 OASIS handles multi-basis HRFs naturally, returning separate estimates for each basis component:
 
-```{r multi-basis}
+```{r multi-basis, fig.alt="Multi-basis HRF example (SPMG3): canonical, temporal, and dispersion derivative components with summary statistics and per-basis plots."}
 # Use SPMG3: canonical + temporal derivative + dispersion derivative
 beta_spmg3 <- lss(
   Y = Y,
@@ -259,14 +270,14 @@ beta_spmg3 <- lss(
   )
 )
 
-# SPMG3 returns K×N rows where K=number of basis functions, N=number of trials
+# SPMG3 returns KxN rows where K=number of basis functions, N=number of trials
 # The results are organized in blocks: [trial1_basis1, trial1_basis2, trial1_basis3,
 #                                       trial2_basis1, trial2_basis2, trial2_basis3, ...]
 cat("Multi-basis results:\n")
 cat("  Beta dimensions:", dim(beta_spmg3), "\n")
 cat("  Basis functions (K):", 3, "\n")
 cat("  Trials (N):", n_trials, "\n")
-cat("  Total rows (K×N):", nrow(beta_spmg3), "\n")
+cat("  Total rows (KxN):", nrow(beta_spmg3), "\n")
 
 # Extract components using the K-stride pattern
 # For K=3 basis functions, every 3rd row starting from position k gives basis k
@@ -275,7 +286,7 @@ canonical_betas <- beta_spmg3[seq(1, nrow(beta_spmg3), by = K), ]    # Basis 1: 
 temporal_betas <- beta_spmg3[seq(2, nrow(beta_spmg3), by = K), ]     # Basis 2: Temporal derivative
 dispersion_betas <- beta_spmg3[seq(3, nrow(beta_spmg3), by = K), ]   # Basis 3: Dispersion derivative
 
-# Verify dimensions: each should be n_trials × n_voxels
+# Verify dimensions: each should be n_trials x n_voxels
 cat("\nExtracted component dimensions:\n")
 cat("  Each basis matrix:", dim(canonical_betas), "\n")
 
@@ -297,11 +308,63 @@ plot(dispersion_betas[, 1], type = "b", main = "Dispersion Derivative",
 
 The multi-basis approach reveals how the hemodynamic response varies across trials. Large temporal derivative values suggest timing variability, while dispersion derivative values indicate width changes. This information can be valuable for understanding physiological variations or task-related modulations of the hemodynamic response.
 
+## Per‑Voxel HRFs with OASIS‑VOXHRF
+
+Some datasets benefit from estimating an HRF shape per voxel before computing trial amplitudes. The OASIS‑VOXHRF mode adds a fast, two‑pass workflow that stays entirely within the OASIS idiom:
+
+- Pass A: estimate a voxel‑wise HRF shape in a chosen basis by solving a tiny K×K ridge system using an aggregate per‑basis design. You can optionally nudge shapes toward a reference (shape prior) and add a small roughness penalty.
+- Pass B: compute single‑trial betas using your voxel‑specific HRFs via the existing `lss_with_hrf()` C++ engine.
+
+Enable it by setting `oasis$hrf_mode = "voxel_ridge"` and, optionally, tuning the knobs below. Defaults keep constraints off for maximal flexibility.
+
+How it differs from HRF grid search
+- Grid search (above) selects a single global HRF for the whole dataset/ROI by scoring a small set of candidate shapes, then refitting once with the winner. It is fast and robust when you expect a largely homogeneous HRF, but it cannot capture voxel‑to‑voxel shape differences.
+- VOXHRF estimates an HRF shape per voxel in a chosen basis (e.g., SPMG3, FIR) and then fits trial betas with those voxel‑specific shapes. It captures spatial heterogeneity and lets you regularize toward a reference via a shape prior (`lambda_shape`), smooth with a roughness penalty (`mu_rough`), and optionally shrink weights across voxels. With a very strong shape prior, VOXHRF reduces to the canonical‑HRF OASIS solution.
+- In practice: start with a global HRF via grid search for stability and speed; use VOXHRF when you need spatially varying shapes or when multi‑basis/FIR modeling is important.
+
+```{r voxhrf-basic, eval=Sys.getenv("IN_PKGDOWN") != "true"}
+beta_voxhrf <- lss(
+  Y = Y,
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(onsets = onsets, hrf = HRF_SPMG3, span = 30)
+    ),
+    hrf_mode      = "voxel_ridge",
+    lambda_shape  = 5,       # pull toward reference shape (e.g., canonical)
+    mu_rough      = 0,       # optional roughness (0 = off)
+    shrink_global = 0.05,    # small global shrink for stability
+    orient_ref    = TRUE     # flip shapes to have positive orientation
+  )
+)
+dim(beta_voxhrf)
+```
+
+Notes
+- Uses the same confound residualization and optional whitening as the standard OASIS path.
+- Defaults: no shape prior, no roughness, no shrink; opt in as needed for rapid designs.
+- With a very strong shape prior, results approach canonical‑HRF OASIS.
+
+## Whitening Semantics
+
+When `oasis$whiten = "ar1"` or `prewhiten = list(...)` is used, OASIS:
+
+- Estimates the AR parameter after deflating the nuisance space used in the model (intercept `Z`, user `Nuisance`, and any `design_spec$others`). This gives a more stable rho.
+- Applies the same linear transform `W` to the data `Y`, the trial design `X`, and the nuisance design, so that the whitened GLS is algebraically equivalent to the unwhitened model.
+
+Implications
+- Consistency matters: if you manually whiten outside OASIS, use the same nuisance space for rho estimation and apply `W` to `Y`, `X`, and nuisance. Otherwise you may see small but systematic differences.
+- Coefficients are identical up to floating‑point when whitening is applied consistently. Standard errors and t‑statistics are computed in the whitened space automatically by OASIS.
+- Whitening does not change the model degrees of freedom; it re‑weights timepoints to account for autocorrelation.
+- This behavior is shared by the VOXHRF path; whitening is applied once and consistently to all model components.
+
 ## Non-Parametric HRF Modeling with FIR
 
 Sometimes you want to make no assumptions about HRF shape at all. The Finite Impulse Response (FIR) basis provides a completely non-parametric approach, estimating the response at each time point independently:
 
-```{r fir-basis}
+```{r fir-basis, fig.alt="FIR-derived HRF: mean response across trials/voxels with shaded standard error band and canonical HRF overlay."}
 # Create FIR basis with 15 time bins (2s width over a 30s window)
 fir_hrf <- hrf_fir_generator(nbasis = 15, span = 30)
 fir_params <- attr(fir_hrf, "params")
@@ -331,7 +394,7 @@ cat("FIR basis results:\n")
 cat("  Beta dimensions:", dim(beta_fir), "\n")
 cat("  Time bins per trial:", nrow(beta_fir) / n_trials, "\n")
 
-# Organise coefficients as (time bin × trial × voxel)
+# Organise coefficients as (time bin x trial x voxel)
 fir_array <- array(beta_fir, dim = c(n_bins, n_trials, ncol(beta_fir)))
 
 # Average across trials and voxels to recover a smooth HRF estimate
@@ -339,7 +402,7 @@ fir_mean <- apply(fir_array, 1, mean)
 fir_se <- apply(fir_array, 1, sd) / sqrt(n_trials * ncol(beta_fir))
 time_points <- seq(0, (n_bins - 1) * bin_width, by = bin_width)
 
-# Plot mean HRF with ±1 SE ribbon
+# Plot mean HRF with +/- 1 SE ribbon
 upper <- fir_mean + fir_se
 lower <- fir_mean - fir_se
 
@@ -357,7 +420,7 @@ canonical <- evaluate(HRF_SPMG1, time_points)
 scale_factor <- max(fir_mean) / max(canonical)
 lines(time_points, canonical * scale_factor, col = "firebrick", lty = 2, lwd = 2)
 legend("topright",
-       c("FIR mean", "±1 SE", "Canonical (scaled)"),
+       c("FIR mean", "+/- 1 SE", "Canonical (scaled)"),
        col = c("navy", NA, "firebrick"),
        lty = c(1, NA, 2),
        lwd = c(2, NA, 2),
@@ -371,7 +434,11 @@ The FIR approach reveals the actual shape of the hemodynamic response without pa
 
 ## Optimizing HRF Models Through Grid Search
 
-When you're unsure which HRF model best fits your data, OASIS can efficiently evaluate multiple candidates. This exploratory approach helps identify the optimal HRF parameters for your specific dataset and brain regions:
+When you're unsure which HRF model best fits your data, OASIS can efficiently evaluate multiple candidates. In this vignette we perform a global HRF selection: we choose a single HRF shape shared by all voxels (or an ROI) and then refit the model using that HRF. This keeps selection fast and stable. It does not estimate voxel‑specific HRFs; for that workflow, see the "Voxel‑wise HRF" vignette or use a multi‑basis/FIR model.
+
+There are two ways to drive selection:
+- Manual scoring (shown below): loop through candidates, score the fit, pick the best, then refit once on the full voxel set.
+- Built‑in selection: pass a grid via `oasis$design_spec$hrf_grid` and let OASIS pick a single best HRF internally using a matched‑filter score.
 
 ```{r hrf-grid-search}
 # Create a grid of HRF models with varying parameters
@@ -386,7 +453,8 @@ hrf_grid <- create_lwu_grid(
 
 cat("Testing", length(hrf_grid$hrfs), "different HRF models\n\n")
 
-# Test each HRF and select best based on fit
+# Global HRF grid search (single HRF for all voxels):
+# Score each candidate on a small voxel subset, then refit all voxels with the best.
 best_fit <- -Inf
 best_idx <- 1
 
@@ -421,11 +489,14 @@ for (i in seq_along(hrf_grid$hrfs)) {
   )
 
   # Calculate fit (simplified - residual sum of squares)
-  X_test <- design_matrix(
-    sframe = sframe,
-    conditions = list(list(onsets = onsets, hrf = hrf_obj)),
-    tr_per_trial = TRUE
-  )$X
+  grid <- fmrihrf::samples(sframe, global = TRUE)
+  rset <- fmrihrf::regressor_set(onsets = onsets,
+                                 fac = factor(seq_along(onsets)),
+                                 hrf = hrf_obj,
+                                 duration = 0,
+                                 span = 30,
+                                 summate = FALSE)
+  X_test <- fmrihrf::evaluate(rset, grid = grid, precision = 0.1, method = "conv")
 
   fitted <- X_test %*% beta_test
   rss <- sum((Y[, 1:10] - fitted)^2)
@@ -440,9 +511,48 @@ cat("Best HRF parameters:\n")
 cat("  tau:", hrf_grid$parameters$tau[best_idx], "\n")
 cat("  sigma:", hrf_grid$parameters$sigma[best_idx], "\n")
 cat("  rho:", hrf_grid$parameters$rho[best_idx], "\n")
+
+# Refit all voxels with the selected global HRF
+best_hrf <- hrf_grid$hrfs[[best_idx]]
+beta_global <- lss(
+  Y = Y,
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(onsets = onsets, hrf = best_hrf, span = 30)
+    ),
+    ridge_mode = "fractional",
+    ridge_x = 0.01,
+    ridge_b = 0.01
+  )
+)
+cat("Refit with global HRF complete. Beta dims:", paste(dim(beta_global), collapse = " x "), "\n")
 ```
 
-Grid search reveals which HRF parameters best explain your data. This data-driven approach can uncover unexpected characteristics of the hemodynamic response in your specific experimental context.
+Grid search (global) reveals which HRF parameters best explain your data at the dataset/ROI level. This is complementary to voxel‑wise HRF modeling: start with a shared HRF for stability, then zoom in with multi‑basis/FIR when needed.
+
+If you prefer to let OASIS pick the HRF internally, pass the grid directly. Note this path also selects a single global HRF and proceeds immediately to fitting; it does not expose the chosen parameters in the return value:
+
+```{r oasis-grid-inline, eval=Sys.getenv("IN_PKGDOWN") != "true"}
+beta_auto_grid <- lss(
+  Y = Y,
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(onsets = onsets, span = 30),
+      hrf_grid = hrf_grid$hrfs
+    ),
+    ridge_mode = "fractional",
+    ridge_x = 0.01,
+    ridge_b = 0.01
+  )
+)
+dim(beta_auto_grid)
+```
 
 ## Handling Complex Experimental Designs
 
@@ -485,7 +595,7 @@ This approach ensures that variance from other conditions is properly accounted 
 
 While beta estimates are valuable, understanding their uncertainty is crucial for proper inference. OASIS can provide standard errors and diagnostic information:
 
-```{r standard-errors}
+```{r standard-errors, fig.alt="Standard error and diagnostic outputs from OASIS, illustrating per-trial uncertainty and design metrics."}
 # Request standard errors
 result_with_se <- lss(
   Y = Y[, 1:10],  # Subset for demonstration
@@ -523,7 +633,7 @@ Standard errors reveal which estimates are most reliable. Trials with higher sta
 
 To understand OASIS's efficiency, let's conduct systematic benchmarks comparing it with traditional LSS implementations across different dataset sizes:
 
-```{r performance-comparison}
+```{r performance-comparison, fig.alt="Benchmark plots comparing computation time scaling across R optimized, C++ optimized, and OASIS (with and without design build)."}
 # Benchmark across different dataset sizes
 sizes <- list(
   small  = list(timepoints = 300, voxels = 500),
@@ -547,11 +657,14 @@ for (size_name in names(sizes)) {
   onsets_bench <- seq(10, n_time - 20, length.out = n_trials)
 
   # Standard LSS with pre-built design (shared across methods)
-  dm_bench <- design_matrix(
-    sframe = sframe_bench,
-    conditions = list(list(onsets = onsets_bench, hrf = fmrihrf::HRF_SPMG1)),
-    tr_per_trial = TRUE
-  )[['X']]
+  grid_b <- fmrihrf::samples(sframe_bench, global = TRUE)
+  rset_b <- fmrihrf::regressor_set(onsets = onsets_bench,
+                                   fac = factor(seq_along(onsets_bench)),
+                                   hrf = fmrihrf::HRF_SPMG1,
+                                   duration = 0,
+                                   span = 30,
+                                   summate = FALSE)
+  dm_bench <- fmrihrf::evaluate(rset_b, grid = grid_b, precision = 0.1, method = "conv")
 
   # Time standard LSS (R optimized)
   time_r_opt <- system.time({
@@ -722,20 +835,20 @@ for (ridge in ridge_values) {
 # Display results
 cat("Ridge parameter selection:\n")
 for (r in names(ridge_results)) {
-  cat(sprintf("  Ridge = %s: mean|β| = %.3f, SD = %.3f, κ = %.1f\n",
+  cat(sprintf("  Ridge = %s: mean|beta| = %.3f, SD = %.3f, kappa = %.1f\n",
               r, ridge_results[[r]]$mean_beta,
               ridge_results[[r]]$sd_beta,
               ridge_results[[r]]$condition_number))
 }
 ```
 
-The condition number (κ) indicates numerical stability—lower values suggest more stable estimates. The tradeoff between bias (reduced mean beta) and variance (reduced SD) guides your choice.
+The condition number (kappa) indicates numerical stability—lower values suggest more stable estimates. The tradeoff between bias (reduced mean beta) and variance (reduced SD) guides your choice.
 
 ## Memory Usage Comparison
 
 Understanding the memory trade-offs between OASIS and standard LSS is important for choosing the right method for your computational resources:
 
-```{r memory-comparison}
+```{r memory-comparison, fig.alt="Memory footprint comparison across backends and dataset sizes, illustrating OASIS precompute overhead."}
 # Compare memory usage across methods
 memory_comparison <- function(n_time, n_vox, n_trials) {
 
@@ -743,12 +856,12 @@ memory_comparison <- function(n_time, n_vox, n_trials) {
   double_size <- 8  # bytes per double
 
   # Standard LSS memory (per iteration)
-  # Stores: current X_trial (n_time × 2), beta result (n_trials × n_vox)
+  # Stores: current X_trial (n_time x 2), beta result (n_trials x n_vox)
   lss_per_iter <- (n_time * 2 + n_vox) * double_size / 1024^2
   lss_total <- lss_per_iter  # Only peak memory matters
 
   # OASIS memory (upfront)
-  # Stores: X (n_time × n_trials), precomputed terms, results
+  # Stores: X (n_time x n_trials), precomputed terms, results
   oasis_X <- n_time * n_trials * double_size / 1024^2
   oasis_precomp <- (n_trials^2 + n_trials * 3) * double_size / 1024^2  # Gram matrices
   oasis_results <- n_trials * n_vox * double_size / 1024^2

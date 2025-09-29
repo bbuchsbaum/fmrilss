@@ -30,7 +30,7 @@ test_that("fmriAR integration works with basic AR(1) whitening", {
 
   # Test new prewhiten parameter
   result <- lss(Y, X, prewhiten = list(method = "ar", p = 1))
-  expect_is(result, "matrix")
+  expect_true(is.matrix(result))
   expect_equal(nrow(result), n_trials)
   expect_equal(ncol(result), n_voxels)
   expect_true(all(is.finite(result)))
@@ -67,7 +67,7 @@ test_that("fmriAR integration with auto AR order selection", {
 
   # Test with auto AR order selection
   result <- lss(Y, X, prewhiten = list(method = "ar", p = "auto", p_max = 4))
-  expect_is(result, "matrix")
+  expect_true(is.matrix(result))
   expect_equal(nrow(result), n_trials)
   expect_equal(ncol(result), n_voxels)
 })
@@ -102,7 +102,7 @@ test_that("fmriAR integration with voxel-specific AR parameters", {
 
   # Test with voxel-specific pooling
   result <- lss(Y, X, prewhiten = list(method = "ar", p = 1, pooling = "voxel"))
-  expect_is(result, "matrix")
+  expect_true(is.matrix(result))
   expect_equal(nrow(result), n_trials)
   expect_equal(ncol(result), n_voxels)
 })
@@ -153,7 +153,7 @@ test_that("fmriAR integration with run-aware estimation", {
     pooling = "run",
     runs = runs
   ))
-  expect_is(result, "matrix")
+  expect_true(is.matrix(result))
   expect_equal(nrow(result), n_trials)
   expect_equal(ncol(result), n_voxels)
 })
@@ -189,14 +189,14 @@ test_that("fmriAR integration with OASIS method", {
   # Test OASIS with new prewhiten parameter
   result <- lss(Y, X, method = "oasis",
                prewhiten = list(method = "ar", p = 1))
-  expect_is(result, "matrix")
+  expect_true(is.matrix(result))
   expect_equal(nrow(result), n_trials)
   expect_equal(ncol(result), n_voxels)
 
   # Compare with old syntax (should give similar results)
   result_old <- lss(Y, X, method = "oasis",
                    oasis = list(whiten = "ar1"))
-  expect_is(result_old, "matrix")
+  expect_true(is.matrix(result_old))
   expect_equal(dim(result), dim(result_old))
 })
 
@@ -222,7 +222,7 @@ test_that("backward compatibility with oasis$whiten is maintained", {
     result <- lss(Y, X, method = "oasis", oasis = list(whiten = "ar1")),
     "deprecated"
   )
-  expect_is(result, "matrix")
+  expect_true(is.matrix(result))
   expect_equal(nrow(result), n_trials)
 })
 
@@ -250,7 +250,7 @@ test_that("prewhiten parameter works with all LSS methods", {
 
   for (m in methods) {
     result <- lss(Y, X, method = m, prewhiten = prewhiten_opts)
-    expect_is(result, "matrix")
+    expect_true(is.matrix(result))
     expect_equal(nrow(result), n_trials)
     expect_equal(ncol(result), n_voxels)
     expect_true(all(is.finite(result)))

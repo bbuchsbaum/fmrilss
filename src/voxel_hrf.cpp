@@ -32,12 +32,29 @@ static arma::mat build_trial_matrix(const arma::vec& hrf_kernel,
   arma::mat C(n_time, n_trials, arma::fill::zeros);
 
   for (unsigned int t = 0; t < n_trials; ++t) {
-    unsigned int start_tr = onset_idx[t] / step; // convert fine index to TR index
-    if (start_tr >= n_time) continue;
+    // Convert fine-grid onset index to TR index (TR assumed to align with grid sampling)
+    double start_tr_d = static_cast<double>(onset_idx[t]) / static_cast<double>(step);
+    int start_tr = static_cast<int>(std::round(start_tr_d)) - 1;
+    if (start_tr < 0) start_tr = 0;
+    if (start_tr >= static_cast<int>(n_time)) continue;
 
-    unsigned int len = hrf_kernel.n_elem;
-    unsigned int end_tr = std::min(start_tr + len - 1, n_time - 1);
-    C.submat(start_tr, t, end_tr, t) += hrf_kernel.subvec(0, end_tr - start_tr);
+    // Duration in TRs (inclusive semantics: length d -> indices [0..d])
+    unsigned int d_tr = 0;
+    if (t < durations.n_elem) {
+      double dv = durations[t];
+      if (dv < 0.0) dv = 0.0;
+      d_tr = static_cast<unsigned int>(std::round(dv));
+    }
+
+    // Add HRF contributions for each TR within the duration window
+    const unsigned int klen = static_cast<unsigned int>(hrf_kernel.n_elem);
+    for (unsigned int k = 0; k <= d_tr; ++k) {
+      unsigned int s = static_cast<unsigned int>(start_tr + static_cast<int>(k));
+      if (s >= n_time) break;
+      unsigned int max_len = std::min<unsigned int>(klen, n_time - s);
+      if (max_len == 0U) break;
+      C.submat(s, t, s + max_len - 1U, t) += hrf_kernel.subvec(0, max_len - 1U);
+    }
   }
   return C;
 }
@@ -67,21 +84,94 @@ void lss_engine_vox_hrf(const arma::mat& Y,
     unsigned int chunkV = end - start + 1;
     arma::mat chunk_out(n_trials, chunkV);
 
-    #pragma omp parallel
-    {
-      arma::vec beta_local(n_trials);
-      #pragma omp for schedule(static)
-      for (unsigned int idx = 0; idx < chunkV; ++idx) {
-        unsigned int v = start + idx;
-        arma::vec hrf_fine = basis_kernels * coeffs.col(v);
-        arma::vec hrf_tr = hrf_fine.elem(tr_idx);
-        arma::mat C = build_trial_matrix(hrf_tr, onset_idx, durations, n_time, step);
-        Rcpp::List res = compute_residuals_cpp(nuisance, Y.col(v), C);
-        arma::mat beta_v = lss_beta_cpp(res["Q_dmat_ran"], res["residual_data"]);
-        beta_local = beta_v.col(0);
-        #pragma omp critical
-        chunk_out.col(idx) = beta_local;
+    #ifdef _OPENMP
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (unsigned int idx = 0; idx < chunkV; ++idx) {
+      unsigned int v = start + idx;
+
+      // Build voxel-specific HRF at fine grid and downsample to TRs
+      arma::vec coeff_v = coeffs.col(v);
+      for (arma::uword k = 0; k < coeff_v.n_elem; ++k) {
+        if (!std::isfinite(coeff_v[k])) {
+          coeff_v[k] = 0.0;
+        }
       }
+      arma::vec hrf_fine = basis_kernels * coeff_v;      // L_fine
+      for (arma::uword k = 0; k < hrf_fine.n_elem; ++k) {
+        if (!std::isfinite(hrf_fine[k])) {
+          hrf_fine[k] = 0.0;
+        }
+      }
+      // Downsample by selecting the fine-sample aligned to each TR (matches fmrihrf conv on TR grid)
+      arma::vec hrf_tr = hrf_fine.elem(tr_idx);
+      for (arma::uword k = 0; k < hrf_tr.n_elem; ++k) {
+        if (!std::isfinite(hrf_tr[k])) hrf_tr[k] = 0.0;
+      }
+      arma::mat C        = build_trial_matrix(hrf_tr, onset_idx, durations, n_time, step); // n_time x n_trials
+
+      // FWL residualization by nuisance: project out nuisance from Y and C
+      arma::vec y = Y.col(v);
+      arma::mat C_res;
+      arma::vec y_res;
+      if (nuisance.n_cols == 0) {
+        C_res = C;
+        y_res = y;
+      } else {
+        arma::mat Q, R;
+        arma::qr_econ(Q, R, nuisance);
+        y_res = y - Q * (Q.t() * y);
+        C_res = C - Q * (Q.t() * C);
+      }
+
+      // Closed-form LSS solution with fallback on degenerate trials
+      const unsigned int T = C_res.n_cols;
+      arma::mat y_res_mat(C_res.n_rows, 1);
+      y_res_mat.col(0) = y_res;
+      arma::mat beta_mat = lss_beta_cpp(C_res, y_res_mat);
+      arma::vec beta = beta_mat.col(0);
+
+      if (!beta.is_finite()) {
+        arma::vec total = arma::sum(C_res, 1);
+        double ss_tot = arma::dot(total, total);
+        arma::vec CtY = C_res.t() * y_res;
+        arma::vec CtC = arma::sum(arma::square(C_res), 0).t();
+        arma::vec CtT = C_res.t() * total;
+        double totalY = arma::dot(total, y_res);
+        arma::vec BtY = totalY - CtY;
+        arma::vec bt2 = ss_tot - 2.0 * CtT + CtC;
+        const double eps = 1e-10;
+
+        for (arma::uword j = 0; j < T; ++j) {
+          if (std::isfinite(beta[j])) continue;
+          double a = CtC[j];
+          double n1 = CtY[j];
+          double b = bt2[j];
+          double c = CtT[j] - CtC[j];
+          double n2 = BtY[j];
+          double det = a * b - c * c;
+          double val = 0.0;
+
+          if (std::isfinite(det) && std::fabs(det) >= eps &&
+              std::isfinite(a) && std::isfinite(b) && std::isfinite(c) &&
+              std::isfinite(n1) && std::isfinite(n2)) {
+            double numer = n1 * b - c * n2;
+            val = numer / det;
+            if (!std::isfinite(val)) {
+              val = 0.0;
+            }
+          } else if (std::isfinite(a) && std::fabs(a) >= eps && std::isfinite(n1)) {
+            val = n1 / a;
+            if (!std::isfinite(val)) {
+              val = 0.0;
+            }
+          }
+
+          beta[j] = val;
+        }
+      }
+
+      chunk_out.col(idx) = beta;
     }
 
     for (unsigned int idx = 0; idx < chunkV; ++idx) {
@@ -96,4 +186,3 @@ void lss_engine_vox_hrf(const arma::mat& Y,
 
   return;
 }
-

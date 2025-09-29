@@ -14,7 +14,11 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.width = 7,
-  fig.height = 5
+  fig.height = 5,
+  dev = "png",
+  dpi = 150,
+  warning = FALSE,
+  message = FALSE
 )
 ```
 
@@ -94,19 +98,25 @@ We'll simulate an experiment with rapid stimulus presentation, where different v
 ```{r simulate-data}
 # Simulation parameters
 n_time <- 200      # Time points
-n_trials <- 10     # Number of trials
-n_vox <- 5         # Number of voxels
-TR <- 1.0          # Repetition time
-
-# Create event design with rapid presentation
-events <- data.frame(
-  onset = seq(10, 180, length.out = n_trials),
-  duration = rep(1, n_trials),
-  condition = rep("task", n_trials)
-)
+n_vox  <- 5        # Number of voxels
+TR     <- 1.0      # Repetition time
 
 # Create sampling frame
 sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
+
+# Rapid, jittered event train with ISI ~ U(3, 9) seconds
+set.seed(123)
+start_time <- 10
+isi <- runif(200, min = 3, max = 9)                   # generous upper bound
+onsets_cont <- c(start_time, start_time + cumsum(isi))
+onsets <- onsets_cont[onsets_cont < (n_time - 20)]     # leave tail for HRF span
+n_trials <- length(onsets)
+
+events <- data.frame(
+  onset = onsets,
+  duration = rep(1, n_trials),
+  condition = rep("task", n_trials)
+)
 
 # Generate voxel-specific HRF parameters
 # Each voxel has slightly different HRF characteristics
@@ -185,6 +195,38 @@ cat("  Time points:", n_time, "\n")
 cat("  Trials:", n_trials, "\n")
 cat("  Voxels:", n_vox, "\n")
 cat("  Signal-to-noise ratio:", round(var(Y[,1] - noise) / var(noise), 2), "\n")
+```
+
+### Visualizing the Trial-wise Design
+
+```{r design-heatmap, fig.width=8, fig.height=4, echo=FALSE, fig.alt="Trial-wise design matrix heatmap (time x trial) with jittered ISIs."}
+# Build trial-wise design with canonical HRF for visualization
+dm_vis <- design_matrix(
+  sframe = sframe,
+  conditions = list(list(onsets = events$onset, hrf = HRF_SPMG1)),
+  tr_per_trial = TRUE
+)
+X_vis <- dm_vis$X
+
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  dfX <- data.frame(
+    Time  = rep(seq_len(nrow(X_vis)), times = ncol(X_vis)),
+    Trial = factor(rep(seq_len(ncol(X_vis)), each = nrow(X_vis))),
+    Value = as.vector(X_vis)
+  )
+  ggplot2::ggplot(dfX, ggplot2::aes(Time, Trial, fill = Value)) +
+    ggplot2::geom_tile() +
+    ggplot2::scale_fill_viridis_c(option = "C") +
+    ggplot2::labs(title = "Trial-wise design (jittered ISIs)", x = "Time (TR)", y = "Trial", fill = "") +
+    ggplot2::theme_minimal(base_size = 12)
+} else {
+  op <- par(no.readonly = TRUE); on.exit(par(op), add = TRUE)
+  image(t(X_vis), col = hcl.colors(64, "BluGrn"), axes = FALSE,
+        main = "Trial-wise design (jittered ISIs)")
+  axis(1, at = c(0, 1), labels = c("0", nrow(X_vis)))
+  axis(2, at = c(0, 1), labels = c("1", ncol(X_vis)))
+  box()
+}
 ```
 
 ## The Standard Approach and Its Limitations
@@ -329,7 +371,7 @@ OASIS handles the HRF expansion and LSS solve in one pass, which limits redundan
 
 Let's quantitatively compare how well each method recovers the true beta values we used to generate our synthetic data:
 
-```{r compare-methods}
+```{r compare-methods, fig.alt="Comparison of LSS with canonical HRF versus voxel-wise HRF/OASIS on simulated data (correlation and error metrics)."}
 # Calculate correlations with true betas
 cor_standard <- cor(as.vector(standard_betas), as.vector(true_betas))
 cor_voxel <- cor(as.vector(voxel_betas), as.vector(true_betas))
@@ -399,11 +441,17 @@ Whole-brain analyses are expensive, so match the backend to the workload:
 betas_cpp <- lss(Y, X, method = "cpp_optimized")
 
 # For very large data with multiple cores
-# betas_parallel <- lss(Y, X, method = "cpp_parallel", n_cores = 4)
+# Removed example of parallel backend to reduce clutter
 
 # OASIS method is often fastest for complex designs
 betas_oasis <- lss(Y, X = NULL, method = "oasis",
                    oasis = list(design_spec = design_spec))
+```
+
+## Session Info
+
+```{r session-info, echo=FALSE}
+sessionInfo()
 ```
 
 Choose the backend according to data size and available hardware: R implementations work for pilot subsets, while whole-brain studies typically require the optimized C++ path or OASIS.

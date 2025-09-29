@@ -1,17 +1,30 @@
 #include <Rcpp.h>
 using namespace Rcpp;
 
+// Safe coercion to base double matrix; falls back to as.matrix for S4 Matrix, etc.
+static NumericMatrix coerce_dense_matrix(SEXP x, int nr, int nc, const char* label) {
+  if (Rf_isMatrix(x) && TYPEOF(x) == REALSXP) {
+    NumericMatrix M(x);
+    if (M.nrow() != nr || M.ncol() != nc) {
+      stop("%s has shape %d x %d, expected %d x %d", label, M.nrow(), M.ncol(), nr, nc);
+    }
+    return M;
+  }
+  Function as_matrix("as.matrix");
+  NumericMatrix M = as<NumericMatrix>(as_matrix(x));
+  if (M.nrow() != nr || M.ncol() != nc) {
+    stop("%s has shape %d x %d, expected %d x %d", label, M.nrow(), M.ncol(), nr, nc);
+  }
+  return M;
+}
+
 // Helper: convert List of matrices to std::vector<NumericMatrix>
 static std::vector<NumericMatrix> as_matrix_list(const List& L, int expected_rows, int expected_cols) {
   const int K = L.size();
   std::vector<NumericMatrix> out;
   out.reserve(K);
   for (int k = 0; k < K; ++k) {
-    NumericMatrix Mk = as<NumericMatrix>(L[k]);
-    if (Mk.nrow() != expected_rows || Mk.ncol() != expected_cols) {
-      stop("basis_convolved[[%d]] has inconsistent dimensions: expected %d x %d, got %d x %d",
-           k + 1, expected_rows, expected_cols, Mk.nrow(), Mk.ncol());
-    }
+    NumericMatrix Mk = coerce_dense_matrix(L[k], expected_rows, expected_cols, "basis_convolved[[k]]");
     out.push_back(Mk);
   }
   return out;

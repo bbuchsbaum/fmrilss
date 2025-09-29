@@ -160,6 +160,67 @@
     if (!is.null(X))      X      <- w$W_apply(X)
   }
 
+  # 4.5) Optional VOXHRF branch: per-voxel HRF via tiny ridge, then LSS with voxel HRFs
+  if (isTRUE(oasis$hrf_mode %in% c("voxel_ridge", "voxhrf"))) {
+    if (is.null(oasis$design_spec)) {
+      stop("hrf_mode='", oasis$hrf_mode, "' requires oasis$design_spec (events + HRF basis)")
+    }
+    # By this point, if X was NULL, it was built in step (1) and whitened once in step (4).
+    # Do not whiten or rebuild here to avoid double-whitening.
+
+    # Fit voxel-wise HRF weights fast, then compute per-trial betas with C++ voxel-HRF engine
+    vhrf <- .estimate_voxel_hrf_fast(
+      Y = Y,
+      X_trials = X,
+      design_spec = oasis$design_spec,
+      N_nuis = N_nuis,
+      K = oasis$K %||% .detect_basis_dimension(X),
+      lambda_shape = oasis$lambda_shape %||% 0,
+      mu_rough     = oasis$mu_rough %||% 0,
+      ref_hrf      = oasis$ref_hrf %||% NULL,
+      shrink_global = oasis$shrink_global %||% 0,
+      orient_ref   = isTRUE(oasis$orient_ref %||% TRUE)
+    )
+
+    events_df <- data.frame(
+      onset     = oasis$design_spec$cond$onsets,
+      duration  = oasis$design_spec$cond$duration %||% 0,
+      condition = "cond"
+    )
+
+    # Build TR-level convolved basis list directly from X_trials for exact parity
+    built <- .oasis_build_X_from_events(oasis$design_spec)
+    X_trials <- built$X_trials
+    Kloc <- oasis$K %||% built$K %||% 1L
+    idx_by_basis <- lapply(seq_len(Kloc), function(k) seq.int(k, ncol(X_trials), by = Kloc))
+    basis_convolved <- lapply(idx_by_basis, function(idx) X_trials[, idx, drop = FALSE])
+
+    # Residualize Y and basis by N_nuis (FWL), keep intercept in Z for design
+    n_time <- nrow(Y)
+    if (!is.null(N_nuis) && ncol(N_nuis) > 0) {
+      qrN <- qr(N_nuis)
+      Y_res <- qr.resid(qrN, Y)
+      basis_convolved <- lapply(basis_convolved, function(Dk) qr.resid(qrN, Dk))
+    } else {
+      Y_res <- Y
+    }
+
+    # Scale weights by ref_norm so the combined TR design matches canonical OASIS
+    coeff_use <- vhrf$coefficients
+    if (!is.null(vhrf$ref_norm) && is.finite(vhrf$ref_norm) && vhrf$ref_norm != 0)
+      coeff_use <- coeff_use * as.numeric(vhrf$ref_norm)
+
+    beta_mat <- lss_engine_vox_hrf_arma(
+      Y = Y_res,
+      coeffs = coeff_use,
+      basis_convolved = basis_convolved,
+      Z = matrix(1, n_time, 1L)
+    )
+    if (is.null(rownames(beta_mat))) rownames(beta_mat) <- sprintf("Trial_%d", seq_len(nrow(beta_mat)))
+    if (!is.null(colnames(Y)) && is.null(colnames(beta_mat))) colnames(beta_mat) <- colnames(Y)
+    return(beta_mat)
+  }
+
   # 5) Branch based on K
   if (K == 1L) {
     # Single-basis path
@@ -369,14 +430,17 @@
   if (length(spec$others)) {
     X_other <- do.call(cbind, lapply(spec$others, function(oc) {
       rr <- fmrihrf::regressor(onsets   = oc$onsets,
-                              hrf      = oc$hrf %||% hrf_obj,
-                              duration = oc$duration %||% 0,
-                              amplitude= oc$amplitude %||% 1,
-                              span     = oc$span %||% 40,
-                              summate  = TRUE)
-      as.numeric(fmrihrf::evaluate(rr, times, 
-                                   precision = spec$precision %||% 0.1,
-                                   method = spec$method %||% "conv"))
+                               hrf      = oc$hrf %||% hrf_obj,
+                               duration = oc$duration %||% 0,
+                               amplitude= oc$amplitude %||% 1,
+                               span     = oc$span %||% 40,
+                               summate  = TRUE)
+      x_eval <- fmrihrf::evaluate(rr, times,
+                                  precision = spec$precision %||% 0.1,
+                                  method = spec$method %||% "conv")
+      if (inherits(x_eval, "Matrix")) x_eval <- as.matrix(x_eval)
+      # For multi-basis HRFs, aggregate columns to a single condition column
+      if (is.matrix(x_eval)) rowSums(x_eval) else as.numeric(x_eval)
     }))
     if (is.null(dim(X_other))) X_other <- matrix(X_other, ncol = 1)
   }
@@ -480,3 +544,129 @@
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
+
+# --- Internal: Fast per-voxel HRF estimation via aggregated per-basis regressors ---
+#' @keywords internal
+.estimate_voxel_hrf_fast <- function(Y, X_trials, design_spec, N_nuis = NULL, K = NULL,
+                                     lambda_shape = 0, mu_rough = 0,
+                                     ref_hrf = NULL, shrink_global = 0, orient_ref = TRUE) {
+  # Coerce
+  to_mat <- function(M) if (is.null(M)) NULL else (if (inherits(M, "Matrix")) as.matrix(M) else as.matrix(M))
+  Y <- to_mat(Y)
+  X_trials <- to_mat(X_trials)
+  N_nuis <- to_mat(N_nuis)
+
+  # Prefer HRF nbasis for K; fall back to detection when needed
+  K_hrf <- tryCatch(fmrihrf::nbasis(design_spec$cond$hrf), error = function(e) NULL)
+  if (is.null(K)) {
+    K <- if (!is.null(K_hrf)) as.integer(K_hrf) else .detect_basis_dimension(X_trials)
+  } else {
+    K <- as.integer(K)
+  }
+  if ((ncol(X_trials) %% K) != 0L) {
+    K <- .detect_basis_dimension(X_trials)
+  }
+  stopifnot(ncol(X_trials) %% K == 0L)
+
+  # 1) Build aggregated per-basis regressors A [T x K] by summing K-blocked columns
+  idx_by_basis <- lapply(seq_len(K), function(k) seq.int(k, ncol(X_trials), by = K))
+  A <- do.call(cbind, lapply(idx_by_basis, function(idx) rowSums(X_trials[, idx, drop = FALSE])))
+
+  # 2) Residualize Y and A by confounds (Z+Nuisance+others already combined into N_nuis)
+  if (!is.null(N_nuis) && ncol(N_nuis) > 0) {
+    qrN <- qr(N_nuis)
+    Y <- qr.resid(qrN, Y)
+    A <- qr.resid(qrN, A)
+  }
+
+  # 3) Shape-prior ridge in basis space
+  sframe <- design_spec$sframe
+  times  <- fmrihrf::samples(sframe, global = TRUE)
+
+  # Evaluate basis kernels on TR grid using a single onset at 0
+  span <- design_spec$cond$span %||% (max(times) - min(times)) %||% 40
+  r <- fmrihrf::regressor(onsets = 0, hrf = design_spec$cond$hrf, duration = 0, span = span)
+  B_time <- fmrihrf::evaluate(r, grid = times, precision = design_spec$precision %||% 0.1,
+                              method = design_spec$method %||% "conv")
+  if (inherits(B_time, "Matrix")) B_time <- as.matrix(B_time)
+  if (is.vector(B_time)) B_time <- cbind(B_time)
+  # If evaluated basis dimension disagrees with K, rebuild A accordingly
+  K_eval <- ncol(B_time)
+  if (K_eval != K) {
+    K <- as.integer(K_eval)
+    stopifnot(ncol(X_trials) %% K == 0L)
+    idx_by_basis <- lapply(seq_len(K), function(k) seq.int(k, ncol(X_trials), by = K))
+    A <- do.call(cbind, lapply(idx_by_basis, function(idx) rowSums(X_trials[, idx, drop = FALSE])))
+  }
+
+  # Reference HRF projection -> W0 (K-vector)
+  if (is.null(ref_hrf)) {
+    # Default: use first basis kernel as reference shape
+    ref_hrf <- B_time[, 1]
+  } else {
+    # Coerce to a vector of same length as time grid if needed
+    ref_hrf <- as.numeric(ref_hrf)
+    if (length(ref_hrf) != nrow(B_time)) {
+      # If provided on a different grid, evaluate HRF object if possible; otherwise fallback to first kernel
+      ref_hrf <- tryCatch({
+        rr <- fmrihrf::regressor(onsets = 0, hrf = ref_hrf, duration = 0, span = span)
+        as.numeric(fmrihrf::evaluate(rr, grid = times, precision = design_spec$precision %||% 0.1,
+                                     method = design_spec$method %||% "conv"))
+      }, error = function(e) B_time[, 1])
+    }
+  }
+  BtB <- crossprod(B_time)                          # K x K
+  # Small ridge on BtB to avoid singularity in projection
+  W0 <- drop(solve(BtB + 1e-8 * diag(ncol(B_time)), crossprod(B_time, ref_hrf)))
+
+  # Roughness penalty R in basis space: R = (D2 B)^T (D2 B)
+  if (mu_rough > 0) {
+    D2 <- diff(diag(nrow(B_time)), differences = 2)
+    R  <- crossprod(D2 %*% B_time)
+  } else {
+    R <- matrix(0, ncol(B_time), ncol(B_time))
+  }
+
+  # 4) Solve tiny KxK ridge system batched over voxels
+  AtA <- crossprod(A)                              # K x K
+  AtY <- crossprod(A, Y)                           # K x V
+  P   <- AtA + lambda_shape * diag(K) + mu_rough * R
+  rhs <- AtY + lambda_shape * W0 %*% matrix(1, 1, ncol(Y))
+  W   <- solve(P, rhs)
+  W   <- matrix(W, nrow = K, ncol = ncol(Y))        # ensure matrix even when K=1
+
+  # 5) Normalize each voxel's HRF shape to unit energy on the time grid
+  # energy_v = sqrt( diag(W^T (B^T B) W) ) computed without forming H = B W
+  M <- BtB
+  MW <- M %*% W                                   # K x V
+  s2 <- sqrt(pmax(colSums(W * MW), .Machine$double.eps))
+  W  <- sweep(W, 2L, s2, "/")
+  W  <- matrix(W, nrow = K, ncol = ncol(Y))
+
+  ref_norm <- sqrt(sum((B_time %*% W0)^2))
+
+  # 6) Optional global shrinkage for stability
+  if (shrink_global > 0) {
+    Wbar <- rowMeans(W)
+    W <- (1 - shrink_global) * W + shrink_global * matrix(Wbar, nrow = K, ncol = ncol(W))
+    W <- matrix(W, nrow = K, ncol = ncol(W))
+  }
+
+  # 7) Optional orientation: align with reference HRF so betas are positive-interpretable
+  if (isTRUE(orient_ref)) {
+    cvec <- as.numeric(crossprod(B_time, ref_hrf))   # length K
+    if (length(cvec) != nrow(W)) {
+      stop("Orientation reference length mismatch with basis dimension")
+    }
+    dots <- as.numeric(crossprod(cvec, W))          # length V
+    flip <- which(dots < 0)
+    if (length(flip)) W[, flip] <- -W[, flip, drop = FALSE]
+  }
+
+  structure(list(
+    coefficients = W,                          # K x V
+    basis       = design_spec$cond$hrf,        # fmrihrf basis object
+    conditions  = "cond",
+    ref_norm    = as.numeric(ref_norm)
+  ), class = "VoxelHRF")
+}

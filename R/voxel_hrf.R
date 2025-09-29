@@ -207,6 +207,12 @@ lss_with_hrf <- function(Y, events, hrf_estimates, nuisance_regs = NULL,
     } else {
       stop("Cannot evaluate HRF basis - unsupported type")
     }
+
+    # Scale predictors by reference norm so TR-grid columns match OASIS scale
+    ref_norm <- if (!is.null(hrf_estimates$ref_norm)) as.numeric(hrf_estimates$ref_norm) else 1
+    if (is.finite(ref_norm) && ref_norm != 0) {
+      hrf_basis_kernels <- hrf_basis_kernels * ref_norm
+    }
     
     # Call the pure R implementation
     betas <- lss_with_hrf_pure_r(
@@ -227,30 +233,6 @@ lss_with_hrf <- function(Y, events, hrf_estimates, nuisance_regs = NULL,
   durations <- as.numeric(events$duration)
   conditions <- as.character(events$condition)
 
-  fine_dt <- 0.1
-  # Get HRF span from the basis object attribute
-  hrf_span <- if (!is.null(attr(hrf_estimates$basis, "span"))) {
-    attr(hrf_estimates$basis, "span") 
-  } else {
-    30
-  }
-  max_time <- max(onsets + durations) + hrf_span
-  fine_grid <- seq(0, max_time, by = fine_dt)
-  # Evaluate HRF at fine grid points
-  hrf_func <- hrf_estimates$basis
-  if (is.function(hrf_func)) {
-    hrf_basis_kernels <- hrf_func(fine_grid)
-  } else {
-    # For HRF objects, create a simple regressor and evaluate
-    r <- fmrihrf::regressor(onsets = 0, hrf = hrf_func, duration = 0, span = hrf_span)
-    hrf_basis_kernels <- fmrihrf::evaluate(r, fine_grid, precision = fine_dt, method = "conv")
-  }
-  if (inherits(hrf_basis_kernels, "Matrix")) {
-    hrf_basis_kernels <- as.matrix(hrf_basis_kernels)
-  }
-
-  onset_idx <- as.integer(round(onsets / fine_dt)) + 1L
-
   if (is.null(backing_dir)) {
     backing_dir <- tempdir()
   }
@@ -268,13 +250,47 @@ lss_with_hrf <- function(Y, events, hrf_estimates, nuisance_regs = NULL,
     pb <- progress::progress_bar$new(total = ncol(Y))
     update_progress <- function(step) pb$tick(step)
   }
-
-  lss_engine_vox_hrf(Y, hrf_estimates$coefficients, hrf_basis_kernels,
-                     onset_idx, durations, nuisance_regs,
-                     betas@address, update_progress,
-                     as.integer(chunk_size), verbose)
+  # Compute betas via Armadillo backend on TR grid (helper) and copy into bigmemory
+  betas_tr <- .voxhrf_betas_cpp_arma(Y, onsets, durations, hrf_estimates, nuisance_regs)
+  betas[,] <- betas_tr
 
   result <- list(betas = betas)
   class(result) <- "LSSBeta"
   result
+}
+
+# Internal helper: compute VOXHRF betas on the TR grid using the Armadillo backend
+# Returns a dense numeric matrix (n_trials x n_vox)
+.voxhrf_betas_cpp_arma <- function(Y, onsets, durations, hrf_estimates, nuisance_regs = NULL) {
+  n_time <- nrow(Y)
+  # Evaluate HRF basis on TR grid
+  hrf_span <- if (!is.null(attr(hrf_estimates$basis, "span"))) attr(hrf_estimates$basis, "span") else 30
+  tr_grid <- seq(0, hrf_span, by = 1)
+  hrf_func <- hrf_estimates$basis
+  if (is.function(hrf_func)) {
+    hrf_basis_kernels <- hrf_func(tr_grid)
+  } else {
+    r <- fmrihrf::regressor(onsets = 0, hrf = hrf_func, duration = 0, span = hrf_span)
+    hrf_basis_kernels <- fmrihrf::evaluate(r, tr_grid, precision = 1, method = "conv")
+  }
+  if (inherits(hrf_basis_kernels, "Matrix")) hrf_basis_kernels <- as.matrix(hrf_basis_kernels)
+  if (is.vector(hrf_basis_kernels)) hrf_basis_kernels <- matrix(hrf_basis_kernels, ncol = 1L)
+  # Apply ref_norm
+  ref_norm <- if (!is.null(hrf_estimates$ref_norm)) as.numeric(hrf_estimates$ref_norm) else 1
+  if (is.finite(ref_norm) && ref_norm != 0) hrf_basis_kernels <- hrf_basis_kernels * ref_norm
+
+  onset_idx <- as.integer(round(onsets))
+  dur_idx   <- as.integer(round(durations))
+
+  lss_with_hrf_pure_r(
+    Y = Y,
+    onset_idx = onset_idx,
+    durations = dur_idx,
+    hrf_basis_kernels = hrf_basis_kernels,
+    coefficients = hrf_estimates$coefficients,
+    Z = matrix(1, n_time, 1L),
+    Nuisance = nuisance_regs,
+    method = "cpp_arma",
+    verbose = FALSE
+  )
 }

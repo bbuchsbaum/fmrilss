@@ -14,3 +14,4 @@ repomix-output.xml
 ^CLAUDE\.md$
 ^data-raw$
 ^examples$
+^VIGNETTE_REVIEW\.md$

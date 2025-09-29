@@ -14,10 +14,27 @@ List compute_residuals_cpp(const arma::mat& X,          // (n×k)
                            const arma::mat& Y,          // (n×V)
                            const arma::mat& C) {        // (n×T)
 
-    arma::mat XtX   = X.t() * X;                        // k×k
-    arma::mat XtXinv= inv_sympd(XtX);                   // k×k  (Cholesky, no SVD)
-    arma::mat XtY   = X.t() * Y;                        // k×V
-    arma::mat XtC   = X.t() * C;                        // k×T
+    // Handle empty or zero-column nuisance robustly
+    if (X.n_cols == 0) {
+        return List::create(Named("Q_dmat_ran") = C,
+                            Named("residual_data") = Y);
+    }
+
+    arma::mat XtX = X.t() * X;                          // k×k
+    arma::mat XtXinv;
+    bool spd = false;
+    try {
+        spd = arma::inv_sympd(XtXinv, XtX);             // Cholesky if SPD
+    } catch (...) {
+        spd = false;
+    }
+    if (!spd) {
+        // Fallback to pseudo-inverse for singular/non-SPD cases
+        XtXinv = arma::pinv(XtX);
+    }
+
+    arma::mat XtY = X.t() * Y;                          // k×V
+    arma::mat XtC = X.t() * C;                          // k×T
 
     arma::mat Y_res = Y - X * (XtXinv * XtY);           // n×V
     arma::mat C_res = C - X * (XtXinv * XtC);           // n×T
