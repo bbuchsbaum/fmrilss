@@ -36,6 +36,7 @@
 <li><a class="dropdown-item" href="../articles/getting_started.html">Getting Started with fmrilss</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_method.html">The OASIS Method: Optimized Analytic Single-pass Inverse Solution</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: Algebra and Implementation Details</a></li>
+    <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF Modeling with fmrilss</a></li>
   </ul>
 </li>
@@ -62,7 +63,7 @@
                         <h4 data-toc-skip class="author">fmrilss
 Development Team</h4>
             
-            <h4 data-toc-skip class="date">2025-09-29</h4>
+            <h4 data-toc-skip class="date">2025-10-31</h4>
       
 
       <div class="d-none name"><code>getting_started.Rmd</code></div>
@@ -136,24 +137,35 @@ from a rapid event-related design.</p>
 <h3 id="creating-the-experimental-design">Creating the Experimental Design<a class="anchor" aria-label="anchor" href="#creating-the-experimental-design"></a>
 </h3>
 <p>The design matrix encodes stimulus timing and expected hemodynamic
-responses.</p>
+responses. We’ll create a proper event-related design by convolving
+trial onsets with an HRF.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Trial design matrix (X)</span></span>
-<span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fl">0</span>, <span class="va">n_timepoints</span>, <span class="va">n_trials</span><span class="op">)</span></span>
-<span><span class="co"># Ensure integer onsets within bounds</span></span>
+<code class="sourceCode R"><span><span class="co"># Define trial onsets (in TRs)</span></span>
 <span><span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span>from <span class="op">=</span> <span class="fl">10</span>, to <span class="op">=</span> <span class="va">n_timepoints</span> <span class="op">-</span> <span class="fl">12</span>, length.out <span class="op">=</span> <span class="va">n_trials</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="kw">for</span><span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_trials</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">X</span><span class="op">[</span><span class="va">onsets</span><span class="op">[</span><span class="va">i</span><span class="op">]</span><span class="op">:</span><span class="op">(</span><span class="va">onsets</span><span class="op">[</span><span class="va">i</span><span class="op">]</span> <span class="op">+</span> <span class="fl">5</span><span class="op">)</span>, <span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">1</span></span>
+<span></span>
+<span><span class="co"># Create HRF-convolved design matrix using a simple gamma HRF</span></span>
+<span><span class="co"># In real analyses, use fmrihrf package for more sophisticated HRF models</span></span>
+<span><span class="va">simple_hrf</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="co"># Gamma function parameters for a canonical HRF shape</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html" class="external-link">ifelse</a></span><span class="op">(</span><span class="va">t</span> <span class="op">&gt;=</span> <span class="fl">0</span>, <span class="fu"><a href="https://rdrr.io/r/stats/GammaDist.html" class="external-link">dgamma</a></span><span class="op">(</span><span class="va">t</span>, shape <span class="op">=</span> <span class="fl">6</span>, rate <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>, <span class="fl">0</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span></span>
-<span><span class="co"># Experimental regressors (Z) - intercept and condition effects</span></span>
-<span><span class="co"># These are regressors we want to model and get estimates for, but not trial-wise</span></span>
+<span><span class="co"># Build trial design matrix (X) with HRF convolution</span></span>
+<span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fl">0</span>, <span class="va">n_timepoints</span>, <span class="va">n_trials</span><span class="op">)</span></span>
+<span><span class="va">hrf_kernel</span> <span class="op">&lt;-</span> <span class="fu">simple_hrf</span><span class="op">(</span><span class="fl">0</span><span class="op">:</span><span class="fl">20</span><span class="op">)</span>  <span class="co"># HRF spanning ~20 TRs</span></span>
+<span><span class="kw">for</span><span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_trials</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">onset</span> <span class="op">&lt;-</span> <span class="va">onsets</span><span class="op">[</span><span class="va">i</span><span class="op">]</span></span>
+<span>  <span class="va">hrf_length</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">hrf_kernel</span><span class="op">)</span>, <span class="va">n_timepoints</span> <span class="op">-</span> <span class="va">onset</span> <span class="op">+</span> <span class="fl">1</span><span class="op">)</span></span>
+<span>  <span class="va">X</span><span class="op">[</span><span class="va">onset</span><span class="op">:</span><span class="op">(</span><span class="va">onset</span> <span class="op">+</span> <span class="va">hrf_length</span> <span class="op">-</span> <span class="fl">1</span><span class="op">)</span>, <span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">hrf_kernel</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="va">hrf_length</span><span class="op">]</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="co"># Experimental regressors (Z) - intercept and linear trend</span></span>
+<span><span class="co"># These are regressors we want to model but not trial-wise</span></span>
 <span><span class="va">Z</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>Intercept <span class="op">=</span> <span class="fl">1</span>, LinearTrend <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="va">n_timepoints</span>, center <span class="op">=</span> <span class="cn">TRUE</span>, scale <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Nuisance regressors - e.g., 6 motion parameters</span></span>
 <span><span class="va">Nuisance</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_timepoints</span> <span class="op">*</span> <span class="fl">6</span><span class="op">)</span>, <span class="va">n_timepoints</span>, <span class="fl">6</span><span class="op">)</span></span></code></pre></div>
-<p>Matrix <code>X</code> contains trial regressors (here using box-car
-functions for simplicity, though HRF convolution is standard). Matrix
+<p>Matrix <code>X</code> contains HRF-convolved trial regressors. Matrix
 <code>Z</code> contains experimental covariates (intercept and linear
 trend). The nuisance matrix models unwanted variance (e.g., motion
 parameters).</p>
@@ -198,62 +210,17 @@ intercept term:</p>
 <span><span class="co"># The result is a trials-by-voxels matrix</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_basic</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 12 25</span></span></code></pre></div>
-</div>
-</div>
-<div class="section level2">
-<h2 id="session-info">Session Info<a class="anchor" aria-label="anchor" href="#session-info"></a>
-</h2>
-<pre><code><span><span class="co">#&gt; R version 4.5.1 (2025-06-13)</span></span>
-<span><span class="co">#&gt; Platform: x86_64-pc-linux-gnu</span></span>
-<span><span class="co">#&gt; Running under: Ubuntu 24.04.3 LTS</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Matrix products: default</span></span>
-<span><span class="co">#&gt; BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3 </span></span>
-<span><span class="co">#&gt; LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.26.so;  LAPACK version 3.12.0</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; locale:</span></span>
-<span><span class="co">#&gt;  [1] LC_CTYPE=C.UTF-8       LC_NUMERIC=C           LC_TIME=C.UTF-8       </span></span>
-<span><span class="co">#&gt;  [4] LC_COLLATE=C.UTF-8     LC_MONETARY=C.UTF-8    LC_MESSAGES=C.UTF-8   </span></span>
-<span><span class="co">#&gt;  [7] LC_PAPER=C.UTF-8       LC_NAME=C              LC_ADDRESS=C          </span></span>
-<span><span class="co">#&gt; [10] LC_TELEPHONE=C         LC_MEASUREMENT=C.UTF-8 LC_IDENTIFICATION=C   </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; time zone: UTC</span></span>
-<span><span class="co">#&gt; tzcode source: system (glibc)</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; attached base packages:</span></span>
-<span><span class="co">#&gt; [1] stats     graphics  grDevices utils     datasets  methods   base     </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; other attached packages:</span></span>
-<span><span class="co">#&gt; [1] fmrilss_0.1.0          fmrihrf_0.1.0          RcppArmadillo_15.0.2-2</span></span>
-<span><span class="co">#&gt; [4] Rcpp_1.1.0            </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; loaded via a namespace (and not attached):</span></span>
-<span><span class="co">#&gt;  [1] Matrix_1.7-3        gtable_0.3.6        jsonlite_2.0.0     </span></span>
-<span><span class="co">#&gt;  [4] compiler_4.5.1      assertthat_0.2.1    jquerylib_0.1.4    </span></span>
-<span><span class="co">#&gt;  [7] splines_4.5.1       systemfonts_1.2.3   scales_1.4.0       </span></span>
-<span><span class="co">#&gt; [10] textshaping_1.0.3   uuid_1.2-1          yaml_2.3.10        </span></span>
-<span><span class="co">#&gt; [13] fastmap_1.2.0       lattice_0.22-7      ggplot2_4.0.0      </span></span>
-<span><span class="co">#&gt; [16] R6_2.6.1            knitr_1.50          desc_1.4.3         </span></span>
-<span><span class="co">#&gt; [19] RColorBrewer_1.1-3  bslib_0.9.0         rlang_1.1.6        </span></span>
-<span><span class="co">#&gt; [22] cachem_1.1.0        xfun_0.53           S7_0.2.0           </span></span>
-<span><span class="co">#&gt; [25] fs_1.6.6            sass_0.4.10         memoise_2.0.1      </span></span>
-<span><span class="co">#&gt; [28] cli_3.6.5           pkgdown_2.1.3       magrittr_2.0.4     </span></span>
-<span><span class="co">#&gt; [31] digest_0.6.37       grid_4.5.1          bigmemory.sri_0.1.8</span></span>
-<span><span class="co">#&gt; [34] lifecycle_1.0.4     bigmemory_4.6.4     vctrs_0.6.5        </span></span>
-<span><span class="co">#&gt; [37] evaluate_1.0.5      glue_1.8.0          farver_2.1.2       </span></span>
-<span><span class="co">#&gt; [40] numDeriv_2016.8-1.1 fmriAR_0.0.0.9000   ragg_1.5.0         </span></span>
-<span><span class="co">#&gt; [43] rmarkdown_2.30      purrr_1.1.0         tools_4.5.1        </span></span>
-<span><span class="co">#&gt; [46] htmltools_0.5.8.1</span></span></code></pre>
 <p>For a more complete analysis that accounts for experimental effects
 and removes nuisance signals, we include our <code>Z</code> and
 <code>Nuisance</code> matrices. The function handles the nuisance
 regression efficiently, projecting these signals out of both the data
 and design matrix before estimating trial-specific betas:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">beta_full</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span><span class="op">)</span></span>
 <span><span class="co"># The output dimensions remain the same</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_full</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 12 25</span></span></code></pre></div>
+</div>
 </div>
 <div class="section level2">
 <h2 id="handling-temporal-autocorrelation-with-prewhitening">Handling Temporal Autocorrelation with Prewhitening<a class="anchor" aria-label="anchor" href="#handling-temporal-autocorrelation-with-prewhitening"></a>
@@ -262,7 +229,7 @@ and design matrix before estimating trial-specific betas:</p>
 statistical inference. The <code>fmrilss</code> package now integrates
 with <code>fmriAR</code> to provide sophisticated prewhitening
 capabilities:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Basic AR(1) prewhitening</span></span>
 <span><span class="va">beta_ar1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
 <span>                prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
@@ -276,14 +243,22 @@ capabilities:</p>
 <span><span class="co">#&gt; [1] 12 25</span></span></code></pre></div>
 <p>For more advanced noise modeling, you can use voxel-specific
 parameters or ARMA models:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Voxel-specific AR parameters</span></span>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Voxel-specific AR parameters (slower but more accurate)</span></span>
+<span><span class="co"># Default pooling="global" estimates one AR model across all voxels</span></span>
+<span><span class="co"># pooling="voxel" fits separate AR models per voxel (~100x slower)</span></span>
 <span><span class="va">beta_voxel</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
 <span>                  prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="fl">1</span>, pooling <span class="op">=</span> <span class="st">"voxel"</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># ARMA model for complex noise</span></span>
+<span><span class="co"># ARMA model for complex noise (AR + moving average components)</span></span>
+<span><span class="co"># Use when residuals show both autocorrelation and moving average patterns</span></span>
 <span><span class="va">beta_arma</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
 <span>                prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"arma"</span>, p <span class="op">=</span> <span class="fl">2</span>, q <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p><strong>Pooling strategies:</strong> -
+<code>pooling = "global"</code> (default): Single AR model for all
+voxels (fast) - <code>pooling = "voxel"</code>: Per-voxel AR models
+(accurate but slow) - <code>pooling = "run"</code>: Separate model per
+run (for multi-run data)</p>
 </div>
 <div class="section level2">
 <h2 id="choosing-the-right-computational-backend">Choosing the Right Computational Backend<a class="anchor" aria-label="anchor" href="#choosing-the-right-computational-backend"></a>
@@ -296,7 +271,7 @@ high-performance C++ backend for real analyses, especially with large
 datasets. The C++ implementation leverages Armadillo for efficient
 linear algebra and OpenMP for parallel processing across multiple CPU
 cores:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Run the same analysis with the high-performance C++ engine</span></span>
 <span><span class="va">beta_fast</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>, method <span class="op">=</span> <span class="st">"cpp_optimized"</span><span class="op">)</span></span>
 <span></span>
@@ -315,10 +290,13 @@ development, while the C++ version provides production performance.</p>
 <div class="section level2">
 <h2 id="lss-versus-traditional-glm-when-each-shines">LSS versus Traditional GLM: When Each Shines<a class="anchor" aria-label="anchor" href="#lss-versus-traditional-glm-when-each-shines"></a>
 </h2>
-<p>Comparison between LSS and standard Least Squares All (LSA)
-methods:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># LSA: Standard GLM with all trials in one model</span></span>
+<p>Comparison between LSS and standard Least Squares All (LSA) methods.
+LSA is the traditional GLM approach that estimates all trial
+coefficients simultaneously in a single model, making it computationally
+faster but more susceptible to collinearity in rapid designs.</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># LSA: Standard GLM (Least Squares All) estimates all trials simultaneously</span></span>
+<span><span class="co"># This is computationally faster but suffers from collinearity in rapid designs</span></span>
 <span><span class="va">beta_lsa</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lsa.html">lsa</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Compare dimensions</span></span>
@@ -335,9 +313,9 @@ methods:</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Mean variance across voxels:</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  LSS:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">var_lss</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   LSS: 1.826826</span></span>
+<span><span class="co">#&gt;   LSS: 10.27741</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  LSA:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">var_lsa</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   LSA: 4.297449</span></span>
+<span><span class="co">#&gt;   LSA: 195.8418</span></span>
 <span></span>
 <span><span class="co"># Plot comparison</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
@@ -363,54 +341,52 @@ seconds - When computational efficiency is critical</p>
 extends LSS with: automatic HRF estimation, ridge regularization for
 stability, single-pass computation for all trials, and multi-basis HRF
 model support.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Basic OASIS usage</span></span>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Basic OASIS usage with automatic design construction</span></span>
 <span><span class="co"># fmrihrf is now imported automatically</span></span>
 <span><span class="va">beta_oasis</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
-<span>  X <span class="op">=</span> <span class="cn">NULL</span>,  <span class="co"># OASIS builds design internally</span></span>
+<span>  X <span class="op">=</span> <span class="cn">NULL</span>,  <span class="co"># Let OASIS build design from design_spec</span></span>
 <span>  method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
 <span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>    design_spec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>      sframe <span class="op">=</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span>, TR <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>,</span>
 <span>      cond <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>        onsets <span class="op">=</span> <span class="va">onsets</span>,        <span class="co"># reuse onsets from above</span></span>
-<span>        hrf <span class="op">=</span> <span class="va">HRF_SPMG1</span>,        <span class="co"># HRF model</span></span>
-<span>        span <span class="op">=</span> <span class="fl">30</span></span>
+<span>        hrf <span class="op">=</span> <span class="va">HRF_SPMG1</span>,        <span class="co"># SPM canonical HRF</span></span>
+<span>        span <span class="op">=</span> <span class="fl">30</span>               <span class="co"># HRF duration in seconds</span></span>
 <span>      <span class="op">)</span></span>
 <span>    <span class="op">)</span>,</span>
-<span>    ridge_mode <span class="op">=</span> <span class="st">"fractional"</span>,</span>
-<span>    ridge_x <span class="op">=</span> <span class="fl">0.01</span>,</span>
-<span>    ridge_b <span class="op">=</span> <span class="fl">0.01</span></span>
+<span>    ridge_mode <span class="op">=</span> <span class="st">"fractional"</span>,  <span class="co"># Regularization for numerical stability</span></span>
+<span>    ridge_x <span class="op">=</span> <span class="fl">0.01</span>,             <span class="co"># Ridge for design matrix</span></span>
+<span>    ridge_b <span class="op">=</span> <span class="fl">0.01</span>              <span class="co"># Ridge for coefficients</span></span>
 <span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"OASIS beta dimensions:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_oasis</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; OASIS beta dimensions: 12 25</span></span></code></pre></div>
-<p>We pass <code>X = NULL</code> together with a
-<code>design_spec</code> so that OASIS can rebuild the trial-wise design
-from the event description and HRF settings on every call. Internally
-(see <code>R/oasis_glue.R</code>) the solver calls <code>fmrihrf</code>
-to generate the appropriate basis for the requested HRF, apply
-span/precision choices, and add any extra conditions before the
-single-pass solve. This keeps the design in sync with changes to the HRF
-(for example when running a grid search or switching to an FIR basis)
-without requiring you to hand-maintain a matching matrix. If you already
-have a fixed design matrix you can still provide it via <code>X</code>,
-but the high-level <code>design_spec</code> path is the recommended
-interface when the HRF is part of what you want OASIS to manage.</p>
+<span><span class="co">#&gt; OASIS beta dimensions: 12 25</span></span>
+<span></span>
+<span><span class="co"># Alternative: Provide a pre-built design matrix directly</span></span>
+<span><span class="co"># beta_oasis_manual &lt;- lss(Y, X = my_hrf_convolved_design, method = "oasis", ...)</span></span></code></pre></div>
+<p><strong>Why <code>X = NULL</code>?</strong> OASIS can build the
+design matrix internally from <code>design_spec</code>, ensuring the HRF
+settings stay synchronized with the design. This is especially useful
+when exploring different HRFs or using multi-basis models.
+Alternatively, you can provide your own HRF-convolved design via
+<code>X</code>.</p>
 </div>
 <div class="section level2">
 <h2 id="working-with-different-computational-backends">Working with Different Computational Backends<a class="anchor" aria-label="anchor" href="#working-with-different-computational-backends"></a>
 </h2>
 <p>The package provides multiple backends to match your computational
 needs and resources. Each backend implements the same algorithm but with
-different optimization strategies. The naive implementation offers the
-clearest code for understanding the algorithm, while the vectorized and
-optimized R versions provide good performance with pure R code. For
-production work with large datasets, the C++ backend offers the best
-performance, especially when combined with parallel processing.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+different optimization strategies. The <code>naive</code> implementation
+offers the clearest code for understanding the algorithm, while
+<code>r_vectorized</code> and <code>r_optimized</code> provide good
+performance with pure R code. For production work with large datasets,
+<code>cpp_optimized</code> offers the best performance, especially when
+combined with parallel processing.</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Benchmark different methods</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/joshuaulrich/microbenchmark/" class="external-link">microbenchmark</a></span><span class="op">)</span></span>
 <span></span>
@@ -447,7 +423,7 @@ conditions, you can create separate design matrices for each condition
 and include condition labels as experimental regressors. This allows you
 to model condition-specific effects while still obtaining trial-wise
 estimates within each condition.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create design with multiple conditions</span></span>
 <span><span class="va">n_cond</span> <span class="op">&lt;-</span> <span class="fl">3</span></span>
 <span><span class="va">X_multi</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fl">0</span>, <span class="va">n_timepoints</span>, <span class="va">n_trials</span> <span class="op">*</span> <span class="va">n_cond</span><span class="op">)</span></span>
@@ -479,7 +455,7 @@ continuous variables like reaction time or stimulus intensity, are also
 straightforward to implement. For a quantitative demo, we simulate a
 parametric effect in the data and show recovery with and without the
 modulator:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Add parametric modulator (e.g., reaction time, stimulus intensity)</span></span>
 <span><span class="va">modulator</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_trials</span>, mean <span class="op">=</span> <span class="fl">0</span>, sd <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>, center <span class="op">=</span> <span class="cn">TRUE</span>, scale <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
@@ -496,10 +472,10 @@ modulator:</p>
 <span><span class="va">beta_unmod</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y_mod</span>, <span class="va">X</span>,       Z <span class="op">=</span> <span class="va">Z</span>, method <span class="op">=</span> <span class="st">"r_optimized"</span><span class="op">)</span></span>
 <span><span class="va">beta_param</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y_mod</span>, <span class="va">X_param</span>, Z <span class="op">=</span> <span class="va">Z</span>, method <span class="op">=</span> <span class="st">"r_optimized"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Ground truths for comparison</span></span>
-<span><span class="co"># - For unmodulated design X, the true coefficients are modulator * true_trial_betas</span></span>
+<span><span class="co"># Ground truth depends on which design matrix we use:</span></span>
+<span><span class="co"># - When fitting with X (unmodulated):        recovers modulator * true_trial_betas</span></span>
+<span><span class="co"># - When fitting with X_param (premodulated): recovers true_trial_betas directly</span></span>
 <span><span class="va">true_unmod_coefs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sweep.html" class="external-link">sweep</a></span><span class="op">(</span><span class="va">true_trial_betas</span>, <span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">modulator</span><span class="op">)</span>, <span class="va">`*`</span><span class="op">)</span></span>
-<span><span class="co"># - For parametrically modulated design X_param, the true coefficients are true_trial_betas</span></span>
 <span></span>
 <span><span class="va">cor_unmod</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">beta_unmod</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">true_unmod_coefs</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">cor_param</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">beta_param</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">true_trial_betas</span><span class="op">)</span><span class="op">)</span></span>
@@ -507,9 +483,9 @@ modulator:</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Correlation with true coefficients (parametric effect simulated):\n"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Correlation with true coefficients (parametric effect simulated):</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Using X (no modulator):\t"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">cor_unmod</span>, <span class="fl">3</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   Using X (no modulator):     0.532</span></span>
+<span><span class="co">#&gt;   Using X (no modulator):     0.138</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Using X_param (with modulator):"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">cor_param</span>, <span class="fl">3</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   Using X_param (with modulator): 0.37</span></span></code></pre></div>
+<span><span class="co">#&gt;   Using X_param (with modulator): 0.103</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="optimizing-performance-for-large-scale-analyses">Optimizing Performance for Large-Scale Analyses<a class="anchor" aria-label="anchor" href="#optimizing-performance-for-large-scale-analyses"></a>
@@ -521,7 +497,7 @@ datasets effectively.</p>
 <p>For very large datasets that exceed available memory, you can process
 voxels in chunks. This approach maintains reasonable memory usage while
 still benefiting from vectorized operations within each chunk:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># For very large datasets, process in chunks</span></span>
 <span><span class="va">chunk_size</span> <span class="op">&lt;-</span> <span class="fl">1000</span></span>
 <span><span class="va">n_chunks</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">ceiling</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span> <span class="op">/</span> <span class="va">chunk_size</span><span class="op">)</span></span>
@@ -538,7 +514,7 @@ still benefiting from vectorized operations within each chunk:</p>
 remove nuisance signals before running LSS. While LSS can handle
 nuisance regressors internally, preprocessing can be more efficient when
 running multiple analyses:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Project out nuisance before LSS (when appropriate)</span></span>
 <span><span class="co"># project_confounds returns the projection matrix Q; apply it to both Y and X</span></span>
 <span><span class="va">Q_nuis</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/project_confounds.html">project_confounds</a></span><span class="op">(</span><span class="va">Nuisance</span><span class="op">)</span></span>
@@ -548,18 +524,47 @@ running multiple analyses:</p>
 <span><span class="co"># This can be faster than including Nuisance in each LSS iteration</span></span>
 <span><span class="va">beta_preprocessed</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y_clean</span>, <span class="va">X_clean</span>, Z <span class="op">=</span> <span class="va">Z</span>, method <span class="op">=</span> <span class="st">"r_optimized"</span><span class="op">)</span></span></code></pre></div>
 <p>Choosing the right backend for your data size is crucial for optimal
-performance. Based on the synthetic benchmarks in the OASIS vignette,
-the optimized R and fused C++ implementations perform almost identically
-for small-to-medium problems (hundreds of trials, up to a few thousand
-voxels); the C++ path pulls slightly ahead once the voxel count grows
-into the tens of thousands. OASIS stays in the same ballpark for these
-workloads, but you typically reach for it when you also want its
-HRF-aware features (automatic design construction, ridge, FIR support,
-grid search) rather than purely for speed, because those extras make the
-comparison less apples-to-apples. In practice pick the backend that
-matches the tooling you need (R for ease of debugging, C++ for maximum
-throughput, OASIS when you want the richer HRF workflow) and validate
-with a short benchmark on your own data.</p>
+performance:</p>
+<p><strong>Performance guidelines (based on benchmarks):</strong></p>
+<table class="table">
+<colgroup>
+<col width="26%">
+<col width="46%">
+<col width="26%">
+</colgroup>
+<thead><tr class="header">
+<th>Data Size</th>
+<th>Recommended Method</th>
+<th>Rationale</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>n_trials &lt; 50, n_voxels &lt; 5,000</td>
+<td>
+<code>r_optimized</code> or <code>cpp_optimized</code>
+</td>
+<td>Similar speed, R easier to debug</td>
+</tr>
+<tr class="even">
+<td>n_voxels &gt; 10,000</td>
+<td><code>cpp_optimized</code></td>
+<td>Benefits from OpenMP parallelization</td>
+</tr>
+<tr class="odd">
+<td>Need HRF grid search or ridge</td>
+<td><code>oasis</code></td>
+<td>Additional features justify overhead</td>
+</tr>
+<tr class="even">
+<td>Quick prototyping</td>
+<td><code>r_optimized</code></td>
+<td>Good balance of speed and readability</td>
+</tr>
+</tbody>
+</table>
+<p>In practice, pick the backend that matches your needs: R for
+debugging, C++ for maximum throughput, OASIS for HRF-aware workflows.
+Always validate with a quick benchmark on your own data.</p>
 </div>
 <div class="section level2">
 <h2 id="troubleshooting-common-challenges">Troubleshooting Common Challenges<a class="anchor" aria-label="anchor" href="#troubleshooting-common-challenges"></a>
@@ -571,31 +576,49 @@ will help you get the most out of your analyses.</p>
 collinearity between regressors, standard least squares solutions become
 unstable. You can detect this by examining the correlation matrix of
 your design:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Check for collinearity</span></span>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Check for collinearity in design matrix</span></span>
 <span><span class="va">cor_matrix</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="va">X</span><span class="op">)</span></span>
 <span><span class="va">high_cor</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html" class="external-link">which</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">cor_matrix</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0.9</span> <span class="op">&amp;</span> <span class="va">cor_matrix</span> <span class="op">!=</span> <span class="fl">1</span>, arr.ind <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span></span>
 <span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">high_cor</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="kw"><a href="https://rdrr.io/r/base/warning.html" class="external-link">warning</a></span><span class="op">(</span><span class="st">"High correlation between regressors detected"</span><span class="op">)</span></span>
-<span>  <span class="co"># Consider using ridge regression via OASIS</span></span>
-<span>  <span class="va">beta_ridge</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
-<span>                    oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>ridge_mode <span class="op">=</span> <span class="st">"absolute"</span>, ridge_x <span class="op">=</span> <span class="fl">0.1</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="co"># Option 1: Use OASIS with ridge and automatic design construction</span></span>
+<span>  <span class="va">beta_ridge</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>    Y <span class="op">=</span> <span class="va">Y</span>,</span>
+<span>    X <span class="op">=</span> <span class="cn">NULL</span>,  <span class="co"># Let OASIS build design</span></span>
+<span>    method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
+<span>    oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      design_spec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>        sframe <span class="op">=</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span>, TR <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>,</span>
+<span>        cond <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>onsets <span class="op">=</span> <span class="va">onsets</span>, hrf <span class="op">=</span> <span class="va">HRF_SPMG1</span>, span <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
+<span>      <span class="op">)</span>,</span>
+<span>      ridge_mode <span class="op">=</span> <span class="st">"absolute"</span>,</span>
+<span>      ridge_x <span class="op">=</span> <span class="fl">0.1</span>  <span class="co"># Stronger ridge for collinearity</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span></span>
+<span>  <span class="co"># Option 2: For standard LSS without OASIS, increase ISI or use prewhitening</span></span>
+<span>  <span class="co"># Ridge is not directly available for non-OASIS backends</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p>Memory limitations can also pose challenges with large datasets.
 Before starting an analysis, it’s wise to estimate memory requirements
 and adjust your approach accordingly:</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Monitor memory usage</span></span>
-<span><span class="va">mem_required</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/object.size.html" class="external-link">object.size</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span> <span class="op">*</span> <span class="va">n_trials</span> <span class="op">*</span> <span class="fl">2</span>  <span class="co"># Rough estimate</span></span>
-<span><span class="co"># mem_available &lt;- memory.limit()  # Windows only</span></span>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Estimate peak memory requirements</span></span>
+<span><span class="va">mem_Y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/object.size.html" class="external-link">object.size</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span></span>
+<span><span class="va">mem_designs_approx</span> <span class="op">&lt;-</span> <span class="va">mem_Y</span> <span class="op">*</span> <span class="va">n_trials</span>  <span class="co"># n_trials copies of design during LSS</span></span>
+<span><span class="va">mem_results</span> <span class="op">&lt;-</span> <span class="va">mem_Y</span>  <span class="co"># Output size similar to Y</span></span>
+<span><span class="va">mem_required</span> <span class="op">&lt;-</span> <span class="va">mem_Y</span> <span class="op">+</span> <span class="va">mem_designs_approx</span> <span class="op">+</span> <span class="va">mem_results</span></span>
 <span></span>
-<span><span class="co"># if (mem_required &gt; mem_available * 0.8) {</span></span>
-<span><span class="co">#   warning("May run out of memory. Consider chunking or using OASIS.")</span></span>
-<span><span class="co"># }</span></span></code></pre></div>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Estimated memory needed:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">mem_required</span> <span class="op">/</span> <span class="fl">1e9</span>, <span class="fl">2</span><span class="op">)</span>, <span class="st">"GB\n"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># If this exceeds available RAM, use chunking approach (see example above)</span></span>
+<span><span class="co"># Or consider OASIS which has lower memory overhead for large datasets</span></span></code></pre></div>
 <p>If you encounter unexpectedly slow performance, profiling can help
 identify bottlenecks:</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Profile code to find bottlenecks</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/Rprof.html" class="external-link">Rprof</a></span><span class="op">(</span><span class="st">"lss_profile.out"</span><span class="op">)</span></span>
 <span><span class="va">beta_slow</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, method <span class="op">=</span> <span class="st">"naive"</span><span class="op">)</span></span>
@@ -611,13 +634,24 @@ addresses the collinearity problem in rapid event-related designs, how
 to choose between different computational backends, and strategies for
 handling complex experimental designs and large datasets.</p>
 <p>To deepen your understanding and explore advanced features, we
-recommend examining the voxel-wise HRF vignette, which demonstrates how
-to model spatial variation in hemodynamic responses across the brain.
-The OASIS method vignette provides comprehensive coverage of this
-powerful extension, including HRF estimation and ridge regression
-techniques. For those interested in hierarchical analyses, the mixed
-models vignette shows how to combine LSS with mixed-effects modeling
-frameworks.</p>
+recommend:</p>
+<ul>
+<li>
+<strong>Voxel-wise HRF vignette</strong>: Model spatial variation in
+hemodynamic responses across the brain using fully flexible HRF
+estimation</li>
+<li>
+<strong>SBHM vignette</strong>: Learn efficient voxel-specific HRF
+estimation using Shared-Basis HRF Matching, a library-constrained
+approach that balances flexibility and computational efficiency</li>
+<li>
+<strong>OASIS method vignette</strong>: Comprehensive coverage of
+OASIS features including automatic HRF construction, ridge
+regularization, and multi-basis models</li>
+<li>
+<strong>Mixed models vignette</strong>: Combine LSS with
+mixed-effects modeling frameworks for hierarchical analyses</li>
+</ul>
 <p>The <code>fmrilss</code> package represents a comprehensive toolkit
 for trial-wise beta estimation, providing options that range from
 simple, interpretable implementations to highly optimized solutions for
@@ -633,6 +667,51 @@ analysis.</p>
 (2012). Deconvolving BOLD activation in event-related designs for
 multivoxel pattern classification analyses. <em>NeuroImage</em>, 59(3),
 2636-2643.</p>
+</div>
+<div class="section level2">
+<h2 id="session-info">Session Info<a class="anchor" aria-label="anchor" href="#session-info"></a>
+</h2>
+<pre><code><span><span class="co">#&gt; R version 4.5.1 (2025-06-13)</span></span>
+<span><span class="co">#&gt; Platform: x86_64-pc-linux-gnu</span></span>
+<span><span class="co">#&gt; Running under: Ubuntu 24.04.3 LTS</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Matrix products: default</span></span>
+<span><span class="co">#&gt; BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3 </span></span>
+<span><span class="co">#&gt; LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.26.so;  LAPACK version 3.12.0</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; locale:</span></span>
+<span><span class="co">#&gt;  [1] LC_CTYPE=C.UTF-8       LC_NUMERIC=C           LC_TIME=C.UTF-8       </span></span>
+<span><span class="co">#&gt;  [4] LC_COLLATE=C.UTF-8     LC_MONETARY=C.UTF-8    LC_MESSAGES=C.UTF-8   </span></span>
+<span><span class="co">#&gt;  [7] LC_PAPER=C.UTF-8       LC_NAME=C              LC_ADDRESS=C          </span></span>
+<span><span class="co">#&gt; [10] LC_TELEPHONE=C         LC_MEASUREMENT=C.UTF-8 LC_IDENTIFICATION=C   </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; time zone: UTC</span></span>
+<span><span class="co">#&gt; tzcode source: system (glibc)</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; attached base packages:</span></span>
+<span><span class="co">#&gt; [1] stats     graphics  grDevices utils     datasets  methods   base     </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; other attached packages:</span></span>
+<span><span class="co">#&gt; [1] fmrilss_0.1.0          fmrihrf_0.1.0.9000     RcppArmadillo_15.0.2-2</span></span>
+<span><span class="co">#&gt; [4] Rcpp_1.1.0            </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; loaded via a namespace (and not attached):</span></span>
+<span><span class="co">#&gt;  [1] Matrix_1.7-3        gtable_0.3.6        jsonlite_2.0.0     </span></span>
+<span><span class="co">#&gt;  [4] compiler_4.5.1      assertthat_0.2.1    jquerylib_0.1.4    </span></span>
+<span><span class="co">#&gt;  [7] splines_4.5.1       systemfonts_1.3.1   scales_1.4.0       </span></span>
+<span><span class="co">#&gt; [10] textshaping_1.0.4   uuid_1.2-1          yaml_2.3.10        </span></span>
+<span><span class="co">#&gt; [13] fastmap_1.2.0       lattice_0.22-7      ggplot2_4.0.0      </span></span>
+<span><span class="co">#&gt; [16] R6_2.6.1            knitr_1.50          desc_1.4.3         </span></span>
+<span><span class="co">#&gt; [19] RColorBrewer_1.1-3  bslib_0.9.0         rlang_1.1.6        </span></span>
+<span><span class="co">#&gt; [22] cachem_1.1.0        xfun_0.53           S7_0.2.0           </span></span>
+<span><span class="co">#&gt; [25] fs_1.6.6            sass_0.4.10         memoise_2.0.1      </span></span>
+<span><span class="co">#&gt; [28] cli_3.6.5           pkgdown_2.1.3       magrittr_2.0.4     </span></span>
+<span><span class="co">#&gt; [31] digest_0.6.37       grid_4.5.1          bigmemory.sri_0.1.8</span></span>
+<span><span class="co">#&gt; [34] lifecycle_1.0.4     bigmemory_4.6.4     vctrs_0.6.5        </span></span>
+<span><span class="co">#&gt; [37] evaluate_1.0.5      glue_1.8.0          farver_2.1.2       </span></span>
+<span><span class="co">#&gt; [40] numDeriv_2016.8-1.1 fmriAR_0.1.0        ragg_1.5.0         </span></span>
+<span><span class="co">#&gt; [43] rmarkdown_2.30      purrr_1.1.0         tools_4.5.1        </span></span>
+<span><span class="co">#&gt; [46] htmltools_0.5.8.1</span></span></code></pre>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

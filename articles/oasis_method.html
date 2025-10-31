@@ -36,6 +36,7 @@
 <li><a class="dropdown-item" href="../articles/getting_started.html">Getting Started with fmrilss</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_method.html">The OASIS Method: Optimized Analytic Single-pass Inverse Solution</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: Algebra and Implementation Details</a></li>
+    <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF Modeling with fmrilss</a></li>
   </ul>
 </li>
@@ -62,7 +63,7 @@
                         <h4 data-toc-skip class="author">fmrilss
 Development Team</h4>
             
-            <h4 data-toc-skip class="date">2025-09-29</h4>
+            <h4 data-toc-skip class="date">2025-10-31</h4>
       
 
       <div class="d-none name"><code>oasis_method.Rmd</code></div>
@@ -304,13 +305,13 @@ how OASIS recovers the signal:</p>
 <span><span class="co">#&gt; [1] stats     graphics  grDevices utils     datasets  methods   base     </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; other attached packages:</span></span>
-<span><span class="co">#&gt; [1] fmrilss_0.1.0 fmrihrf_0.1.0</span></span>
+<span><span class="co">#&gt; [1] fmrilss_0.1.0      fmrihrf_0.1.0.9000</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; loaded via a namespace (and not attached):</span></span>
 <span><span class="co">#&gt;  [1] Matrix_1.7-3        gtable_0.3.6        jsonlite_2.0.0     </span></span>
 <span><span class="co">#&gt;  [4] compiler_4.5.1      Rcpp_1.1.0          assertthat_0.2.1   </span></span>
-<span><span class="co">#&gt;  [7] jquerylib_0.1.4     splines_4.5.1       systemfonts_1.2.3  </span></span>
-<span><span class="co">#&gt; [10] scales_1.4.0        textshaping_1.0.3   uuid_1.2-1         </span></span>
+<span><span class="co">#&gt;  [7] jquerylib_0.1.4     splines_4.5.1       systemfonts_1.3.1  </span></span>
+<span><span class="co">#&gt; [10] scales_1.4.0        textshaping_1.0.4   uuid_1.2-1         </span></span>
 <span><span class="co">#&gt; [13] yaml_2.3.10         fastmap_1.2.0       lattice_0.22-7     </span></span>
 <span><span class="co">#&gt; [16] ggplot2_4.0.0       R6_2.6.1            labeling_0.4.3     </span></span>
 <span><span class="co">#&gt; [19] knitr_1.50          desc_1.4.3          RColorBrewer_1.1-3 </span></span>
@@ -321,7 +322,7 @@ how OASIS recovers the signal:</p>
 <span><span class="co">#&gt; [34] magrittr_2.0.4      digest_0.6.37       grid_4.5.1         </span></span>
 <span><span class="co">#&gt; [37] bigmemory.sri_0.1.8 lifecycle_1.0.4     bigmemory_4.6.4    </span></span>
 <span><span class="co">#&gt; [40] vctrs_0.6.5         evaluate_1.0.5      glue_1.8.0         </span></span>
-<span><span class="co">#&gt; [43] farver_2.1.2        numDeriv_2016.8-1.1 fmriAR_0.0.0.9000  </span></span>
+<span><span class="co">#&gt; [43] farver_2.1.2        numDeriv_2016.8-1.1 fmriAR_0.1.0       </span></span>
 <span><span class="co">#&gt; [46] ragg_1.5.0          rmarkdown_2.30      purrr_1.1.0        </span></span>
 <span><span class="co">#&gt; [49] tools_4.5.1         htmltools_0.5.8.1</span></span></code></pre>
 <p>Notice how OASIS takes a design specification rather than a pre-built
@@ -552,6 +553,81 @@ shrink; opt in as needed for rapid designs. - With a very strong shape
 prior, results approach canonical‑HRF OASIS.</p>
 </div>
 <div class="section level2">
+<h2 id="sharedbasis-hrf-matching-sbhm">Shared‑Basis HRF Matching (SBHM)<a class="anchor" aria-label="anchor" href="#sharedbasis-hrf-matching-sbhm"></a>
+</h2>
+<p>SBHM learns a single low‑rank time basis from a large HRF library and
+fits voxels in that same coordinate system. Matching is then a fast
+cosine lookup in r‑dimensional space, and trial‑wise amplitudes come
+from projecting the r‑coefficients onto each voxel’s matched
+coordinates. This provides design‑aware HRF selection without FIRs or
+manifold alignment.</p>
+<p><strong>Note:</strong> This section provides a quick demonstration of
+SBHM. For comprehensive documentation including parameter guidance,
+performance considerations, and troubleshooting, see the dedicated
+<strong>SBHM vignette</strong>
+(<code><a href="../articles/sbhm.html">vignette("sbhm", package = "fmrilss")</a></code>).</p>
+<p>Workflow - Build a library via <code><a href="https://bbuchsbaum.github.io/fmrihrf/reference/hrf_library.html" class="external-link">fmrihrf::hrf_library()</a></code>
+over a parameter grid; learn rank‑r basis B by SVD. - Prepass: fit r
+coefficients per voxel with the SBHM basis, then match to the closest
+library member in whitened, L2‑normalized coefficient space. - LSS: run
+OASIS with K=r (the SBHM HRF) to get r×trial coefficients; project onto
+matched coordinates for scalar amplitudes.</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># 1) Build an HRF library on the TR grid using fmrihrf::hrf_library</span></span>
+<span><span class="va">param_grid</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/expand.grid.html" class="external-link">expand.grid</a></span><span class="op">(</span>shape <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">6</span>, <span class="fl">8</span>, <span class="fl">10</span><span class="op">)</span>, rate <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.9</span>, <span class="fl">1.0</span>, <span class="fl">1.1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">gamma_fun</span>  <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">shape</span>, <span class="va">rate</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">f</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span><span class="op">)</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/hrf_gamma.html" class="external-link">hrf_gamma</a></span><span class="op">(</span><span class="va">t</span>, shape <span class="op">=</span> <span class="va">shape</span>, rate <span class="op">=</span> <span class="va">rate</span><span class="op">)</span></span>
+<span>  <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/as_hrf.html" class="external-link">as_hrf</a></span><span class="op">(</span><span class="va">f</span>, span <span class="op">=</span> <span class="fl">32</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">sbhm</span> <span class="op">&lt;-</span> <span class="fu">sbhm_build</span><span class="op">(</span></span>
+<span>  library_spec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>fun <span class="op">=</span> <span class="va">gamma_fun</span>, pgrid <span class="op">=</span> <span class="va">param_grid</span>, span <span class="op">=</span> <span class="fl">32</span><span class="op">)</span>,</span>
+<span>  r <span class="op">=</span> <span class="fl">6</span>, sframe <span class="op">=</span> <span class="va">sframe</span>, baseline <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.5</span><span class="op">)</span>, normalize <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># 2) Define design (SBHM HRF is injected automatically by lss_sbhm)</span></span>
+<span><span class="va">design_spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>  sframe <span class="op">=</span> <span class="va">sframe</span>,</span>
+<span>  cond   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>onsets <span class="op">=</span> <span class="va">onsets</span>, duration <span class="op">=</span> <span class="fl">0</span>, span <span class="op">=</span> <span class="fl">32</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># 3) Run end-to-end SBHM: prepass -&gt; match -&gt; OASIS(K=r) -&gt; projection</span></span>
+<span><span class="va">res_sbhm</span> <span class="op">&lt;-</span> <span class="fu">lss_sbhm</span><span class="op">(</span></span>
+<span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
+<span>  sbhm <span class="op">=</span> <span class="va">sbhm</span>,</span>
+<span>  design_spec <span class="op">=</span> <span class="va">design_spec</span>,</span>
+<span>  Nuisance <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, exact_first <span class="op">=</span> <span class="st">"ar1"</span><span class="op">)</span>,</span>
+<span>  match <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>shrink <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>tau <span class="op">=</span> <span class="fl">0.0</span>, ref <span class="op">=</span> <span class="va">sbhm</span><span class="op">$</span><span class="va">ref</span><span class="op">$</span><span class="va">alpha_ref</span><span class="op">)</span>, whiten <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
+<span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>ridge_mode <span class="op">=</span> <span class="st">"fractional"</span>, ridge_x <span class="op">=</span> <span class="fl">0</span>, ridge_b <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span>
+<span>  return <span class="op">=</span> <span class="st">"amplitude"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"SBHM results:\n"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Amplitude dims:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">amplitude</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Mean amplitude:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">amplitude</span><span class="op">)</span>, <span class="fl">3</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Top-1/-2 margin (median):"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/median.html" class="external-link">median</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">margin</span><span class="op">)</span>, <span class="fl">3</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Optional: compare against canonical LSS amplitudes for reference</span></span>
+<span><span class="va">beta_spmg1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
+<span>  X <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
+<span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    design_spec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>sframe <span class="op">=</span> <span class="va">sframe</span>, cond <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>onsets <span class="op">=</span> <span class="va">onsets</span>, hrf <span class="op">=</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/HRF_objects.html" class="external-link">HRF_SPMG1</a></span>, span <span class="op">=</span> <span class="fl">30</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  Corr(SBHM amp, canonical beta):"</span>,</span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">amplitude</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">beta_spmg1</span><span class="op">)</span><span class="op">)</span>, <span class="fl">3</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span></code></pre></div>
+<p>Notes - The library and data live in the same coordinate system: if a
+library HRF is h_k = B α_k, its trial regressor is exactly X α_k where X
+are the per‑basis regressors, so comparing β̄_v to α_k is principled. -
+Whitening divides coefficients by the singular values (Σ_r^{-1}),
+equalizing basis directions before cosine matching; recommended. -
+Confidence can be read from the margin between top‑1 and top‑2 cosine
+matches; small margins indicate ambiguity.</p>
+</div>
+<div class="section level2">
 <h2 id="whitening-semantics">Whitening Semantics<a class="anchor" aria-label="anchor" href="#whitening-semantics"></a>
 </h2>
 <p>When <code>oasis$whiten = "ar1"</code> or
@@ -582,12 +658,15 @@ is applied once and consistently to all model components.</p>
 <p>Sometimes you want to make no assumptions about HRF shape at all. The
 Finite Impulse Response (FIR) basis provides a completely non-parametric
 approach, estimating the response at each time point independently:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create FIR basis with 15 time bins (2s width over a 30s window)</span></span>
 <span><span class="va">fir_hrf</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/hrf_fir_generator.html" class="external-link">hrf_fir_generator</a></span><span class="op">(</span>nbasis <span class="op">=</span> <span class="fl">15</span>, span <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
-<span><span class="va">fir_params</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fir_hrf</span>, <span class="st">"params"</span><span class="op">)</span></span>
-<span><span class="va">bin_width</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">fir_params</span><span class="op">[[</span><span class="st">"bin_width"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
-<span><span class="va">n_bins</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fir_hrf</span>, <span class="st">"nbasis"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Robustly derive bin width from attributes. Some fmrihrf versions</span></span>
+<span><span class="co"># do not expose bin_width via attr(params).</span></span>
+<span><span class="va">n_bins</span>   <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fir_hrf</span>, <span class="st">"nbasis"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">span_fir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fir_hrf</span>, <span class="st">"span"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">bin_width</span> <span class="op">&lt;-</span> <span class="va">span_fir</span> <span class="op">/</span> <span class="va">n_bins</span></span>
 <span></span>
 <span><span class="va">beta_fir</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
@@ -675,7 +754,7 @@ below): loop through candidates, score the fit, pick the best, then
 refit once on the full voxel set. - Built‑in selection: pass a grid via
 <code>oasis$design_spec$hrf_grid</code> and let OASIS pick a single best
 HRF internally using a matched‑filter score.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create a grid of HRF models with varying parameters</span></span>
 <span><span class="va">hrf_grid</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/create_lwu_grid.html">create_lwu_grid</a></span><span class="op">(</span></span>
 <span>  tau_range <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">4</span>, <span class="fl">8</span><span class="op">)</span>,      <span class="co"># Peak time</span></span>
@@ -778,7 +857,7 @@ multi‑basis/FIR when needed.</p>
 directly. Note this path also selects a single global HRF and proceeds
 immediately to fitting; it does not expose the chosen parameters in the
 return value:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">beta_auto_grid</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
 <span>  X <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -802,7 +881,7 @@ return value:</p>
 <p>Real experiments often involve multiple conditions, with some trials
 of interest and others serving as nuisance events. OASIS handles these
 scenarios through structured condition specification:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create design with two conditions</span></span>
 <span><span class="va">onsets_cond1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">280</span>, by <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
 <span><span class="va">onsets_cond2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">25</span>, <span class="fl">280</span>, by <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
@@ -844,7 +923,7 @@ accounted for without conflating it with the trials of interest.</p>
 <p>While beta estimates are valuable, understanding their uncertainty is
 crucial for proper inference. OASIS can provide standard errors and
 diagnostic information:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Request standard errors</span></span>
 <span><span class="va">result_with_se</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>  Y <span class="op">=</span> <span class="va">Y</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">]</span>,  <span class="co"># Subset for demonstration</span></span>
@@ -890,7 +969,7 @@ occurring during periods of higher noise.</p>
 <p>To understand OASIS’s efficiency, let’s conduct systematic benchmarks
 comparing it with traditional LSS implementations across different
 dataset sizes:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Benchmark across different dataset sizes</span></span>
 <span><span class="va">sizes</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>  small  <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>timepoints <span class="op">=</span> <span class="fl">300</span>, voxels <span class="op">=</span> <span class="fl">500</span><span class="op">)</span>,</span>
@@ -979,15 +1058,15 @@ dataset sizes:</p>
 <span><span class="va">benchmark_display</span><span class="op">[</span><span class="va">numeric_cols</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">benchmark_display</span><span class="op">[</span><span class="va">numeric_cols</span><span class="op">]</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">x</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">benchmark_display</span><span class="op">)</span></span>
 <span><span class="co">#&gt;            Size Timepoints Voxels Trials R_Optimized CPP_Optimized OASIS</span></span>
-<span><span class="co">#&gt; elapsed   small        300    500     30       0.005         0.014 0.002</span></span>
-<span><span class="co">#&gt; elapsed1 medium        400   2000     40       0.015         0.080 0.013</span></span>
-<span><span class="co">#&gt; elapsed2  large        600   8000     60       0.078         0.073 0.055</span></span>
-<span><span class="co">#&gt; elapsed3 xlarge        800  16000     60       0.171         0.503 0.137</span></span>
+<span><span class="co">#&gt; elapsed   small        300    500     30       0.005         0.008 0.004</span></span>
+<span><span class="co">#&gt; elapsed1 medium        400   2000     40       0.016         0.029 0.014</span></span>
+<span><span class="co">#&gt; elapsed2  large        600   8000     60       0.076         0.172 0.062</span></span>
+<span><span class="co">#&gt; elapsed3 xlarge        800  16000     60       0.179         0.197 0.157</span></span>
 <span><span class="co">#&gt;          OASIS_with_design Speedup_vs_R Speedup_vs_CPP Design_Build_Overhead</span></span>
-<span><span class="co">#&gt; elapsed              0.016        2.500          7.000                 0.014</span></span>
-<span><span class="co">#&gt; elapsed1             0.031        1.154          6.154                 0.018</span></span>
-<span><span class="co">#&gt; elapsed2             0.093        1.418          1.327                 0.038</span></span>
-<span><span class="co">#&gt; elapsed3             0.172        1.248          3.672                 0.035</span></span>
+<span><span class="co">#&gt; elapsed              0.016        1.250          2.000                 0.012</span></span>
+<span><span class="co">#&gt; elapsed1             0.034        1.143          2.071                 0.020</span></span>
+<span><span class="co">#&gt; elapsed2             0.093        1.226          2.774                 0.031</span></span>
+<span><span class="co">#&gt; elapsed3             0.205        1.140          1.255                 0.048</span></span>
 <span></span>
 <span><span class="co"># Visualize scaling</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
@@ -1077,7 +1156,7 @@ packages.</p>
 performance. Too little regularization leaves estimates unstable; too
 much biases them toward zero. Here’s a systematic approach to
 selection:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Test different ridge values</span></span>
 <span><span class="va">ridge_values</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.001</span>, <span class="fl">0.01</span>, <span class="fl">0.05</span>, <span class="fl">0.1</span><span class="op">)</span></span>
 <span><span class="va">ridge_results</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
@@ -1129,7 +1208,7 @@ mean beta) and variance (reduced SD) guides your choice.</p>
 <p>Understanding the memory trade-offs between OASIS and standard LSS is
 important for choosing the right method for your computational
 resources:</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Compare memory usage across methods</span></span>
 <span><span class="va">memory_comparison</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">n_time</span>, <span class="va">n_vox</span>, <span class="va">n_trials</span><span class="op">)</span> <span class="op">{</span></span>
 <span></span>
@@ -1220,7 +1299,7 @@ features enhance efficiency and robustness.</p>
 </h3>
 <p>For datasets too large to fit in memory, OASIS can process voxels in
 blocks:</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># For very large datasets, use blocked processing</span></span>
 <span><span class="va">block_size</span> <span class="op">&lt;-</span> <span class="fl">1000</span></span>
 <span><span class="va">n_blocks</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">ceiling</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span> <span class="op">/</span> <span class="va">block_size</span><span class="op">)</span></span>
@@ -1241,7 +1320,7 @@ blocks:</p>
 </h3>
 <p>fMRI data exhibits temporal autocorrelation that can bias standard
 errors. OASIS can apply AR(1) prewhitening:</p>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># OASIS with AR(1) prewhitening using new fmriAR integration</span></span>
 <span><span class="va">beta_whitened</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>  Y <span class="op">=</span> <span class="va">Y</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">]</span>,</span>
@@ -1295,7 +1374,7 @@ particularly for standard errors and hypothesis tests.</p>
 </h3>
 <p>The integration with fmriAR provides sophisticated noise modeling
 capabilities beyond simple AR(1):</p>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Voxel-specific AR parameters</span></span>
 <span><span class="va">beta_voxel_ar</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>

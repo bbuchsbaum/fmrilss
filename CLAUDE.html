@@ -21,6 +21,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="articles/getting_started.html">Getting Started with fmrilss</a></li>
     <li><a class="dropdown-item" href="articles/oasis_method.html">The OASIS Method: Optimized Analytic Single-pass Inverse Solution</a></li>
     <li><a class="dropdown-item" href="articles/oasis_theory.html">OASIS Theory: Algebra and Implementation Details</a></li>
+    <li><a class="dropdown-item" href="articles/sbhm.html">Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation</a></li>
     <li><a class="dropdown-item" href="articles/voxel-wise-hrf.html">Voxel-wise HRF Modeling with fmrilss</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
@@ -47,8 +48,18 @@
 </div>
 <div class="section level2">
 <h2 id="core-architecture">Core Architecture<a class="anchor" aria-label="anchor" href="#core-architecture"></a></h2>
-<p>The package provides five implementations of the LSS algorithm, accessible through a unified interface: - <strong>cpp_optimized</strong>: Parallelized C++ using OpenMP (fastest) - <strong>optimized</strong>: Optimized R version - <strong>vectorized</strong>: Standard vectorized R - <strong>cpp_vectorized</strong>: Standard C++ - <strong>loop</strong>: Simple R loop (reference implementation)</p>
+<div class="section level3">
+<h3 id="lss-implementations">LSS Implementations<a class="anchor" aria-label="anchor" href="#lss-implementations"></a></h3>
+<p>The package provides multiple implementations of the LSS algorithm, accessible through a unified interface: - <strong>r_optimized</strong>: Optimized R implementation (default, recommended) - <strong>cpp_optimized</strong>: Parallelized C++ using OpenMP (fastest for large datasets) - <strong>r_vectorized</strong>: Standard vectorized R - <strong>cpp</strong>: Standard C++ implementation - <strong>naive</strong>: Simple loop-based R (reference implementation for testing) - <strong>oasis</strong>: Mathematically equivalent reformulation with ridge regularization support</p>
 <p>Key design pattern: All methods use the same <code>lss(Y, X, Z, Nuisance)</code> signature where: - <code>Y</code>: data matrix (timepoints x voxels) - <code>X</code>: trial design matrix (one column per trial) - <code>Z</code>: experimental regressors (intercept, trends, blocks) - <code>Nuisance</code>: regressors to project out (motion, physiology)</p>
+</div>
+<div class="section level3">
+<h3 id="advanced-features">Advanced Features<a class="anchor" aria-label="anchor" href="#advanced-features"></a></h3>
+<p><strong>OASIS Method</strong>: Reformulates LSS as a single matrix operation, eliminating per-trial GLM redundancy. Supports: - Multi-basis HRF models (K &gt; 1) - Ridge regularization (absolute or fractional modes) - Automatic design construction from event onsets via <code>fmrihrf</code> - Standard error computation - AR(1) prewhitening</p>
+<p><strong>Voxel-wise HRF Estimation</strong>: <code><a href="reference/estimate_voxel_hrf.html">estimate_voxel_hrf()</a></code> fits per-voxel HRF basis coefficients, enabling data-driven HRF modeling before LSS.</p>
+<p><strong>Shared-Basis HRF Models (SBHM)</strong>: Learn low-rank shared time bases from parameterized HRF libraries via SVD, enabling efficient multi-voxel HRF estimation with reduced parameters.</p>
+<p><strong>Prewhitening</strong>: Integration with <code>fmriAR</code> package for AR/ARMA noise modeling with flexible pooling strategies (global, voxel-wise, run-aware, parcel-based).</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="essential-commands">Essential Commands<a class="anchor" aria-label="anchor" href="#essential-commands"></a></h2>
@@ -85,17 +96,21 @@
 <div class="section level2">
 <h2 id="key-dependencies">Key Dependencies<a class="anchor" aria-label="anchor" href="#key-dependencies"></a></h2>
 <ul><li>
-<strong>fmrihrf</strong>: Custom HRF modeling (GitHub: bbuchsbaum/fmrihrf)</li>
+<strong>fmrihrf</strong>: HRF modeling and convolution (GitHub: bbuchsbaum/fmrihrf)</li>
+<li>
+<strong>fmriAR</strong>: AR/ARMA prewhitening (GitHub: bbuchsbaum/fmriAR)</li>
 <li>
 <strong>RcppArmadillo</strong>: Matrix operations in C++</li>
 <li>
-<strong>roptim</strong>: Optimization routines</li>
+<strong>roptim</strong>: Optimization routines for HRF parameter estimation</li>
 <li>
-<strong>MASS</strong>: Statistical functions</li>
+<strong>MASS</strong>: Statistical functions (used in mixed models)</li>
+<li>
+<strong>bigmemory</strong>: Memory-efficient matrix operations</li>
 </ul></div>
 <div class="section level2">
 <h2 id="vignettes">Vignettes<a class="anchor" aria-label="anchor" href="#vignettes"></a></h2>
-<p>Three main vignettes demonstrate package usage: - <code>getting_started.Rmd</code>: Basic LSS concepts and usage - <code>oasis_method.Rmd</code>: OASIS deconvolution integration - <code>performance_optimization.Rmd</code>: Backend comparison and optimization</p>
+<p>Five main vignettes demonstrate package usage: - <code>getting_started.Rmd</code>: Basic LSS concepts and usage - <code>oasis_method.Rmd</code>: OASIS method with ridge regularization - <code>oasis_theory.Rmd</code>: Mathematical foundations of OASIS - <code>voxel-wise-hrf.Rmd</code>: Voxel-wise HRF estimation and integration with LSS - <code>sbhm.Rmd</code>: Shared-Basis HRF Matching for efficient voxel-specific HRF estimation</p>
 </div>
 </div>
 
