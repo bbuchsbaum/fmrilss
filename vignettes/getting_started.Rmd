@@ -58,26 +58,37 @@ The following example demonstrates LSS analysis using synthetic data from a rapi
 
 ### Creating the Experimental Design
 
-The design matrix encodes stimulus timing and expected hemodynamic responses.
+The design matrix encodes stimulus timing and expected hemodynamic responses. We'll create a proper event-related design by convolving trial onsets with an HRF.
 
 ```{r design}
-# Trial design matrix (X)
-X <- matrix(0, n_timepoints, n_trials)
-# Ensure integer onsets within bounds
+# Define trial onsets (in TRs)
 onsets <- round(seq(from = 10, to = n_timepoints - 12, length.out = n_trials))
-for(i in 1:n_trials) {
-  X[onsets[i]:(onsets[i] + 5), i] <- 1
+
+# Create HRF-convolved design matrix using a simple gamma HRF
+# In real analyses, use fmrihrf package for more sophisticated HRF models
+simple_hrf <- function(t) {
+  # Gamma function parameters for a canonical HRF shape
+  ifelse(t >= 0, dgamma(t, shape = 6, rate = 1), 0)
 }
 
-# Experimental regressors (Z) - intercept and condition effects
-# These are regressors we want to model and get estimates for, but not trial-wise
+# Build trial design matrix (X) with HRF convolution
+X <- matrix(0, n_timepoints, n_trials)
+hrf_kernel <- simple_hrf(0:20)  # HRF spanning ~20 TRs
+for(i in 1:n_trials) {
+  onset <- onsets[i]
+  hrf_length <- min(length(hrf_kernel), n_timepoints - onset + 1)
+  X[onset:(onset + hrf_length - 1), i] <- hrf_kernel[1:hrf_length]
+}
+
+# Experimental regressors (Z) - intercept and linear trend
+# These are regressors we want to model but not trial-wise
 Z <- cbind(Intercept = 1, LinearTrend = as.vector(scale(1:n_timepoints, center = TRUE, scale = FALSE)))
 
 # Nuisance regressors - e.g., 6 motion parameters
 Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)
 ```
 
-Matrix `X` contains trial regressors (here using box-car functions for simplicity, though HRF convolution is standard). Matrix `Z` contains experimental covariates (intercept and linear trend). The nuisance matrix models unwanted variance (e.g., motion parameters).
+Matrix `X` contains HRF-convolved trial regressors. Matrix `Z` contains experimental covariates (intercept and linear trend). The nuisance matrix models unwanted variance (e.g., motion parameters).
 
 ### Visualizing Regressors
 
@@ -251,12 +262,6 @@ beta_basic <- lss(Y, X)
 dim(beta_basic)
 ```
 
-## Session Info
-
-```{r session-info, echo=FALSE}
-sessionInfo()
-```
-
 For a more complete analysis that accounts for experimental effects and removes nuisance signals, we include our `Z` and `Nuisance` matrices. The function handles the nuisance regression efficiently, projecting these signals out of both the data and design matrix before estimating trial-specific betas:
 
 ```{r lss_advanced}
@@ -285,14 +290,22 @@ dim(beta_ar1)
 For more advanced noise modeling, you can use voxel-specific parameters or ARMA models:
 
 ```{r advanced_prewhitening, eval=FALSE}
-# Voxel-specific AR parameters
+# Voxel-specific AR parameters (slower but more accurate)
+# Default pooling="global" estimates one AR model across all voxels
+# pooling="voxel" fits separate AR models per voxel (~100x slower)
 beta_voxel <- lss(Y, X, Z = Z, Nuisance = Nuisance,
                   prewhiten = list(method = "ar", p = 1, pooling = "voxel"))
 
-# ARMA model for complex noise
+# ARMA model for complex noise (AR + moving average components)
+# Use when residuals show both autocorrelation and moving average patterns
 beta_arma <- lss(Y, X, Z = Z, Nuisance = Nuisance,
                 prewhiten = list(method = "arma", p = 2, q = 1))
 ```
+
+**Pooling strategies:**
+- `pooling = "global"` (default): Single AR model for all voxels (fast)
+- `pooling = "voxel"`: Per-voxel AR models (accurate but slow)
+- `pooling = "run"`: Separate model per run (for multi-run data)
 
 ## Choosing the Right Computational Backend
 
@@ -315,10 +328,11 @@ This modular design allows seamless switching between backends without code chan
 
 ## LSS versus Traditional GLM: When Each Shines
 
-Comparison between LSS and standard Least Squares All (LSA) methods:
+Comparison between LSS and standard Least Squares All (LSA) methods. LSA is the traditional GLM approach that estimates all trial coefficients simultaneously in a single model, making it computationally faster but more susceptible to collinearity in rapid designs.
 
 ```{r lsa-comparison, fig.alt="Beta distributions for LSS vs LSA (example voxel), with variance comparison across voxels."}
-# LSA: Standard GLM with all trials in one model
+# LSA: Standard GLM (Least Squares All) estimates all trials simultaneously
+# This is computationally faster but suffers from collinearity in rapid designs
 beta_lsa <- lsa(Y, X, Z = Z, Nuisance = Nuisance)
 
 # Compare dimensions
@@ -360,44 +374,38 @@ LSS produces beta estimates with different variance characteristics than LSA. Me
 The OASIS (Optimized Analytic Single-pass Inverse Solution) method extends LSS with: automatic HRF estimation, ridge regularization for stability, single-pass computation for all trials, and multi-basis HRF model support.
 
 ```{r oasis-intro}
-# Basic OASIS usage
+# Basic OASIS usage with automatic design construction
 # fmrihrf is now imported automatically
 beta_oasis <- lss(
   Y = Y,
-  X = NULL,  # OASIS builds design internally
+  X = NULL,  # Let OASIS build design from design_spec
   method = "oasis",
   oasis = list(
     design_spec = list(
       sframe = sampling_frame(blocklens = nrow(Y), TR = 1),
       cond = list(
         onsets = onsets,        # reuse onsets from above
-        hrf = HRF_SPMG1,        # HRF model
-        span = 30
+        hrf = HRF_SPMG1,        # SPM canonical HRF
+        span = 30               # HRF duration in seconds
       )
     ),
-    ridge_mode = "fractional",
-    ridge_x = 0.01,
-    ridge_b = 0.01
+    ridge_mode = "fractional",  # Regularization for numerical stability
+    ridge_x = 0.01,             # Ridge for design matrix
+    ridge_b = 0.01              # Ridge for coefficients
   )
 )
 
 cat("OASIS beta dimensions:", dim(beta_oasis), "\n")
+
+# Alternative: Provide a pre-built design matrix directly
+# beta_oasis_manual <- lss(Y, X = my_hrf_convolved_design, method = "oasis", ...)
 ```
 
-We pass `X = NULL` together with a `design_spec` so that OASIS can rebuild the
-trial-wise design from the event description and HRF settings on every call.
-Internally (see `R/oasis_glue.R`) the solver calls `fmrihrf` to generate the
-appropriate basis for the requested HRF, apply span/precision choices, and add
-any extra conditions before the single-pass solve. This keeps the design in sync
-with changes to the HRF (for example when running a grid search or switching to
-an FIR basis) without requiring you to hand-maintain a matching matrix. If you
-already have a fixed design matrix you can still provide it via `X`, but the
-high-level `design_spec` path is the recommended interface when the HRF is part
-of what you want OASIS to manage.
+**Why `X = NULL`?** OASIS can build the design matrix internally from `design_spec`, ensuring the HRF settings stay synchronized with the design. This is especially useful when exploring different HRFs or using multi-basis models. Alternatively, you can provide your own HRF-convolved design via `X`.
 
 ## Working with Different Computational Backends
 
-The package provides multiple backends to match your computational needs and resources. Each backend implements the same algorithm but with different optimization strategies. The naive implementation offers the clearest code for understanding the algorithm, while the vectorized and optimized R versions provide good performance with pure R code. For production work with large datasets, the C++ backend offers the best performance, especially when combined with parallel processing.
+The package provides multiple backends to match your computational needs and resources. Each backend implements the same algorithm but with different optimization strategies. The `naive` implementation offers the clearest code for understanding the algorithm, while `r_vectorized` and `r_optimized` provide good performance with pure R code. For production work with large datasets, `cpp_optimized` offers the best performance, especially when combined with parallel processing.
 
 ```{r backend-comparison, eval=FALSE}
 # Benchmark different methods
@@ -479,10 +487,10 @@ Y_mod <- (Z %*% true_fixed_effects) +
 beta_unmod <- lss(Y_mod, X,       Z = Z, method = "r_optimized")
 beta_param <- lss(Y_mod, X_param, Z = Z, method = "r_optimized")
 
-# Ground truths for comparison
-# - For unmodulated design X, the true coefficients are modulator * true_trial_betas
+# Ground truth depends on which design matrix we use:
+# - When fitting with X (unmodulated):        recovers modulator * true_trial_betas
+# - When fitting with X_param (premodulated): recovers true_trial_betas directly
 true_unmod_coefs <- sweep(true_trial_betas, 1, as.numeric(modulator), `*`)
-# - For parametrically modulated design X_param, the true coefficients are true_trial_betas
 
 cor_unmod <- cor(as.vector(beta_unmod), as.vector(true_unmod_coefs))
 cor_param <- cor(as.vector(beta_param), as.vector(true_trial_betas))
@@ -526,7 +534,18 @@ X_clean <- Q_nuis %*% X
 beta_preprocessed <- lss(Y_clean, X_clean, Z = Z, method = "r_optimized")
 ```
 
-Choosing the right backend for your data size is crucial for optimal performance. Based on the synthetic benchmarks in the OASIS vignette, the optimized R and fused C++ implementations perform almost identically for small-to-medium problems (hundreds of trials, up to a few thousand voxels); the C++ path pulls slightly ahead once the voxel count grows into the tens of thousands. OASIS stays in the same ballpark for these workloads, but you typically reach for it when you also want its HRF-aware features (automatic design construction, ridge, FIR support, grid search) rather than purely for speed, because those extras make the comparison less apples-to-apples. In practice pick the backend that matches the tooling you need (R for ease of debugging, C++ for maximum throughput, OASIS when you want the richer HRF workflow) and validate with a short benchmark on your own data.
+Choosing the right backend for your data size is crucial for optimal performance:
+
+**Performance guidelines (based on benchmarks):**
+
+| Data Size | Recommended Method | Rationale |
+|-----------|-------------------|-----------|
+| n_trials < 50, n_voxels < 5,000 | `r_optimized` or `cpp_optimized` | Similar speed, R easier to debug |
+| n_voxels > 10,000 | `cpp_optimized` | Benefits from OpenMP parallelization |
+| Need HRF grid search or ridge | `oasis` | Additional features justify overhead |
+| Quick prototyping | `r_optimized` | Good balance of speed and readability |
+
+In practice, pick the backend that matches your needs: R for debugging, C++ for maximum throughput, OASIS for HRF-aware workflows. Always validate with a quick benchmark on your own data.
 
 ## Troubleshooting Common Challenges
 
@@ -535,28 +554,46 @@ Even with robust implementations, certain data characteristics can cause issues.
 When design matrices become singular or near-singular due to high collinearity between regressors, standard least squares solutions become unstable. You can detect this by examining the correlation matrix of your design:
 
 ```{r troubleshoot-singular, eval=FALSE}
-# Check for collinearity
+# Check for collinearity in design matrix
 cor_matrix <- cor(X)
 high_cor <- which(abs(cor_matrix) > 0.9 & cor_matrix != 1, arr.ind = TRUE)
 
 if (nrow(high_cor) > 0) {
   warning("High correlation between regressors detected")
-  # Consider using ridge regression via OASIS
-  beta_ridge <- lss(Y, X, method = "oasis",
-                    oasis = list(ridge_mode = "absolute", ridge_x = 0.1))
+
+  # Option 1: Use OASIS with ridge and automatic design construction
+  beta_ridge <- lss(
+    Y = Y,
+    X = NULL,  # Let OASIS build design
+    method = "oasis",
+    oasis = list(
+      design_spec = list(
+        sframe = sampling_frame(blocklens = nrow(Y), TR = 1),
+        cond = list(onsets = onsets, hrf = HRF_SPMG1, span = 30)
+      ),
+      ridge_mode = "absolute",
+      ridge_x = 0.1  # Stronger ridge for collinearity
+    )
+  )
+
+  # Option 2: For standard LSS without OASIS, increase ISI or use prewhitening
+  # Ridge is not directly available for non-OASIS backends
 }
 ```
 
 Memory limitations can also pose challenges with large datasets. Before starting an analysis, it's wise to estimate memory requirements and adjust your approach accordingly:
 
 ```{r troubleshoot-memory, eval=FALSE}
-# Monitor memory usage
-mem_required <- object.size(Y) * n_trials * 2  # Rough estimate
-# mem_available <- memory.limit()  # Windows only
+# Estimate peak memory requirements
+mem_Y <- object.size(Y)
+mem_designs_approx <- mem_Y * n_trials  # n_trials copies of design during LSS
+mem_results <- mem_Y  # Output size similar to Y
+mem_required <- mem_Y + mem_designs_approx + mem_results
 
-# if (mem_required > mem_available * 0.8) {
-#   warning("May run out of memory. Consider chunking or using OASIS.")
-# }
+cat("Estimated memory needed:", round(mem_required / 1e9, 2), "GB\n")
+
+# If this exceeds available RAM, use chunking approach (see example above)
+# Or consider OASIS which has lower memory overhead for large datasets
 ```
 
 If you encounter unexpectedly slow performance, profiling can help identify bottlenecks:
@@ -573,10 +610,21 @@ summaryRprof("lss_profile.out")
 
 This vignette has introduced you to the core concepts and capabilities of the `fmrilss` package. You've learned how LSS addresses the collinearity problem in rapid event-related designs, how to choose between different computational backends, and strategies for handling complex experimental designs and large datasets.
 
-To deepen your understanding and explore advanced features, we recommend examining the voxel-wise HRF vignette, which demonstrates how to model spatial variation in hemodynamic responses across the brain. The OASIS method vignette provides comprehensive coverage of this powerful extension, including HRF estimation and ridge regression techniques. For those interested in hierarchical analyses, the mixed models vignette shows how to combine LSS with mixed-effects modeling frameworks.
+To deepen your understanding and explore advanced features, we recommend:
+
+- **Voxel-wise HRF vignette**: Model spatial variation in hemodynamic responses across the brain using fully flexible HRF estimation
+- **SBHM vignette**: Learn efficient voxel-specific HRF estimation using Shared-Basis HRF Matching, a library-constrained approach that balances flexibility and computational efficiency
+- **OASIS method vignette**: Comprehensive coverage of OASIS features including automatic HRF construction, ridge regularization, and multi-basis models
+- **Mixed models vignette**: Combine LSS with mixed-effects modeling frameworks for hierarchical analyses
 
 The `fmrilss` package represents a comprehensive toolkit for trial-wise beta estimation, providing options that range from simple, interpretable implementations to highly optimized solutions for large-scale analyses. Whether you're conducting exploratory analyses on a laptop or processing massive datasets on a computing cluster, the package offers the flexibility and performance you need for modern fMRI analysis.
 
 ## References
 
 Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012). Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses. *NeuroImage*, 59(3), 2636-2643.
+
+## Session Info
+
+```{r session-info, echo=FALSE}
+sessionInfo()
+```

@@ -28,6 +28,8 @@ Voxel-wise HRF modeling addresses spatial and subject-specific differences in th
 
 This vignette shows how to estimate voxel-specific HRFs and incorporate them into LSS analyses. Familiarity with the core LSS workflow and fmrihrf basics is assumed.
 
+**Alternative approach:** For library-constrained voxel-specific HRF estimation with computational efficiency, see **Shared-Basis HRF Matching (SBHM)** in the dedicated SBHM vignette (`vignette("sbhm", package = "fmrilss")`). SBHM provides interpretable per-voxel HRF assignments while being 5-20x faster than fully unconstrained voxel-wise estimation.
+
 ```{r setup}
 library(fmrilss)
 library(fmrihrf)

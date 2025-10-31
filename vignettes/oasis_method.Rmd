@@ -347,6 +347,71 @@ Notes
 - Defaults: no shape prior, no roughness, no shrink; opt in as needed for rapid designs.
 - With a very strong shape prior, results approach canonical‑HRF OASIS.
 
+## Shared‑Basis HRF Matching (SBHM)
+
+SBHM learns a single low‑rank time basis from a large HRF library and fits voxels in that same coordinate system. Matching is then a fast cosine lookup in r‑dimensional space, and trial‑wise amplitudes come from projecting the r‑coefficients onto each voxel's matched coordinates. This provides design‑aware HRF selection without FIRs or manifold alignment.
+
+**Note:** This section provides a quick demonstration of SBHM. For comprehensive documentation including parameter guidance, performance considerations, and troubleshooting, see the dedicated **SBHM vignette** (`vignette("sbhm", package = "fmrilss")`).
+
+Workflow
+- Build a library via `fmrihrf::hrf_library()` over a parameter grid; learn rank‑r basis B by SVD.
+- Prepass: fit r coefficients per voxel with the SBHM basis, then match to the closest library member in whitened, L2‑normalized coefficient space.
+- LSS: run OASIS with K=r (the SBHM HRF) to get r×trial coefficients; project onto matched coordinates for scalar amplitudes.
+
+```{r sbhm-end-to-end, eval=Sys.getenv("IN_PKGDOWN") != "true"}
+# 1) Build an HRF library on the TR grid using fmrihrf::hrf_library
+param_grid <- expand.grid(shape = c(6, 8, 10), rate = c(0.9, 1.0, 1.1))
+gamma_fun  <- function(shape, rate) {
+  f <- function(t) fmrihrf::hrf_gamma(t, shape = shape, rate = rate)
+  fmrihrf::as_hrf(f, span = 32)
+}
+
+sbhm <- sbhm_build(
+  library_spec = list(fun = gamma_fun, pgrid = param_grid, span = 32),
+  r = 6, sframe = sframe, baseline = c(0, 0.5), normalize = TRUE
+)
+
+# 2) Define design (SBHM HRF is injected automatically by lss_sbhm)
+design_spec <- list(
+  sframe = sframe,
+  cond   = list(onsets = onsets, duration = 0, span = 32)
+)
+
+# 3) Run end-to-end SBHM: prepass -> match -> OASIS(K=r) -> projection
+res_sbhm <- lss_sbhm(
+  Y = Y,
+  sbhm = sbhm,
+  design_spec = design_spec,
+  Nuisance = NULL,
+  prewhiten = list(method = "ar", exact_first = "ar1"),
+  match = list(shrink = list(tau = 0.0, ref = sbhm$ref$alpha_ref), whiten = TRUE),
+  oasis = list(ridge_mode = "fractional", ridge_x = 0, ridge_b = 0),
+  return = "amplitude"
+)
+
+cat("SBHM results:\n")
+cat("  Amplitude dims:", dim(res_sbhm$amplitude), "\n")
+cat("  Mean amplitude:", round(mean(res_sbhm$amplitude), 3), "\n")
+cat("  Top-1/-2 margin (median):", round(median(res_sbhm$margin), 3), "\n")
+
+# Optional: compare against canonical LSS amplitudes for reference
+beta_spmg1 <- lss(
+  Y = Y,
+  X = NULL,
+  method = "oasis",
+  oasis = list(
+    design_spec = list(sframe = sframe, cond = list(onsets = onsets, hrf = fmrihrf::HRF_SPMG1, span = 30))
+  )
+)
+cat("  Corr(SBHM amp, canonical beta):",
+    round(cor(as.vector(res_sbhm$amplitude), as.vector(beta_spmg1)), 3), "\n")
+```
+
+Notes
+- The library and data live in the same coordinate system: if a library HRF is h_k = B α_k, its trial regressor is exactly X α_k where X are the per‑basis regressors, so comparing β̄_v to α_k is principled.
+- Whitening divides coefficients by the singular values (Σ_r^{-1}), equalizing basis directions before cosine matching; recommended.
+- Confidence can be read from the margin between top‑1 and top‑2 cosine matches; small margins indicate ambiguity.
+
 ## Whitening Semantics
 
 When `oasis$whiten = "ar1"` or `prewhiten = list(...)` is used, OASIS:
@@ -367,9 +432,12 @@ Sometimes you want to make no assumptions about HRF shape at all. The Finite Imp
 ```{r fir-basis, fig.alt="FIR-derived HRF: mean response across trials/voxels with shaded standard error band and canonical HRF overlay."}
 # Create FIR basis with 15 time bins (2s width over a 30s window)
 fir_hrf <- hrf_fir_generator(nbasis = 15, span = 30)
-fir_params <- attr(fir_hrf, "params")
-bin_width <- as.numeric(fir_params[["bin_width"]])
-n_bins <- attr(fir_hrf, "nbasis")
+
+# Robustly derive bin width from attributes. Some fmrihrf versions
+# do not expose bin_width via attr(params).
+n_bins   <- as.integer(attr(fir_hrf, "nbasis"))
+span_fir <- as.numeric(attr(fir_hrf, "span"))
+bin_width <- span_fir / n_bins
 
 beta_fir <- lss(
   Y = Y,

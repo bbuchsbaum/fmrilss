@@ -8,18 +8,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Core Architecture
 
-The package provides five implementations of the LSS algorithm, accessible through a unified interface:
-- **cpp_optimized**: Parallelized C++ using OpenMP (fastest)
-- **optimized**: Optimized R version
-- **vectorized**: Standard vectorized R
-- **cpp_vectorized**: Standard C++
-- **loop**: Simple R loop (reference implementation)
+### LSS Implementations
+
+The package provides multiple implementations of the LSS algorithm, accessible through a unified interface:
+- **r_optimized**: Optimized R implementation (default, recommended)
+- **cpp_optimized**: Parallelized C++ using OpenMP (fastest for large datasets)
+- **r_vectorized**: Standard vectorized R
+- **cpp**: Standard C++ implementation
+- **naive**: Simple loop-based R (reference implementation for testing)
+- **oasis**: Mathematically equivalent reformulation with ridge regularization support
 
 Key design pattern: All methods use the same `lss(Y, X, Z, Nuisance)` signature where:
 - `Y`: data matrix (timepoints x voxels)
 - `X`: trial design matrix (one column per trial)
 - `Z`: experimental regressors (intercept, trends, blocks)
 - `Nuisance`: regressors to project out (motion, physiology)
+
+### Advanced Features
+
+**OASIS Method**: Reformulates LSS as a single matrix operation, eliminating per-trial GLM redundancy. Supports:
+- Multi-basis HRF models (K > 1)
+- Ridge regularization (absolute or fractional modes)
+- Automatic design construction from event onsets via `fmrihrf`
+- Standard error computation
+- AR(1) prewhitening
+
+**Voxel-wise HRF Estimation**: `estimate_voxel_hrf()` fits per-voxel HRF basis coefficients, enabling data-driven HRF modeling before LSS.
+
+**Shared-Basis HRF Models (SBHM)**: Learn low-rank shared time bases from parameterized HRF libraries via SVD, enabling efficient multi-voxel HRF estimation with reduced parameters.
+
+**Prewhitening**: Integration with `fmriAR` package for AR/ARMA noise modeling with flexible pooling strategies (global, voxel-wise, run-aware, parcel-based).
 
 ## Essential Commands
 
@@ -65,14 +83,18 @@ Test files follow pattern `test-{feature}.R` in `tests/testthat/`.
 
 ## Key Dependencies
 
-- **fmrihrf**: Custom HRF modeling (GitHub: bbuchsbaum/fmrihrf)
+- **fmrihrf**: HRF modeling and convolution (GitHub: bbuchsbaum/fmrihrf)
+- **fmriAR**: AR/ARMA prewhitening (GitHub: bbuchsbaum/fmriAR)
 - **RcppArmadillo**: Matrix operations in C++
-- **roptim**: Optimization routines
-- **MASS**: Statistical functions
+- **roptim**: Optimization routines for HRF parameter estimation
+- **MASS**: Statistical functions (used in mixed models)
+- **bigmemory**: Memory-efficient matrix operations
 
 ## Vignettes
 
-Three main vignettes demonstrate package usage:
+Five main vignettes demonstrate package usage:
 - `getting_started.Rmd`: Basic LSS concepts and usage
-- `oasis_method.Rmd`: OASIS deconvolution integration
-- `performance_optimization.Rmd`: Backend comparison and optimization
+- `oasis_method.Rmd`: OASIS method with ridge regularization
+- `oasis_theory.Rmd`: Mathematical foundations of OASIS
+- `voxel-wise-hrf.Rmd`: Voxel-wise HRF estimation and integration with LSS
+- `sbhm.Rmd`: Shared-Basis HRF Matching for efficient voxel-specific HRF estimation
