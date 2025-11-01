@@ -2,7 +2,9 @@
 title: "OASIS Theory: Algebra and Implementation Details"
 author: "fmrilss Development Team"
 date: "`r Sys.Date()`"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    mathjax: default
 vignette: >
   %\VignetteIndexEntry{OASIS Theory: Algebra and Implementation Details}
   %\VignetteEngine{knitr::rmarkdown}

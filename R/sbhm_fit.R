@@ -79,23 +79,51 @@ sbhm_prepass <- function(Y, sbhm, design_spec,
   }
   r <- ncol(sbhm$B)
 
-  # 1) Build trial-wise design using SBHM HRF
+  # 1) Build aggregated per-basis design (A: T×r) directly using fmrihrf
+  #    Avoids constructing full trial-wise matrix X_trials (memory/time saver)
   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
   spec <- design_spec
   spec$cond <- spec$cond %||% list()
   spec$cond$hrf <- hrf_B
-  built <- .oasis_build_X_from_events(spec)
-  X_trials <- built$X_trials
-  X_other  <- built$X_other
-  K <- r
-  if ((ncol(X_trials) %% K) != 0L) {
-    stop(sprintf("ncol(X_trials)=%d not divisible by K=%d", ncol(X_trials), K))
-  }
-  ntrials <- as.integer(ncol(X_trials) / K)
 
-  # 2) Aggregate per-basis columns across trials: A_agg (T×r)
-  idx_by_basis <- lapply(seq_len(K), function(k) seq.int(k, ncol(X_trials), by = K))
-  A <- do.call(cbind, lapply(idx_by_basis, function(idx) rowSums(X_trials[, idx, drop = FALSE])))
+  onsets <- spec$cond$onsets
+  if (is.null(onsets)) stop("design_spec$cond$onsets must be provided")
+  # Aggregated regressor set with K=r columns (one per basis), trials summed
+  rr_agg <- fmrihrf::regressor(
+    onsets   = onsets,
+    hrf      = hrf_B,
+    duration = spec$cond$duration %||% 0,
+    amplitude= spec$cond$amplitude %||% 1,
+    span     = spec$cond$span %||% 40,
+    summate  = TRUE
+  )
+  A <- fmrihrf::evaluate(rr_agg, grid = sbhm$tgrid,
+                         precision = spec$precision %||% 0.1,
+                         method = spec$method %||% "conv")
+  if (inherits(A, "Matrix")) A <- as.matrix(A)
+  if (!is.matrix(A)) A <- cbind(A)
+
+  # Aggregates for "other" conditions (one col each) -> nuisances
+  X_other <- NULL
+  if (length(spec$others)) {
+    X_other <- do.call(cbind, lapply(spec$others, function(oc) {
+      rr <- fmrihrf::regressor(onsets   = oc$onsets,
+                               hrf      = oc$hrf %||% hrf_B,
+                               duration = oc$duration %||% 0,
+                               amplitude= oc$amplitude %||% 1,
+                               span     = oc$span %||% 40,
+                               summate  = TRUE)
+      x_eval <- fmrihrf::evaluate(rr, sbhm$tgrid,
+                                  precision = spec$precision %||% 0.1,
+                                  method = spec$method %||% "conv")
+      if (inherits(x_eval, "Matrix")) x_eval <- as.matrix(x_eval)
+      # For multi-basis HRFs, aggregate columns to a single condition column
+      if (is.matrix(x_eval)) rowSums(x_eval) else as.numeric(x_eval)
+    }))
+    if (is.null(dim(X_other))) X_other <- matrix(X_other, ncol = 1)
+  }
+  K <- r
+  ntrials <- as.integer(length(onsets))
 
   # 3) Nuisance combination (intercept + provided + others)
   Zint <- matrix(1, nrow(Y), 1)

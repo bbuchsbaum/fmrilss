@@ -31,7 +31,8 @@ Suggests:
     knitr,
     rmarkdown,
     pkgdown,
-    progress
+    progress,
+    fmridesign
 Remotes:
     bbuchsbaum/fmrihrf,
     bbuchsbaum/fmriAR

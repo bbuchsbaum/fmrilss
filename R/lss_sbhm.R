@@ -24,6 +24,11 @@
 #'     conditional blending.
 #' @param oasis Optional list forwarded to `lss(..., method="oasis")`. `K` is set to
 #'   `ncol(sbhm$B)` if not provided, and `design_spec` is injected automatically.
+#' @param amplitude List controlling the scalar amplitude stage. Fields:
+#'   - `method`: one of "global_ls" (default), "lss1", "oasis_voxel".
+#'   - `ridge`: for `global_ls`, either numeric (absolute) or list(mode, lambda).
+#'   - `ridge_frac`: for `lss1`/`oasis_voxel`, list(x, b) fractional ridge.
+#'   - `cond_gate`: optional auto-fallback rule, e.g., list(metric="rho", thr=0.999, fallback="lss1").
 #' @param return One of `"amplitude"`, `"coefficients"`, or `"both"` (default `"amplitude"`).
 #'
 #' @return A list with components:
@@ -66,6 +71,12 @@ lss_sbhm <- function(Y, sbhm, design_spec,
                      match = list(shrink = list(tau = 0, ref = NULL, snr = NULL),
                                   topK = 1, whiten = TRUE, orient_ref = TRUE),
                      oasis = list(),
+                     amplitude = list(method = "global_ls",
+                                      ridge = list(mode = "fractional", lambda = 0.02),
+                                      ridge_frac = list(x = 0.02, b = 0.02),
+                                      cond_gate = NULL,
+                                      adaptive = list(enable = FALSE, base = 0.02, k0 = 1000, max = 0.08),
+                                      return_se = FALSE),
                      return = c("amplitude", "coefficients", "both")) {
 
   return <- match.arg(return)
@@ -141,14 +152,117 @@ lss_sbhm <- function(Y, sbhm, design_spec,
   ntrials <- as.integer(nrow(BetaMat) / r)
   beta_rt <- array(BetaMat, dim = c(r, ntrials, V))
 
-  # 4) Projection to scalar amplitudes ---------------------------------------
-  amps <- sbhm_project(beta_rt, alpha_hat)
+  # 4) Scalar amplitudes with method + optional auto-fallback -----------------
+  amp_method <- match.arg(amplitude$method %||% "global_ls",
+                          c("global_ls","lss1","oasis_voxel"))
+  ridge_gls  <- amplitude$ridge %||% list(mode = "fractional", lambda = 0.02)
+  ridge_frac <- amplitude$ridge_frac %||% list(x = 0.02, b = 0.02)
+
+  # Conditioning diagnostics in (optionally) whitened space
+  regs_diag <- .sbhm_build_trial_regs(sbhm, design_spec)
+  Zint_diag <- matrix(1, nrow(Y), 1)
+  if (!is.null(prewhiten)) {
+    pw <- .sbhm_prewhiten(Y, regs_diag, Zint_diag, Nuisance, prewhiten)
+    Y_diag <- pw$Yw; regs_diag <- pw$regs_w; Zint_diag <- pw$Zw; Nuis_diag <- pw$Nw
+  } else {
+    Y_diag <- Y; Nuis_diag <- Nuisance
+  }
+  N_mat_diag <- cbind(Zint_diag, if (!is.null(Nuis_diag)) Nuis_diag)
+  V <- ncol(Y)
+  diag_rho <- rep(NA_real_, V); diag_kappa <- rep(NA_real_, V)
+  .cond_metrics <- function(regs, alpha_v, Nmat) {
+    Xv <- do.call(cbind, lapply(regs, function(Xt) as.numeric(Xt %*% alpha_v)))
+    Xv <- .sbhm_resid(Xv, Nmat)
+    xs <- sweep(Xv, 2L, sqrt(colSums(Xv^2)) + 1e-12, "/")
+    sv <- svd(xs, nu = 0, nv = 0)$d
+    kappa <- if (length(sv) > 1L) max(sv) / pmax(min(sv), 1e-8) else 1
+    xsum <- rowSums(Xv)
+    rho_max <- 0
+    for (j in seq_len(ncol(Xv))) {
+      x1 <- Xv[, j]; x2 <- xsum - x1
+      denom <- sqrt(sum(x1 * x1) * sum(x2 * x2)) + 1e-12
+      rho <- if (denom > 0) abs(sum(x1 * x2) / denom) else 0
+      if (rho > rho_max) rho_max <- rho
+    }
+    c(rho = rho_max, kappa = kappa)
+  }
+  for (v in seq_len(V)) {
+    met <- .cond_metrics(regs_diag, alpha_hat[, v], N_mat_diag)
+    diag_rho[v]   <- met[["rho"]]
+    diag_kappa[v] <- met[["kappa"]]
+  }
+
+  # Resolve amplitude policy defaults
+  amp_method <- match.arg((amplitude$method %||% "global_ls"), c("global_ls","lss1","oasis_voxel"))
+  ridge_gls  <- amplitude$ridge %||% list(mode = "fractional", lambda = 0.02)
+  ridge_frac <- amplitude$ridge_frac %||% list(x = 0.02, b = 0.02)
+  return_se  <- isTRUE(amplitude$return_se %||% FALSE)
+
+  method_used <- rep(amp_method, V)
+  if (!is.null(amplitude$cond_gate) && amp_method == "global_ls") {
+    gate <- amplitude$cond_gate
+    metric <- gate$metric %||% "rho"
+    thr    <- as.numeric(gate$thr %||% 0.999)
+    fallback <- match.arg(gate$fallback %||% "lss1", c("lss1","oasis_voxel"))
+    trig <- if (metric == "kappa") (diag_kappa > (gate$kappa_thr %||% 1e3)) else (diag_rho > thr)
+    method_used[which(trig)] <- fallback
+  }
+
+  amps <- matrix(NA_real_, ntrials, V)
+  se_gls <- se_lss1 <- NULL
+  if (any(method_used == "global_ls")) {
+    sel <- method_used == "global_ls"
+    # Adaptive ridge per voxel if requested
+    ridge_use <- ridge_gls
+    if (isTRUE(amplitude$adaptive$enable %||% FALSE)) {
+      lam_vec <- .sbhm_adaptive_ridge_gls(diag_kappa[sel],
+                                          base = amplitude$adaptive$base %||% 0.02,
+                                          k0   = amplitude$adaptive$k0   %||% 1000,
+                                          max_lam = amplitude$adaptive$max %||% 0.08)
+      ridge_use <- lam_vec
+    }
+    res_gls <- sbhm_amplitude_ls(Y, sbhm, design_spec, alpha_hat[, sel, drop = FALSE],
+                                 Nuisance = Nuisance, ridge = ridge_use, prewhiten = prewhiten,
+                                 return_se = return_se)
+    if (is.list(res_gls)) { amps[, sel] <- res_gls$beta; se_gls <- res_gls$se } else { amps[, sel] <- res_gls }
+  }
+  if (any(method_used == "lss1")) {
+    sel <- method_used == "lss1"
+    res_lss1 <- sbhm_amplitude_lss1(Y, sbhm, design_spec, alpha_hat[, sel, drop = FALSE],
+                                    Nuisance = Nuisance, ridge_frac = ridge_frac,
+                                    prewhiten = prewhiten, return_se = return_se)
+    if (is.list(res_lss1)) { amps[, sel] <- res_lss1$beta; se_lss1 <- res_lss1$se } else { amps[, sel] <- res_lss1 }
+  }
+  oasis_se <- NULL
+  if (any(method_used == "oasis_voxel")) {
+    sel <- method_used == "oasis_voxel"
+    res_o <- sbhm_amplitude_oasis_k1(Y, sbhm, design_spec, alpha_hat[, sel, drop = FALSE],
+                                     Nuisance = Nuisance, ridge_frac = ridge_frac,
+                                     prewhiten = prewhiten, return_se = return_se)
+    amps[, sel] <- res_o$beta
+    if (return_se) {
+      # Build full SE matrix (NA for non-oasis voxels)
+      se_full <- matrix(NA_real_, ntrials, V)
+      se_full[, sel] <- res_o$se
+      oasis_se <- se_full
+    }
+  }
 
   out <- list(
     matched_idx = m$idx,
     margin      = m$margin,
     alpha_coords= alpha_hat,
-    diag        = list(r = r, ntrials = ntrials, times = sbhm$tgrid)
+    diag        = list(r = r, ntrials = ntrials, times = sbhm$tgrid,
+                       method_used = method_used, rho_max = diag_rho, kappa = diag_kappa,
+                       ridge_gls = if (is.list(ridge_gls)) ridge_gls else as.list(ridge_gls),
+                       ridge_frac = ridge_frac,
+                       se = if (return_se) {
+                         se_all <- matrix(NA_real_, ntrials, V)
+                         if (!is.null(se_gls))   se_all[, method_used == "global_ls"]   <- se_gls[,  method_used == "global_ls",   drop = FALSE]
+                         if (!is.null(se_lss1))  se_all[, method_used == "lss1"]        <- se_lss1[, method_used == "lss1",        drop = FALSE]
+                         if (!is.null(oasis_se)) se_all[, method_used == "oasis_voxel"] <- oasis_se[, method_used == "oasis_voxel", drop = FALSE]
+                         se_all
+                       } else NULL)
   )
   if ((match$topK %||% 1) > 1) {
     out$topK_idx <- m$topK_idx

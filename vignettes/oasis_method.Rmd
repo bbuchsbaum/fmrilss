@@ -424,6 +424,7 @@ Implications
 - Coefficients are identical up to floating‑point when whitening is applied consistently. Standard errors and t‑statistics are computed in the whitened space automatically by OASIS.
 - Whitening does not change the model degrees of freedom; it re‑weights timepoints to account for autocorrelation.
 - This behavior is shared by the VOXHRF path; whitening is applied once and consistently to all model components.
+ - In the SBHM pipeline, when the prepass uses a factorized data representation (`data_fac`), prewhitening is intentionally skipped during the prepass to preserve its memory/time advantages. You can still enable prewhitening for the final OASIS step by passing `prewhiten = list(...)` through `lss_sbhm(...)`, which applies whitening consistently to the data and trial design before estimating betas.
 
 ## Non-Parametric HRF Modeling with FIR
 

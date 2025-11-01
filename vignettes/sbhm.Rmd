@@ -2,7 +2,9 @@
 title: "Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation"
 author: "fmrilss Development Team"
 date: "`r Sys.Date()`"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    mathjax: default
 vignette: >
   %\VignetteIndexEntry{Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation}
   %\VignetteEngine{knitr::rmarkdown}
@@ -59,27 +61,22 @@ This approach provides:
 - **Stability**: Constrain estimates to a learned manifold of plausible HRFs
 - **Interpretability**: Each voxel maps to a specific library HRF with known parameters
 
-### When to Use SBHM
+### What SBHM Provides
 
-**Use SBHM when:**
-- You expect voxel-specific HRF shapes but want them library-constrained
-- Your library is large (50-200+ candidate HRFs) covering physiological variability
-- You want computational efficiency with interpretable per-voxel HRF assignments
-- You need to compare HRF parameters across voxels or conditions
+SBHM gives you **trial-by-trial activation amplitudes** for each voxel, where each voxel's HRF shape is:
 
-**Use global HRF selection when:**
-- A single shared HRF is sufficient for your analysis
-- Maximum computational efficiency is critical
-- Your ROI is anatomically homogeneous
+1. **Library-constrained**: Comes from a predefined set of physiologically plausible HRFs (e.g., gamma functions with varying peak times and widths)
+2. **Voxel-specific**: Each voxel gets its own best-matching HRF from the library
+3. **Interpretable**: You know exactly which HRF parameters (peak time, width) each voxel uses
+4. **Efficiently estimated**: Uses only r=4-8 shared basis functions instead of fitting full HRF timecourses
 
-**Use unconstrained voxel-wise HRF when:**
-- You need to discover completely novel HRF shapes
-- You have many trials and can afford the variance
-- You want data-driven HRF discovery without parametric constraints
+**Concrete output:**
+- `amplitude`: (ntrials × V) matrix of trial-wise activation strengths per voxel
+- `matched_idx`: Which library HRF each voxel matched to (e.g., "voxel 42 uses gamma HRF with peak=5.2s")
+- `margin`: Confidence in the match (high margin = unambiguous HRF assignment)
+- `coeffs_r`: Low-dimensional (r) trial-wise coefficients in the shared basis (optional)
 
-**Use multi-basis or FIR when:**
-- You need to capture timing/shape variability within single trials
-- Your experimental design varies trial-to-trial (e.g., parametric modulation)
+**Key advantage:** SBHM scales to large libraries (50-200+ candidate HRFs) while fitting only r parameters per voxel, making voxel-specific HRF modeling practical for whole-brain analysis.
 
 ```{r setup, message=FALSE, warning=FALSE}
 library(fmrihrf)
@@ -639,7 +636,13 @@ Conceptually:
 - Blend: compute weighted average of the unwhitened library coordinates A[:, idx]
   using those weights to form `alpha_soft` (r×V).
 - LSS: obtain trial-wise r-dimensional coefficients (K=r) with OASIS.
-- Project: amplitudes = inner product of trial-wise coefficients with `alpha_soft`.
+- Project: amplitudes = projection of trial-wise r‑coefficients onto `alpha_soft` using per‑trial Gram weighting (a_j' a_j):
+  a_hat = (alpha' D_j beta_j) / (alpha' D_j alpha), where D_j = A_j' A_j for trial j.
+
+Note on orientation: before projection, we align each voxel’s matched
+coordinates to the average direction of its trial-wise coefficients to avoid
+arbitrary sign flips (basis sign is not identifiable). This improves amplitude
+interpretability and cross-voxel comparability.
 
 ```{r soft-assignment, eval=eval_chunks}
 # 1) Prepass on all voxels
@@ -727,6 +730,230 @@ Best practices for soft assignment:
   exponentiation.
 - Blending trades interpretability (single HRF per voxel) for stability. Report
   both the matched index and whether soft blending was applied.
+
+## Performance and Prewhitening
+
+### Why SBHM’s Prepass Avoids Full Trial Matrices
+
+The `sbhm_prepass()` step now builds the aggregated per-basis design directly
+via `fmrihrf::regressor(..., summate = TRUE)` rather than constructing the
+full trial-wise matrix and summing its columns. This yields the same
+aggregated design `A_agg` (T×r) with significantly lower memory and runtime when
+the number of trials is large.
+
+Practical effects:
+- Memory scales with `T×r` instead of `T×(r·ntrials)` during prepass.
+- The subsequent ridge-regularized solve is unchanged; default fractional ridge
+  (`lambda = 0.01`) stabilizes the `G = A' A` system.
+
+### Prewhitening in the Factorized Path (by design)
+
+When providing factorized data (`data_fac = list(scores, loadings)`),
+`sbhm_prepass()` intentionally skips prewhitening. Applying fmriAR-based
+whitening directly in the factorized representation would require estimating
+and applying per-parcel/run filters consistently to both `Scores` and the
+aggregated design, which defeats the purpose of the low‑memory factorized path.
+
+Recommended pattern:
+- Use the factorized prepass for shape-only matching efficiency.
+- Apply prewhitening in the final OASIS step, where `lss_sbhm(..., prewhiten = list(...))`
+  forwards options to `lss(method = "oasis")`. This yields whitened trial-wise
+  coefficients and amplitudes, even if the prepass was factorized.
+
+### Benchmark: SBHM vs Voxel-wise HRF
+
+We ship an illustrative benchmark script. It simulates data, runs
+`lss_sbhm()` end-to-end, and compares timing against a voxel-wise HRF workflow
+(`estimate_voxel_hrf()` + `lss_with_hrf()`). Results will vary by machine and
+library/basis choice, but SBHM typically shows substantial speedups.
+
+Run from an R session after installing/loading `fmrilss`:
+
+```r
+path <- system.file("benchmarks", "bench_sbhm.R", package = "fmrilss")
+if (nzchar(path)) source(path) else message("Benchmark script not found in installed package.")
+```
+
+Notes:
+- The script prefers an FIR basis if available for the voxel-wise comparator,
+  otherwise falls back to SPMG3.
+- To adapt for your data, adjust `T`, `V`, trials, rank `r`, and HRF library.
+
+## Amplitude Policy
+
+The final amplitude stage estimates per‑trial scalars from the matched HRF shape per voxel. Different regimes benefit from different estimators:
+
+- global_ls (default): single‑shape GLM across all trials with fractional ridge (e.g., 0.02 of mean diag(X'X)). Use for slow or moderately overlapped ER designs. Works well with optional AR prewhitening (`prewhiten`).
+- lss1: per‑trial 2×2 LSS (trial vs. others) with fractional ridge on both arms. Gentler under strong overlap (ISI 1–4 s) and typically more stable when trial columns are highly collinear.
+- oasis_voxel: runs OASIS with K=1 per voxel using the matched HRF columns, returning SEs/t‑stats. Heavier but most consistent; recommended as a fallback in extreme overlap.
+
+You can select the method and add a per‑voxel fallback when conditioning is poor:
+
+```r
+out <- lss_sbhm(
+  Y, sbhm, design_spec,
+  prewhiten = list(method = "ar", p = "auto", pooling = "run", exact_first = "ar1"),
+  amplitude = list(
+    method = "global_ls",
+    ridge  = list(mode = "fractional", lambda = 0.02),
+    ridge_frac = list(x = 0.02, b = 0.02),
+    cond_gate  = list(metric = "rho", thr = 0.999, fallback = "lss1"),
+    return_se = FALSE   # set TRUE to compute per-trial SEs
+  )
+)
+
+table(out$diag$method_used)
+summary(out$diag$rho_max)
+```
+
+Guidance by regime:
+
+- Slow ER (≥12 s): global_ls, fractional ridge 0.01–0.02, prewhitening optional.
+- Moderate ER (4–8 s): global_ls with ridge 0.02, prewhitening recommended; fallback to lss1 for voxels with rho > 0.999.
+- Fast ER (ISI 1–4 s): global_ls with ridge 0.02–0.05 and prewhitening; enable cond_gate fallback to lss1 or oasis_voxel. Soft‑blend (`match$topK>1`) can modestly help matching under ambiguity.
+
+### ISI Sweep (Example)
+
+The snippet below sweeps two regimes and reports method usage and conditioning. It runs quickly in fast mode.
+
+```r
+set.seed(101)
+Tlen <- if (fast_mode) 160 else 220
+V    <- if (fast_mode)  6 else  24
+r    <- 4
+sframe <- fmrihrf::sampling_frame(blocklens = Tlen, TR = TR)
+
+# Small HRF library and SBHM basis
+H <- cbind(
+  exp(-seq(0, 30, length.out = Tlen)/4),
+  exp(-seq(0, 30, length.out = Tlen)/6),
+  exp(-seq(0, 30, length.out = Tlen)/8),
+  exp(-seq(0, 30, length.out = Tlen)/10)
+)
+sbhm <- sbhm_build(library_H = H, r = r, sframe = sframe, normalize = TRUE)
+hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
+
+simulate_design <- function(isi, jitter) {
+  bounds <- c(10, Tlen - 30)
+  nslots <- max(3L, floor((bounds[2] - bounds[1]) / isi))
+  base   <- seq(bounds[1], bounds[2], length.out = nslots)
+  if (jitter > 0) base <- pmin(pmax(base + runif(length(base), -jitter, jitter), bounds[1]), bounds[2])
+  list(sframe = sframe, cond = list(onsets = sort(base), duration = 0, span = 24))
+}
+
+simulate_Y <- function(design_spec, noise_sd = 0.12) {
+  onsets <- design_spec$cond$onsets
+  regs <- lapply(onsets, function(ot) {
+    rr_t <- fmrihrf::regressor(onsets = ot, hrf = hrf_B, duration = 0, span = 24, summate = FALSE)
+    fmrihrf::evaluate(rr_t, grid = sbhm$tgrid, precision = 0.1, method = "conv")
+  })
+  idx <- sample(seq_len(ncol(sbhm$A)), V, replace = TRUE)
+  alpha <- sbhm$A[, idx, drop = FALSE]
+  amps_true <- matrix(rnorm(length(onsets) * V, mean = 2, sd = 0.4), length(onsets), V)
+  Y <- matrix(rnorm(Tlen * V, sd = noise_sd), Tlen, V)
+  for (v in seq_len(V)) for (t in seq_along(onsets)) Y[, v] <- Y[, v] + amps_true[t, v] * as.numeric(regs[[t]] %*% alpha[, v])
+  Y
+}
+
+spec_slow <- simulate_design(isi = 15, jitter = 2)
+spec_fast <- simulate_design(isi = 2,  jitter = 0.5)
+Y_slow <- simulate_Y(spec_slow)
+Y_fast <- simulate_Y(spec_fast)
+
+out_slow <- lss_sbhm(
+  Y_slow, sbhm, spec_slow,
+  prewhiten = list(method = "ar", p = "auto", pooling = "run"),
+  amplitude = list(method = "global_ls", ridge = list(mode = "fractional", lambda = 0.02))
+)
+
+out_fast <- lss_sbhm(
+  Y_fast, sbhm, spec_fast,
+  prewhiten = list(method = "ar", p = "auto", pooling = "run"),
+  amplitude = list(method = "global_ls",
+                   ridge = list(mode = "fractional", lambda = 0.02),
+                   cond_gate = list(metric = "kappa", kappa_thr = 50, fallback = "lss1"))
+)
+
+cat("Slow ER: method usage\n"); print(table(out_slow$diag$method_used))
+cat("Fast ER: method usage\n"); print(table(out_fast$diag$method_used))
+summary(out_fast$diag$kappa)
+```
+
+Interpretation:
+- Slow ER: most voxels use the fast global_ls path.
+- Fast ER: some voxels auto‑fallback to lss1 based on conditioning; amplitudes remain stable and diagnostics transparent.
+
+### SEs and t‑stats with oasis_voxel
+
+When the fallback (or selected) method is `oasis_voxel`, per‑trial SEs are available by design, and returned in `out$diag$se` as an `ntrials × V` matrix (NA elsewhere). This makes it easy to compute t‑statistics and masks.
+
+```r
+# Force oasis_voxel for demonstration
+out_ov <- lss_sbhm(
+  Y_fast, sbhm, spec_fast,
+  prewhiten = list(method = "ar", p = "auto", pooling = "run"),
+  amplitude = list(method = "oasis_voxel", ridge_frac = list(x = 0.02, b = 0.02)),
+  return = "amplitude"
+)
+
+se_mat <- out_ov$diag$se              # ntrials × V (NA if method != oasis_voxel)
+t_mat  <- out_ov$amplitude / se_mat   # elementwise; NA propagated where se is NA
+
+# Example: count voxels with at least one |t| > 2 across trials
+hit_vox <- colSums(abs(t_mat) > 2, na.rm = TRUE)
+summary(hit_vox)
+```
+
+If you prefer to use `global_ls` as default and only fallback to `oasis_voxel` in extreme cases, `out$diag$se` will be NA for non‑oasis voxels by design—mask by `out$diag$method_used == "oasis_voxel"` when aggregating.
+
+### Auto‑tuning thresholds and adaptive ridge (optional)
+
+You can use the observed diagnostics to set a reasonable gate and to adapt ridge per voxel:
+
+```r
+# Auto-set gate to the 99th percentile of kappa
+kappa_thr <- fmrilss:::`.sbhm_auto_gate_threshold`(out_fast$diag$kappa, metric = "kappa", q = 0.99, hard_min = 1000)
+
+# Adaptive fractional ridge suggestion based on kappa (clip to [0.02, 0.08])
+lam_vec <- fmrilss:::`.sbhm_adaptive_ridge_gls`(out_fast$diag$kappa, base = 0.02, k0 = 1000, max_lam = 0.08)
+summary(lam_vec)
+```
+
+These helpers give you principled starting points for `cond_gate` and per‑voxel ridge in fast ER designs.
+
+
+## Amplitude Policy
+
+The final amplitude stage estimates per‑trial scalars from the matched HRF shape per voxel. Different regimes benefit from different estimators:
+
+- global_ls (default): single‑shape GLM across all trials with fractional ridge (e.g., 0.02 of mean diag(X'X)). Use for slow or moderately overlapped ER designs. Works well with optional AR prewhitening (`prewhiten`).
+- lss1: per‑trial 2×2 LSS (trial vs. others) with fractional ridge on both arms. Gentler under strong overlap (ISI 1–4 s) and typically more stable when trial columns are highly collinear.
+- oasis_voxel: runs OASIS with K=1 per voxel using the matched HRF columns, returning SEs/t‑stats. Heavier but most consistent; recommended as a fallback in extreme overlap.
+
+You can select the method and add a per‑voxel fallback when conditioning is poor:
+
+```r
+out <- lss_sbhm(
+  Y, sbhm, design_spec,
+  prewhiten = list(method = "ar", p = "auto", pooling = "run", exact_first = "ar1"),
+  amplitude = list(
+    method = "global_ls",
+    ridge  = list(mode = "fractional", lambda = 0.02),
+    ridge_frac = list(x = 0.02, b = 0.02),
+    cond_gate  = list(metric = "rho", thr = 0.999, fallback = "lss1")
+  )
+)
+
+table(out$diag$method_used)
+summary(out$diag$rho_max)
+```
+
+Guidance by regime:
+
+- Slow ER (≥12 s): global_ls, fractional ridge 0.01–0.02, prewhitening optional.
+- Moderate ER (4–8 s): global_ls with ridge 0.02, prewhitening recommended; fallback to lss1 for voxels with rho > 0.999.
+- Fast ER (ISI 1–4 s): global_ls with ridge 0.02–0.05 and prewhitening; enable cond_gate fallback to lss1 or oasis_voxel. Soft‑blend (`match$topK>1`) can modestly help matching under ambiguity.
+
 
 ### Returning Coefficients for Custom Analysis
 

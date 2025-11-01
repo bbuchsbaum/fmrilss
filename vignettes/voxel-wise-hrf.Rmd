@@ -2,7 +2,9 @@
 title: "Voxel-wise HRF Modeling with fmrilss"
 author: "fmrilss Development Team"
 date: "`r Sys.Date()`"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    mathjax: default
 vignette: >
   %\VignetteIndexEntry{Voxel-wise HRF Modeling with fmrilss}
   %\VignetteEngine{knitr::rmarkdown}
