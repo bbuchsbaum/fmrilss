@@ -189,13 +189,9 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   
   method <- match.arg(method)
   
-  # Handle backward compatibility: convert oasis$whiten to prewhiten
-  if (!is.null(oasis$whiten) && is.null(prewhiten)) {
-    legacy_prewhiten <- .convert_legacy_whiten(oasis)
-    if (!is.null(legacy_prewhiten)) {
-      message("Note: oasis$whiten is deprecated. Use the prewhiten parameter instead.")
-      prewhiten <- legacy_prewhiten
-    }
+  # Drop legacy oasis$whiten: ignore and warn once if provided
+  if (method == "oasis" && !is.null(oasis$whiten)) {
+    warning("oasis$whiten is deprecated and ignored. Use the prewhiten parameter instead.", call. = FALSE)
   }
 
   # Fast-path to OASIS: it has its own coercion/validation and supports Matrix inputs

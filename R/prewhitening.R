@@ -119,15 +119,20 @@
       design_full <- cbind(design_full, Nuisance)
     }
 
-    # If we have design matrices, compute residuals
+    # If we have design matrices, compute residuals robustly (rank-safe)
     if (!is.null(design_full)) {
-      # Add intercept if not present
-      if (!any(apply(design_full, 2, function(x) all(x == x[1])))) {
-        design_full <- cbind(1, design_full)
-      }
+      # Add intercept only if the constant vector is NOT in the span already
+      # This is robust to run-wise intercept dummies (one-hot per run) and
+      # avoids creating perfect multicollinearity.
+      n_time <- nrow(Y)
+      qr0 <- qr(design_full)
+      r1  <- qr.resid(qr0, rep(1, n_time))
+      in_span <- sqrt(sum(r1^2)) < 1e-8
+      if (!in_span) design_full <- cbind(1, design_full)
 
-      # Compute OLS residuals
-      resid <- Y - design_full %*% qr.solve(design_full, Y)
+      # Rank-safe residualization
+      qrX <- qr(design_full)
+      resid <- qr.resid(qrX, Y)
     } else {
       # No design matrices, use demeaned data
       resid <- sweep(Y, 2, colMeans(Y))

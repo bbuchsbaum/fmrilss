@@ -75,9 +75,7 @@
   if (!is.null(oasis$ridge_mode)) {
     oasis$ridge_mode <- match.arg(oasis$ridge_mode, c("absolute", "fractional"))
   }
-  if (!is.null(oasis$whiten)) {
-    oasis$whiten <- match.arg(tolower(oasis$whiten), c("none", "ar1"))
-  }
+  # legacy oasis$whiten is dropped; use prewhiten instead
 
   # Default intercept (aligns with non-OASIS paths)
   if (is.null(Z) && isTRUE(oasis$add_intercept %||% TRUE)) {
@@ -158,19 +156,11 @@
   N_nuis <- cbind(if (!is.null(Z)) Z, if (!is.null(Nuisance)) Nuisance, X_other)
 
   # 4) Whitening hook (optional)
-  # Check if we should use fmriAR for advanced features
-  if (!is.null(prewhiten) && .needs_advanced_prewhitening(prewhiten)) {
-    # Use fmriAR for advanced prewhitening
+  if (!is.null(prewhiten) && is.list(prewhiten) && (prewhiten$method %||% "none") != "none") {
     whitened <- .prewhiten_data(Y, X, NULL, N_nuis, prewhiten)
     Y <- whitened$Y_whitened
     X <- whitened$X_whitened
     if (!is.null(whitened$Nuisance_whitened)) N_nuis <- whitened$Nuisance_whitened
-  } else if (isTRUE(tolower(oasis$whiten %||% "none") == "ar1")) {
-    # Keep simple AR(1) for backward compatibility
-    w <- .oasis_ar1_whitener(Y, X_nuis = N_nuis)
-    Y <- w$Wy
-    if (!is.null(N_nuis) && ncol(N_nuis) > 0) N_nuis <- w$W_apply(N_nuis)
-    if (!is.null(X))      X      <- w$W_apply(X)
   }
 
   # 4.5) Optional VOXHRF branch: per-voxel HRF via tiny ridge, then LSS with voxel HRFs
@@ -380,35 +370,7 @@
 }
 
 # --- Helper: simple AR(1) whitening (optional) ---
-.oasis_ar1_whitener <- function(Y, X_nuis = NULL) {
-  # Estimate AR(1) parameter and apply variance-preserving whitening
-  n_time <- nrow(Y)
-
-  # Optionally deflate nuisance before rho estimation
-  Y_for_rho <- if (!is.null(X_nuis) && is.matrix(X_nuis) && ncol(X_nuis) > 0L) {
-    Qn <- qr.Q(qr(X_nuis))
-    Y - Qn %*% crossprod(Qn, Y)
-  } else Y
-
-  y1  <- Y_for_rho[-n_time, , drop=FALSE]
-  y2  <- Y_for_rho[-1,     , drop=FALSE]
-  rho <- mean(colSums(y1 * y2) / pmax(colSums(y1 * y1), .Machine$double.eps))
-  rho <- min(max(rho, -0.98), 0.98)
-
-  Wy        <- Y
-  Wy[1, ]   <- sqrt(1 - rho^2) * Y[1, ]
-  Wy[-1, ]  <- Y[-1, ] - rho * Y[-n_time, ]
-
-  W_apply <- function(X) {
-    if (is.null(X)) return(NULL)
-    if (!is.matrix(X)) X <- as.matrix(X)
-    WX        <- X
-    WX[1, ]   <- sqrt(1 - rho^2) * X[1, ]
-    WX[-1, ]  <- X[-1, ] - rho * X[-n_time, ]
-    WX
-  }
-  list(W_apply = W_apply, Wy = Wy, rho = rho)
-}
+## legacy simple AR(1) whitener removed; use prewhiten instead
 
 # --- Helper: build X (trial-wise) and X_other (aggregates for other conditions) via fmrihrf ---
 #' @keywords internal
