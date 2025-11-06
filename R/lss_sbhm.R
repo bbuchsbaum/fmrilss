@@ -171,19 +171,30 @@ lss_sbhm <- function(Y, sbhm, design_spec,
   V <- ncol(Y)
   diag_rho <- rep(NA_real_, V); diag_kappa <- rep(NA_real_, V)
   .cond_metrics <- function(regs, alpha_v, Nmat) {
+    # Build trial-by-trial design for this voxel’s matched shape
     Xv <- do.call(cbind, lapply(regs, function(Xt) as.numeric(Xt %*% alpha_v)))
     Xv <- .sbhm_resid(Xv, Nmat)
+
+    # Conditioning via singular values (scale-invariant)
     xs <- sweep(Xv, 2L, sqrt(colSums(Xv^2)) + 1e-12, "/")
     sv <- svd(xs, nu = 0, nv = 0)$d
     kappa <- if (length(sv) > 1L) max(sv) / pmax(min(sv), 1e-8) else 1
-    xsum <- rowSums(Xv)
-    rho_max <- 0
-    for (j in seq_len(ncol(Xv))) {
-      x1 <- Xv[, j]; x2 <- xsum - x1
-      denom <- sqrt(sum(x1 * x1) * sum(x2 * x2)) + 1e-12
-      rho <- if (denom > 0) abs(sum(x1 * x2) / denom) else 0
-      if (rho > rho_max) rho_max <- rho
+
+    # Robust overlap metric: maximum pairwise absolute cosine between columns
+    # This tends to be higher (and more stable) under heavy overlap than
+    # correlating with the sum of the other trials.
+    if (ncol(Xv) <= 1L) {
+      rho_max <- 0
+    } else {
+      G <- crossprod(Xv)                                 # trial×trial inner products
+      d <- sqrt(pmax(1e-12, diag(G)))
+      # Normalized correlation/cosine matrix
+      C <- G / outer(d, d, "*")
+      diag(C) <- 0
+      rho_max <- max(abs(C[upper.tri(C)]), na.rm = TRUE)
+      if (!is.finite(rho_max)) rho_max <- 0
     }
+
     c(rho = rho_max, kappa = kappa)
   }
   for (v in seq_len(V)) {

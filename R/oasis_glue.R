@@ -81,8 +81,21 @@
 
   # Default intercept (aligns with non-OASIS paths)
   if (is.null(Z) && isTRUE(oasis$add_intercept %||% TRUE)) {
-    Z <- matrix(1, n_time, 1)
-    colnames(Z) <- "Intercept"
+    # If using design_spec and there are multiple runs, prefer run-wise intercepts
+    if (!is.null(oasis$design_spec)) {
+      bl <- tryCatch(fmrihrf::blocklens(oasis$design_spec$sframe), error = function(e) NULL)
+      if (!is.null(bl) && length(bl) > 1L) {
+        runs <- rep(seq_along(bl), bl)
+        Z <- stats::model.matrix(~ 0 + factor(runs))
+        colnames(Z) <- paste0("run", seq_along(bl))
+      } else {
+        Z <- matrix(1, n_time, 1)
+        colnames(Z) <- "Intercept"
+      }
+    } else {
+      Z <- matrix(1, n_time, 1)
+      colnames(Z) <- "Intercept"
+    }
   }
 
   # 1) Build trial-wise design if needed (from fmrihrf)
@@ -404,6 +417,26 @@
   
   sframe <- spec$sframe
   times  <- fmrihrf::samples(sframe, global = TRUE)   # global seconds grid
+
+  # Minimal safety for multi-run: warn if onsets look run‑relative
+  # Heuristic: in multi-run, if max(onsets) is no larger than a single run's
+  # duration in seconds, users likely supplied run-relative onsets.
+  bl <- tryCatch(fmrihrf::blocklens(sframe), error = function(e) NULL)
+  if (!is.null(bl) && length(bl) > 1L && !is.null(spec$cond$onsets)) {
+    TR <- as.numeric(median(diff(times)))
+    run_sec <- max(bl) * TR
+    onv <- tryCatch(as.numeric(unlist(spec$cond$onsets)), error = function(e) NA_real_)
+    max_onset <- suppressWarnings(max(onv, na.rm = TRUE))
+    if (is.finite(max_onset) && max_onset <= run_sec + 1e-6) {
+      warning(
+        paste0(
+          "Onsets appear run-relative but design_spec expects global time.\n",
+          "For multi-run designs, prefer lss_design() with fmridesign::event_model(),\n",
+          "or convert onsets to global seconds (offset each run)."
+        ), call. = FALSE
+      )
+    }
+  }
   
   # Get HRF object
   hrf_obj <- spec$cond$hrf %||% fmrihrf::make_hrf("spmg1")

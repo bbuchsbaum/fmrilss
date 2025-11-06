@@ -37,7 +37,7 @@ Remotes:
     bbuchsbaum/fmrihrf,
     bbuchsbaum/fmriAR
 VignetteBuilder: knitr
-RoxygenNote: 7.3.2.9000
+RoxygenNote: 7.3.3
 Config/testthat/edition: 3
 URL: https://bbuchsbaum.github.io/fmrilss/
 Language: en-US

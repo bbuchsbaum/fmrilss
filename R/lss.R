@@ -302,14 +302,12 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
     return(list(Y_residual = Y, X_residual = X))
   }
 
-  # Numerically stable residualization via QR (avoids explicit inverse)
+  # Robust residualization via QR. Using qr.resid avoids NA propagation when
+  # X_nuisance is rank-deficient (e.g., duplicate intercept in Z and Nuisance).
   qrX <- qr(X_nuisance)
-  coefY <- qr.coef(qrX, Y)
-  coefX <- qr.coef(qrX, X)
-  
-  Y_residual <- Y - X_nuisance %*% coefY
-  X_residual <- X - X_nuisance %*% coefX
-  
+  Y_residual <- qr.resid(qrX, Y)
+  X_residual <- qr.resid(qrX, X)
+
   list(Y_residual = Y_residual, X_residual = X_residual)
 }
 
