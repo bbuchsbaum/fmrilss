@@ -191,7 +191,7 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   
   # Drop legacy oasis$whiten: ignore and warn once if provided
   if (method == "oasis" && !is.null(oasis$whiten)) {
-    warning("oasis$whiten is deprecated and ignored. Use the prewhiten parameter instead.", call. = FALSE)
+    message("Note: oasis$whiten is deprecated and ignored. Use the prewhiten parameter instead.")
   }
 
   # Fast-path to OASIS: it has its own coercion/validation and supports Matrix inputs

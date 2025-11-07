@@ -292,7 +292,7 @@ test_that("VOXHRF handles degenerate trial designs without crashing", {
   )
 })
 
-test_that("Manual single AR1 whiten == internal VOXHRF AR1 whiten", {
+test_that("Manual AR(1) prewhiten equals internal prewhiten in VOXHRF path", {
   skip_on_cran()
   set.seed(110)
   n_time <- 150
@@ -308,15 +308,14 @@ test_that("Manual single AR1 whiten == internal VOXHRF AR1 whiten", {
   # Random data
   Y <- matrix(rnorm(n_time * n_vox), n_time, n_vox)
 
-  # Manual AR1 whiten once for both Y and X
-  # Internal path uses default intercept in nuisance; emulate that here
-  Z <- matrix(1, n_time, 1)
-  w <- fmrilss:::`.oasis_ar1_whitener`(Y, X_nuis = Z)
-  Yw <- w$Wy
-  Xw <- w$W_apply(X_trials)
-  Zw <- w$W_apply(Z)
+  # Manual prewhiten with AR(1) using the public prewhiten API
+  Z <- matrix(1, n_time, 1)  # intercept, matches default behavior
+  pw <- fmrilss:::`.prewhiten_data`(Y, X_trials, Z, NULL, prewhiten = list(method = "ar", p = 1))
+  Yw <- pw$Y_whitened
+  Xw <- pw$X_whitened
+  Zw <- pw$Z_whitened
 
-  # Internal path: whiten inside with oasis$whiten = "ar1"
+  # Internal path: use prewhiten argument (no legacy options)
   beta_internal <- lss(
     Y = Y,
     X = NULL,
@@ -324,10 +323,10 @@ test_that("Manual single AR1 whiten == internal VOXHRF AR1 whiten", {
     oasis = list(
       design_spec = spec,
       hrf_mode = "voxel_ridge",
-      whiten = "ar1",
       K = K,
       lambda_shape = 0
-    )
+    ),
+    prewhiten = list(method = "ar", p = 1)
   )
 
   # Manual path: pass whitened Y and X; disable whitening inside
@@ -339,10 +338,10 @@ test_that("Manual single AR1 whiten == internal VOXHRF AR1 whiten", {
     oasis = list(
       design_spec = spec,
       hrf_mode = "voxel_ridge",
-      whiten = "none",
       K = K,
       lambda_shape = 0
-    )
+    ),
+    prewhiten = list(method = "none")
   )
 
   # Compare within tight tolerance
