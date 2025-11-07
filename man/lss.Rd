@@ -79,12 +79,18 @@ When using method="oasis", the following options are available in the oasis list
   \item \code{K}: Explicit basis dimension for multi-basis HRF models (e.g., 3 for SPMG3).
     If not provided, it's auto-detected from X dimensions or defaults to 1 for single-basis HRFs.
   \item \code{ridge_mode}: Either "absolute" (default) or "fractional". In absolute mode,
-    ridge_x and ridge_b are used directly as regularization parameters. In fractional mode,
-    they represent fractions of the maximum eigenvalue for adaptive regularization.
-  \item \code{ridge_x}: Ridge parameter for trial-specific regressors (default 0). Controls
-    regularization strength for individual trial estimates.
-  \item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0). Controls
-    regularization strength for the sum of all other trials.
+    \code{ridge_x} and \code{ridge_b} are used directly. In fractional mode they are interpreted
+    as multipliers on the mean design energy (\(\lambda_x = \eta_x \cdot \overline{d}\),
+    \(\lambda_b = \eta_b \cdot \overline{s}\)), making the penalty scale automatically with
+    the trial and aggregator regressors that fmrihrf builds. Typical fmrihrf designs have
+    \(\overline{d}, \overline{s} \approx 5{-}15\), so \code{ridge_x = 0.01} corresponds to adding
+    roughly 1% of that energy to the diagonal for each trial.
+  \item \code{ridge_x}: Ridge parameter for trial-specific regressors (default 0). In fractional
+    mode concrete starting points are 0.005 for well-spaced trials, 0.01 for standard rapid ER
+    designs, and 0.02-0.05 when regressors are highly collinear or multi-basis HRFs are used.
+  \item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0). Usually matched
+    to \code{ridge_x} for symmetric conditioning, though you can set it lower (e.g., half) if the
+    combined regressor is already stable.
   \item \code{return_se}: Logical, whether to return standard errors (default FALSE). When TRUE,
     returns a list with \code{beta} (trial estimates) and \code{se} (standard errors) components.
   \item \code{return_diag}: Logical, whether to return design diagnostics (default FALSE).

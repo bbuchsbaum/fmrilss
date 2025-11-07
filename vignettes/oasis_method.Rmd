@@ -246,6 +246,25 @@ cat("  Reduction:", round((1 - mean(var_ridge)/mean(var_unreg)) * 100, 1), "%\n"
 
 The variance reduction demonstrates ridge regression's stabilizing effect. In practice, this translates to more reliable estimates, especially in noisy data or complex designs.
 
+Internally, fractional penalties are resolved as
+\(\lambda_x = \eta_x \cdot \overline{d}\) and \(\lambda_b = \eta_b \cdot \overline{s}\),
+where \(\eta_x = \) `ridge_x`, \(\eta_b = \) `ridge_b`, and \(\overline{d}\) / \(\overline{s}\) are
+the mean diagonal entries of the per-trial normal equations for the trial and
+aggregator regressors, respectively. Because standard fmrihrf event regressors
+have \(\overline{d}, \overline{s}\) on the order of \(5{-}15\) (depending on TR, span,
+and basis size), the fractional values translate directly into intuitive
+percentage-style penalties. Practical starting points:
+
+- `ridge_x = ridge_b = 0.005` (0.5% of mean energy) when trials are well separated (>= 6 s ISI) or SNR is high and you mainly want numerical padding.
+- `ridge_x = ridge_b = 0.01` (1%) for typical rapid ER designs with TR in 0.8-1.5 s and moderate overlap; this is the recommended default for most studies.
+- `ridge_x = ridge_b = 0.02-0.05` (2-5%) when events are extremely dense (<= 4 s ISI), you model multi-basis HRFs (K > 1), or whitening indicates high condition number.
+
+You can bias the aggregator penalty downward (e.g., `ridge_b = 0.5 * ridge_x`)
+if the summed regressor remains stable across designs, but matching values keeps
+the conditioning symmetric. Monitor the reported variance reduction and, if the
+mean variance drops by more than ~60%, consider backing the penalty down to
+preserve amplitude fidelity.
+
 ## Working with Multi-Basis HRFs
 
 Real hemodynamic responses rarely match the canonical HRF perfectly. They might peak earlier or later, be wider or narrower, or have different undershoot characteristics. Multi-basis HRF models capture this variability by representing the response as a weighted combination of basis functions.
