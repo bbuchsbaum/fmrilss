@@ -264,7 +264,10 @@ arma::mat oasisk_betas(const arma::cube& D,
     bool ok = chol(L, G, "lower");
     if (!ok) {
       G.diag() += diag_eps;         // tiny jitter if needed
-      chol(L, G, "lower");
+      ok = chol(L, G, "lower");
+    }
+    if (!ok) {
+      Rcpp::stop("Cholesky failed");
     }
     arma::mat Z = solve(trimatl(L), RHS);
     X           = solve(trimatu(L.t()), Z);

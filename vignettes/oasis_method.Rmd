@@ -401,10 +401,8 @@ res_sbhm <- lss_sbhm(
   Y = Y,
   sbhm = sbhm,
   design_spec = design_spec,
-  Nuisance = NULL,
   prewhiten = list(method = "ar", exact_first = "ar1"),
-  match = list(shrink = list(tau = 0.0, ref = sbhm$ref$alpha_ref), whiten = TRUE),
-  oasis = list(ridge_mode = "fractional", ridge_x = 0, ridge_b = 0),
+  match = list(shrink = list(ref = sbhm$ref$alpha_ref)),
   return = "amplitude"
 )
 

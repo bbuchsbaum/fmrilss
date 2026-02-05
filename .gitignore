@@ -4,3 +4,4 @@ src/*.o
 /doc/
 /Meta/
 ..Rcheck/
+tests/testthat/_problems/

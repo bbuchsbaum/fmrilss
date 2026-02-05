@@ -71,6 +71,14 @@ same basis, (3) Least Squares Separate (OASIS) with the SBHM basis to obtain
 trial-wise r-dimensional coefficients, and (4) projection of those
 coefficients onto the matched coordinates to produce scalar amplitudes.
 }
+\details{
+Most users should treat the `prepass`, `match`, `oasis`, and `amplitude` inputs
+as optional *override lists*: you can provide only the fields you want to
+change, and rely on defaults for everything else.
+
+If you already use `fmridesign`, prefer [lss_sbhm_design()] to avoid manually
+assembling an OASIS `design_spec`.
+}
 \examples{
 \dontrun{
   library(fmrihrf)
@@ -92,7 +100,14 @@ coefficients onto the matched coordinates to produce scalar amplitudes.
   Y <- matrix(rnorm(Tlen*V, sd = .6), Tlen, V)
   Y[,1] <- Y[,1] + Xr \%*\% alpha_true
   out <- lss_sbhm(Y, sbhm, design_spec)
+  # Common override-only pattern:
+  out2 <- lss_sbhm(Y, sbhm, design_spec,
+                  match = list(topK = 3, soft_blend = TRUE),
+                  return = "amplitude")
   names(out)
 }
 
+}
+\seealso{
+[lss_sbhm_design()], [sbhm_prepass()], [sbhm_match()]
 }

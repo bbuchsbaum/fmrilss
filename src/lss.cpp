@@ -48,8 +48,13 @@ List compute_residuals_cpp(const arma::mat& X,          // (n×k)
 arma::mat lss_compute_cpp(const arma::mat& C,   // projected (n×T)
                           const arma::mat& Y) { // projected (n×V)
 
+    const double eps = 1e-12;
+
     if (C.n_cols == 1) {                // single-trial guard
         double cc = dot(C, C);
+        if (cc <= eps) {
+            return arma::mat(1, Y.n_cols, fill::zeros);
+        }
         return (C.t() * Y) / cc;
     }
 
@@ -65,7 +70,12 @@ arma::mat lss_compute_cpp(const arma::mat& C,   // projected (n×T)
     arma::vec  bt2   = ss_tot - 2*CtT + CtC;
     arma::vec  ctb   = CtT   - CtC;
 
-    arma::vec ctb_bt2 = ctb / bt2;                // T vector
+    // Guard against degenerate "other-trials" regressor with zero norm (bt2 == 0),
+    // and against numerical underflow in near-degenerate cases.
+    arma::vec bt2_safe = bt2;
+    bt2_safe.elem(find(bt2_safe <= eps)).fill(eps);
+
+    arma::vec ctb_bt2 = ctb / bt2_safe;           // T vector
     
     // Memory-efficient numerator calculation (Fix 2, final)
     arma::mat num = CtY;
@@ -73,7 +83,9 @@ arma::mat lss_compute_cpp(const arma::mat& C,   // projected (n×T)
         num.col(i) -= BtY.col(i) % ctb_bt2;
     }
 
-    arma::mat den = repmat(CtC - square(ctb)/bt2, 1, Y.n_cols);
+    arma::vec den_vec = CtC - square(ctb) / bt2_safe;
+    den_vec.elem(find(arma::abs(den_vec) <= eps)).fill(eps);
+    arma::mat den = repmat(den_vec, 1, Y.n_cols);
 
     return num / den;
 }

@@ -68,6 +68,20 @@ mixed_solve <- function(Y, X = NULL, Z = NULL, K = NULL, Nuisance = NULL,
   if (is.null(X) && !is.null(Nuisance)) {
     X <- Nuisance
   }
+
+  # Guard against saturated / ill-posed fixed-effect designs early, to avoid
+  # cryptic C++ errors and provide stable error contracts.
+  n_obs <- if (is.matrix(Y)) nrow(Y) else length(Y)
+  if (!is.null(X)) {
+    X <- as.matrix(X)
+    if (nrow(X) != n_obs) {
+      stop("X must have the same number of rows as Y", call. = FALSE)
+    }
+    n_filtered <- if (is.matrix(Y)) sum(stats::complete.cases(Y)) else sum(!is.na(Y))
+    if (n_filtered <= ncol(X)) {
+      stop("Need more non-NA observations than columns in X", call. = FALSE)
+    }
+  }
   
   # Use the C++ implementation (currently the only available method)
   result <- .mixed_solve_cpp(Y, X, Z, K, method, bounds, SE, return_Hinv)

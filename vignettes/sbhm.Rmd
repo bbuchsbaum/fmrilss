@@ -325,6 +325,35 @@ cat("  True HRF assignments:", length(unique(true_hrf_idx)), "unique HRFs\n")
 
 Now we'll use `lss_sbhm()` to recover the voxel-specific HRFs and trial amplitudes.
 
+### Recommended entry point: `lss_sbhm_design()`
+
+If you already use `fmridesign`, prefer `lss_sbhm_design()` to avoid manually
+building an OASIS `design_spec`. This mirrors `lss_design()` while running the
+SBHM pipeline end-to-end.
+
+```{r sbhm-design-entrypoint, eval=FALSE}
+if (requireNamespace("fmridesign", quietly = TRUE)) {
+  library(fmridesign)
+
+  # trials: data.frame with at least onset + run (run-relative onsets)
+  emod <- event_model(
+    onset ~ trialwise(basis = "spmg1"),
+    data = trials,
+    block = ~run,
+    sampling_frame = sframe
+  )
+
+  res <- lss_sbhm_design(
+    Y = Y,
+    sbhm = sbhm,
+    event_model = emod,
+    # baseline_model = bmodel,  # optional drift/block/nuisance terms
+    match = list(topK = 3, soft_blend = TRUE),
+    return = "amplitude"
+  )
+}
+```
+
 ### Prewhitening for Autocorrelated Noise
 
 If your fMRI data has temporally correlated noise (common with short TR < 2s), prewhitening improves parameter estimates:
@@ -343,33 +372,22 @@ res_prewhiten <- lss_sbhm(
 - Visual inspection shows autocorrelated residuals
 - Improved model fit is critical (e.g., single-subject studies)
 
-**Note:** Prewhitening is applied during the prepass stage. It cannot be combined with `data_fac` (PCA factorization).
+**Note:** If you use the factorized prepass (`prepass = list(data_fac = ...)`), the
+prepass stage intentionally skips prewhitening for efficiency. You can still
+enable prewhitening for the final OASIS step by passing `prewhiten = list(...)`
+to `lss_sbhm()`.
 
 ### Basic SBHM Run
 
 ```{r run-sbhm, eval=eval_chunks}
-# Run end-to-end SBHM (no prewhitening for this synthetic example)
+# Minimal end-to-end SBHM: specify only what you want to override.
+# (All control lists are optional, and you can provide partial lists.)
 res_sbhm <- lss_sbhm(
   Y = Y,
   sbhm = sbhm,
   design_spec = design_spec,
-  Nuisance = NULL,
-  prewhiten = NULL,  # Set to list(method="ar", p=1L, exact_first="ar1") for short TR
-  prepass = list(
-    ridge = list(mode = "fractional", lambda = 0.01)  # Small ridge for stability
-  ),
-  match = list(
-    shrink = list(tau = 0, ref = sbhm$ref$alpha_ref),
-    topK = 1,
-    whiten = TRUE,      # Whiten by singular values before matching
-    orient_ref = TRUE   # Flip coefficient sign if anti-correlated with reference
-                        # Ensures consistent polarity across voxels
-  ),
-  oasis = list(
-    ridge_mode = "fractional",  # Scale ridge by mean eigenvalue (recommended)
-    ridge_x = 0.01,   # Regularize design matrix (X'X + ridge_x*I) for stability
-    ridge_b = 0.01    # Shrink coefficients towards zero for variance reduction
-  ),
+  # match = list(topK = 3, soft_blend = TRUE),     # optional: blend ambiguous voxels
+  # prewhiten = list(method="ar", p=1L, exact_first="ar1"),  # optional: short TR
   return = "both"  # Return both amplitudes and coefficients
 )
 
@@ -420,10 +438,12 @@ grid()
 - **Medium margin (0.05-0.1)**: Moderate confidence, top 2 candidates similar
 - **Low margin (<0.05)**: Ambiguous, consider averaging top-K candidates
 
-Note on top-K: `lss_sbhm()` uses hard assignment (top-1) internally. For soft
-assignment, call `sbhm_prepass()` and `sbhm_match(topK = K)` directly to obtain
-`weights` and `topK_idx`, then combine candidate coordinates manually before
-projecting via `sbhm_project()`.
+Note on top-K: by default `lss_sbhm()` uses hard assignment (top-1) even if you
+request `topK > 1`. To *blend* the top-K candidates for ambiguous voxels, use
+`match = list(topK = K, soft_blend = TRUE)` (optionally with `blend_margin` to
+blend only when the margin is small). If you need custom weighting (e.g., a
+different softmax temperature), use the manual pipeline with `sbhm_prepass()`,
+`sbhm_match(topK = K)`, and `sbhm_project()`.
 
 ### Comparing Recovered vs. True Amplitudes
 
@@ -492,7 +512,7 @@ This table summarizes all SBHM parameters with recommended starting values:
 |-----------|---------|-------------------|----------------|
 | **r** (rank) | — | 6 (simple) to 12 (complex) | Aim for 90-95% variance explained |
 | **topK** (matching) | 1 | 1 (hard) to 5 (soft) | Use 3-5 for ambiguous cases |
-| **ridge.lambda** (prepass) | 0.01 | 0.005 to 0.05 | Add 0.01-0.05 for noisy data |
+| **prepass.ridge** | NULL (off) | 0.005 to 0.05 | Enable for noisy / ill-conditioned designs |
 | **ridge.mode** | "fractional" | "fractional" or "absolute" | Fractional scales by design energy |
 | **shrink.tau** (matching) | 0 | 0 to 0.2 | Increase for low SNR (0.1-0.2) |
 | **whiten** | TRUE | TRUE (recommended) | Set FALSE to weight by singular values |
@@ -505,7 +525,8 @@ This table summarizes all SBHM parameters with recommended starting values:
 **Minimal call** (uses all defaults except required arguments):
 ```{r minimal-call, eval=FALSE}
 res <- lss_sbhm(Y = Y, sbhm = sbhm, design_spec = design_spec)
-# Uses: small fractional ridge (0.01), topK=1, whiten=TRUE, orient_ref=TRUE, no prewhitening
+# Uses: topK=1, whiten=TRUE, orient_ref=TRUE, no prewhitening.
+# (Prepass ridge is off by default; enable it via prepass = list(ridge = ...).)
 ```
 
 ### Prepass Ridge Regularization

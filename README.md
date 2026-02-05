@@ -87,6 +87,23 @@ print(dim(beta_fast))
 print(beta_fast[1:5, 1:4])
 ```
 
+## Recommended workflows
+
+For real fMRI analyses, most users will want one of the higher-level, design-aware
+interfaces (see package vignettes for full examples):
+
+- **Formula-based designs (multi-run, modulators, validation):** `lss_design()` with
+  `fmridesign` (`vignette("lss_with_fmridesign", package = "fmrilss")`).
+- **Voxel-specific HRFs from a library (SBHM):** `lss_sbhm_design()` (recommended if
+  you use `fmridesign`) or `lss_sbhm()` (`vignette("sbhm", package = "fmrilss")`).
+
+Minimal SBHM call (showing the “override-only” pattern):
+
+```r
+# res <- lss_sbhm_design(Y, sbhm, event_model = emod, return = "amplitude")
+res <- lss_sbhm(Y, sbhm, design_spec, match = list(topK = 3, soft_blend = TRUE))
+```
+
 ## References
 
 Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012). Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses. *NeuroImage*, 59(3), 2636-2643.
