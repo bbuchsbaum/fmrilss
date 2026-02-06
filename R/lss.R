@@ -27,8 +27,14 @@
 #'   }
 #' @param block_size An integer specifying the voxel block size for parallel
 #'   processing, only applicable when `method = "cpp_optimized"`. Defaults to 96.
-#' @param oasis A list of options for the OASIS method. See Details for available options.
-#' @param prewhiten A list of prewhitening options using fmriAR. See Details for available options.
+#' @param oasis A list of options for the OASIS method (ridge, SE, design
+#'   construction, etc.).
+#'   See Details and \code{\link{oasis_options}} for the full list.
+#'   \strong{Note:} \code{oasis$whiten} is deprecated and ignored.
+#'   Use the \code{prewhiten} parameter instead for all temporal whitening.
+#' @param prewhiten A list of prewhitening options using the \pkg{fmriAR}
+#'   package, or \code{NULL} (no whitening, the default).
+#'   See Details and \code{\link{prewhiten_options}} for the full list.
 #'
 #' @return A numeric matrix of size T × V containing the trial-wise beta estimates.
 #'   Note: Currently only returns estimates for the trial regressors (X). Beta
@@ -45,7 +51,8 @@
 #' If Nuisance regressors are provided, they are first projected out from both
 #' Y and X using standard linear regression residualization.
 #' 
-#' When using method="oasis", the following options are available in the oasis list:
+#' When using method="oasis", the following options are available in the oasis list
+#' (see also \code{\link{oasis_options}} for a validated constructor):
 #' \itemize{
 #'   \item \code{design_spec}: A list for building trial-wise designs from event onsets using fmrihrf.
 #'     Must contain: \code{sframe} (sampling frame), \code{cond} (list with \code{onsets},
@@ -55,7 +62,7 @@
 #'     If not provided, it's auto-detected from X dimensions or defaults to 1 for single-basis HRFs.
 #'   \item \code{ridge_mode}: Either "absolute" (default) or "fractional". In absolute mode,
 #'     ridge_x and ridge_b are used directly as regularization parameters. In fractional mode,
-#'     they represent fractions of the maximum eigenvalue for adaptive regularization.
+#'     they represent fractions of the mean design energy for adaptive regularization.
 #'   \item \code{ridge_x}: Ridge parameter for trial-specific regressors (default 0). Controls
 #'     regularization strength for individual trial estimates.
 #'   \item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0). Controls
@@ -66,30 +73,89 @@
 #'     When TRUE, includes diagnostic information about the design matrix structure.
 #'   \item \code{block_cols}: Integer, voxel block size for memory-efficient processing (default 4096).
 #'     Larger values use more memory but may be faster for systems with sufficient RAM.
-#'   \item \code{whiten}: Logical, whether to apply AR(1) whitening (default FALSE). When TRUE,
-#'     estimates AR(1) coefficients and pre-whitens data to account for temporal autocorrelation.
 #'   \item \code{ntrials}: Explicit number of trials (used when K > 1 to determine output dimensions).
 #'     If not provided, calculated as ncol(X) / K.
 #'   \item \code{hrf_grid}: Vector of HRF indices for grid-based HRF selection (advanced use).
 #'     Allows testing multiple HRF shapes simultaneously.
 #' }
 #'
-#' When using the \code{prewhiten} parameter, the following options are available:
+#' \strong{Prewhitening (temporal autocorrelation correction):}
+#'
+#' Use the top-level \code{prewhiten} parameter for all temporal whitening.
+#' This replaces the old \code{oasis$whiten = "ar1"} syntax, which is now
+#' deprecated and ignored.  Do \emph{not} put AR options inside the
+#' \code{oasis} list; they belong in \code{prewhiten}.
+#'
+#' The \code{prewhiten} list accepts the following fields
+#' (see also \code{\link{prewhiten_options}} for a validated constructor):
 #' \itemize{
-#'   \item \code{method}: Character, "ar" (default), "arma", or "none" for the noise model type.
-#'   \item \code{p}: Integer or "auto" for AR order (default "auto").
-#'   \item \code{q}: Integer for MA order in ARMA models (default 0).
-#'   \item \code{p_max}: Maximum AR order when p="auto" (default 6).
-#'   \item \code{pooling}: Character, "global" (default), "voxel", "run", or "parcel" for parameter estimation strategy.
-#'   \item \code{runs}: Integer vector of run identifiers for run-aware estimation.
-#'   \item \code{parcels}: Integer vector of parcel memberships for parcel-based pooling.
-#'   \item \code{exact_first}: Character, "ar1" or "none" for exact AR(1) scaling at segment starts.
+#'   \item \code{method}: Character, \code{"ar"} (default when the list is
+#'     non-NULL), \code{"arma"}, or \code{"none"}.
+#'     \code{"ar"} fits a pure autoregressive model; \code{"arma"} adds a
+#'     moving-average component (requires \code{q > 0}).
+#'   \item \code{p}: AR order.
+#'     An integer, or \code{"auto"} (default) to select via AIC/BIC up to
+#'     \code{p_max}. Use \code{p = 1} for a simple AR(1) model (the most
+#'     common choice for fMRI); higher orders are rarely needed but may
+#'     help with short TRs or multi-band sequences.
+#'   \item \code{q}: Integer MA order for ARMA models (default 0).  Only
+#'     relevant when \code{method = "arma"}.
+#'   \item \code{p_max}: Integer, maximum AR order when \code{p = "auto"}
+#'     (default 6).
+#'   \item \code{pooling}: How AR coefficients are estimated across voxels.
+#'     One of:
+#'     \describe{
+#'       \item{\code{"global"}}{(default) A single set of AR coefficients is
+#'         estimated from the median autocorrelation across all voxels.
+#'         Fast and usually adequate.}
+#'       \item{\code{"voxel"}}{Fit a separate AR model per voxel.  Most
+#'         accurate but slow; consider \code{"parcel"} instead.}
+#'       \item{\code{"run"}}{Fit one AR model per run (requires \code{runs}).
+#'         Useful when noise structure differs between runs.}
+#'       \item{\code{"parcel"}}{Fit one AR model per parcel (requires
+#'         \code{parcels}). Good compromise between \code{"global"} and
+#'         \code{"voxel"}.}
+#'     }
+#'   \item \code{runs}: Integer vector of length \code{nrow(Y)} giving
+#'     run/block labels. Required for \code{pooling = "run"} and recommended
+#'     whenever data span multiple runs so that whitening respects run
+#'     boundaries.
+#'   \item \code{parcels}: Integer vector of length \code{ncol(Y)} giving
+#'     parcel labels.  Required for \code{pooling = "parcel"}.
+#'   \item \code{exact_first}: Character, \code{"ar1"} (default) or
+#'     \code{"none"}.  When \code{"ar1"}, the first observation of each
+#'     segment is scaled by \eqn{\sqrt{1 - \phi_1^2}} for the exact
+#'     likelihood; \code{"none"} drops the first observation instead.
+#'   \item \code{compute_residuals}: Logical (default TRUE). When TRUE,
+#'     OLS residuals from the full design are computed before fitting the
+#'     noise model.  Set to FALSE only if Y is already residualized.
 #' }
 #'
-#' Prewhitening is applied before the LSS analysis to account for temporal autocorrelation in the
-#' fMRI time series. The fmriAR package provides flexible AR/ARMA modeling with various pooling
-#' strategies. For backward compatibility, the old \code{oasis$whiten = "ar1"} syntax is still
-#' supported and will be converted to the equivalent prewhiten settings.
+#' \strong{Typical prewhiten recipes:}
+#' \preformatted{
+#'   # Simple AR(1) — good default for most fMRI data
+#'   prewhiten = list(method = "ar", p = 1)
+#'
+#'   # Auto-select AR order (AIC), global pooling
+#'   prewhiten = list(method = "ar", p = "auto")
+#'
+#'   # Per-run AR(1) for multi-run data
+#'   prewhiten = list(method = "ar", p = 1, pooling = "run",
+#'                    runs = blockids)
+#'
+#'   # Parcel-based AR with atlas labels
+#'   prewhiten = list(method = "ar", p = 1, pooling = "parcel",
+#'                    parcels = atlas_labels)
+#'
+#'   # Or use the validated constructor:
+#'   prewhiten = prewhiten_options(method = "ar", p = 1, pooling = "run",
+#'                                 runs = blockids)
+#' }
+#'
+#' Prewhitening is applied before the LSS analysis to account for temporal
+#' autocorrelation in the fMRI time series. Both Y and all design matrices
+#' (X, Z, Nuisance) are filtered through the same whitening operator so that
+#' OLS on the whitened system is equivalent to GLS on the original data.
 #'
 #' The OASIS method provides a mathematically equivalent but computationally optimized version
 #' of standard LSS. It reformulates the per-trial GLM fitting as a single matrix operation,

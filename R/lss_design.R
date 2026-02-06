@@ -16,9 +16,20 @@
 #'   sampling frame) are used to ensure proper baseline modeling.
 #' @param method LSS method to use. Currently only "oasis" is supported for
 #'   event_model integration.
-#' @param oasis List of OASIS-specific options (see \code{?lss} for details).
-#'   Note: \code{design_spec} is not used when providing event_model.
-#' @param prewhiten Optional prewhitening specification (see \code{?lss}).
+#' @param oasis List of OASIS-specific options: ridge regularization
+#'   (\code{ridge_x}, \code{ridge_b}, \code{ridge_mode}), standard errors
+#'   (\code{return_se}), etc.  See \code{\link{oasis_options}} and the
+#'   Details section of \code{\link{lss}} for the full list.
+#'   Note: \code{design_spec} is not used when providing event_model, and
+#'   \code{oasis$whiten} is deprecated — use \code{prewhiten} instead.
+#' @param prewhiten Optional prewhitening specification as a list (or
+#'   \code{NULL} for no whitening).  Controls temporal autocorrelation
+#'   correction via the \pkg{fmriAR} package.  Key fields: \code{method}
+#'   (\code{"ar"}, \code{"arma"}, \code{"none"}), \code{p} (AR order or
+#'   \code{"auto"}), \code{pooling} (\code{"global"}, \code{"voxel"},
+#'   \code{"run"}, \code{"parcel"}), and \code{runs}/\code{parcels}.
+#'   See \code{\link{prewhiten_options}} and \code{\link{lss}} for full
+#'   details and examples.
 #' @param blockids Optional block/run identifiers for event_model. If NULL,
 #'   extracted from event_model$blockids.
 #' @param validate Logical. If TRUE (default), performs validation checks on
@@ -62,12 +73,21 @@
 #' (resetting to 0 each run) as per fmridesign convention - conversion to global
 #' time is handled automatically.
 #'
+#' \strong{Prewhitening:}
+#'
+#' Use the \code{prewhiten} parameter (not the \code{oasis} list) for temporal
+#' autocorrelation correction.  For multi-run data, pass
+#' \code{prewhiten = list(method = "ar", p = 1, pooling = "run", runs = blockids)}
+#' so that whitening respects run boundaries.
+#' See \code{\link{lss}} and \code{\link{prewhiten_options}} for full details.
+#'
 #' \strong{Validation:}
 #'
 #' When \code{validate = TRUE}, the function checks:
 #' \itemize{
 #'   \item Temporal alignment: nrow(Y) matches total scans in sampling_frame
-#'   \item Collinearity: Design matrix condition number < 30
+#'   \item Collinearity: Design matrix condition number < 30 (suppressed when
+#'     ridge is already configured via \code{oasis$ridge_x} or \code{oasis$ridge_b})
 #'   \item Compatibility: event_model and baseline_model use same sampling_frame
 #' }
 #'
@@ -256,7 +276,9 @@ lss_design <- function(Y,
     if (!is.null(Nuisance)) X_full <- cbind(X_full, Nuisance)
 
     cond_num <- tryCatch(kappa(X_full), error = function(e) NA_real_)
-    if (is.finite(cond_num) && cond_num > 30) {
+    ridge_already_set <- !is.null(oasis$ridge_x) || !is.null(oasis$ridge_b) ||
+                         !is.null(oasis$ridge)
+    if (is.finite(cond_num) && cond_num > 30 && !ridge_already_set) {
       warning(sprintf(
         "High collinearity detected (condition number = %.1f). Consider ridge via oasis$ridge_*",
         cond_num

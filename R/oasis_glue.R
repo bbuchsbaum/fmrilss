@@ -21,8 +21,9 @@
 #'    - block_cols: voxel block size (default 4096)
 #'    - return_se: logical (default FALSE)
 #'    - return_diag: logical (default FALSE)
-#'    - whiten: "none" | "ar1" (default "none"); if "ar1", prewhiten Y and design first (DEPRECATED: use prewhiten parameter)
-#' @param prewhiten list of prewhitening options using fmriAR (see ?lss for details)
+#' @param prewhiten list of prewhitening options using fmriAR (see \code{?lss}
+#'   and \code{\link{prewhiten_options}} for details).  The legacy
+#'   \code{oasis$whiten} field is ignored; use this parameter instead.
 #'
 #' @return by default: (N_trials x V) matrix of betas; if `return_se` or `return_diag`, a list
 #' @keywords internal
