@@ -1,0 +1,201 @@
+---
+title: Getting started with fmrilss
+output:
+  rmarkdown::html_vignette:
+    mathjax: default
+vignette: '%\VignetteIndexEntry{Getting started with fmrilss} %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}'
+params:
+  family: red
+css: albers.css
+resource_files:
+- albers.css
+- albers.js
+includes:
+  in_header: |-
+    <script src="albers.js"></script>
+    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5,
+  dev = "png",
+  dpi = 150,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+## Why fmrilss?
+
+In rapid event-related fMRI, hemodynamic responses from consecutive trials overlap, making trial-by-trial beta estimates unstable. This is a problem for MVPA, RSA, and connectivity analyses that need reliable single-trial activation patterns.
+
+Least Squares Separate (LSS; Mumford et al., 2012) solves this by fitting a separate GLM for each trial: one regressor for the trial of interest, one aggregating all other trials, plus nuisance regressors. This reduces collinearity and stabilizes estimates.
+
+`fmrilss` provides optimized LSS implementations (R and C++ with OpenMP), plus extensions for automatic HRF estimation, ridge regularization, and the OASIS single-pass solver.
+
+## Quick example
+
+```{r setup}
+if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
+library(fmrihrf)
+library(fmrilss)
+set.seed(42)
+```
+
+### Create a rapid event design
+
+We'll simulate 12 trials in a 150-TR run with jittered onsets, then convolve with a canonical HRF to build one design-matrix column per trial.
+
+```{r onsets}
+n_time <- 150; n_trials <- 12; n_vox <- 25
+sframe <- sampling_frame(blocklens = n_time, TR = 1)
+
+base <- round(seq(10, n_time - 24, length.out = n_trials))
+onsets <- sort(pmax(10, pmin(base + sample(-3:3, n_trials, TRUE), n_time - 24)))
+```
+
+```{r design-matrix}
+rset <- regressor_set(onsets, factor(seq_along(onsets)),
+                      hrf = HRF_SPMG1, duration = 0, span = 24, summate = FALSE)
+X <- evaluate(rset, grid = samples(sframe, global = TRUE),
+              precision = 0.1, method = "conv")
+```
+
+`X` is a `r nrow(X)` x `r ncol(X)` matrix --- one column per trial, each containing the HRF-convolved impulse.
+
+### Add baseline and nuisance regressors
+
+```{r nuisance}
+Z <- cbind(1, scale(seq_len(n_time)))       # intercept + linear trend
+Nuisance <- matrix(rnorm(n_time * 6), n_time, 6)  # e.g. motion
+```
+
+### Simulate data with known ground truth
+
+```{r simulate}
+true_betas <- matrix(rnorm(n_trials * n_vox, 0, 1.2), n_trials, n_vox)
+Y <- X %*% true_betas +
+     Z %*% matrix(rnorm(2 * n_vox), 2) +
+     Nuisance %*% matrix(rnorm(6 * n_vox), 6) +
+     matrix(rnorm(n_time * n_vox), n_time, n_vox)
+```
+
+### Run LSS
+
+At its simplest, `lss()` needs only the data and the trial design:
+
+```{r lss-basic}
+beta <- lss(Y, X)
+dim(beta)
+```
+
+Include `Z` and `Nuisance` for a more complete model:
+
+```{r lss-full}
+beta_full <- lss(Y, X, Z = Z, Nuisance = Nuisance)
+```
+
+That's it --- `beta_full` is a `r nrow(beta_full)` x `r ncol(beta_full)` matrix of trial-by-voxel estimates.
+
+## LSS vs standard GLM
+
+The traditional approach ("Least Squares All", LSA) estimates all trials in one model. Let's compare:
+
+```{r lsa}
+beta_lsa <- lsa(Y, X, Z = Z, Nuisance = Nuisance)
+```
+
+```{r compare-variance}
+cat("Mean variance  LSS:", round(mean(apply(beta_full, 2, var)), 3), "\n")
+cat("Mean variance  LSA:", round(mean(apply(beta_lsa, 2, var)), 3), "\n")
+```
+
+With overlapping regressors, LSA variance is typically higher. A scatter plot shows the relationship:
+
+```{r lss-lsa-scatter, fig.width=5.5, fig.height=5}
+plot(as.vector(beta_lsa), as.vector(beta_full),
+     pch = 19, col = adjustcolor("steelblue", 0.3), cex = 0.6,
+     xlab = "LSA beta", ylab = "LSS beta",
+     main = "Trial-wise betas: LSS vs LSA")
+abline(0, 1, lty = 2, col = "gray40")
+```
+
+## Prewhitening
+
+fMRI time series have temporal autocorrelation. Pass a `prewhiten` list to correct for it:
+
+```{r prewhiten}
+beta_ar1 <- lss(Y, X, Z = Z, Nuisance = Nuisance,
+                prewhiten = list(method = "ar", p = 1))
+```
+
+Automatic AR order selection:
+
+```{r prewhiten-auto}
+beta_auto <- lss(Y, X, Z = Z, Nuisance = Nuisance,
+                 prewhiten = list(method = "ar", p = "auto", p_max = 4))
+```
+
+See `?lss` for additional pooling strategies (`"voxel"`, `"run"`, `"parcel"`) and ARMA models.
+
+## Computational backends
+
+The default backend (`"r_optimized"`) is fast and readable. For large datasets, switch to the parallelized C++ engine:
+
+```{r cpp-backend, eval=require("Rcpp") && require("RcppArmadillo")}
+beta_cpp <- lss(Y, X, Z = Z, Nuisance = Nuisance, method = "cpp_optimized")
+all.equal(beta_full, beta_cpp, tolerance = 1e-8)
+```
+
+Available methods: `"naive"`, `"r_vectorized"`, `"r_optimized"` (default), `"cpp_optimized"`, `"oasis"`.
+
+## OASIS: single-pass LSS with extras
+
+OASIS can build the design matrix from event specifications, add ridge regularization, and fit multi-basis HRFs --- all in one call:
+
+```{r oasis}
+beta_oasis <- lss(
+  Y, X = NULL, method = "oasis",
+  oasis = list(
+    design_spec = list(
+      sframe = sframe,
+      cond = list(onsets = onsets, hrf = HRF_SPMG1, span = 24)
+    ),
+    ridge_mode = "fractional",
+    ridge_x = 0.01, ridge_b = 0.01
+  )
+)
+dim(beta_oasis)
+```
+
+Setting `X = NULL` lets OASIS construct the design internally from `design_spec`. See `vignette("oasis_method")` for ridge tuning, multi-basis HRFs, standard errors, and diagnostics.
+
+## Nuisance pre-projection
+
+If you plan to re-run LSS with different settings, it can be faster to project out nuisance once up front:
+
+```{r preprojection}
+Q <- project_confounds(Nuisance)
+beta_pre <- lss(Q %*% Y, Q %*% X, Z = Z, method = "r_optimized")
+```
+
+## Next steps
+
+- `vignette("oasis_method")` --- OASIS solver with ridge, multi-basis HRFs, and standard errors
+- `vignette("voxel-wise-hrf")` --- per-voxel HRF estimation before LSS
+- `vignette("sbhm")` --- library-constrained voxel-specific HRFs
+- `vignette("lss_with_fmridesign")` --- formula-based design interface for multi-run experiments
+
+## References
+
+Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012). Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses. *NeuroImage*, 59(3), 2636--2643.
+
+```{r session-info, echo=FALSE}
+sessionInfo()
+```

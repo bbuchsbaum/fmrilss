@@ -93,7 +93,7 @@ Test files follow pattern `test-{feature}.R` in `tests/testthat/`.
 ## Vignettes
 
 Five main vignettes demonstrate package usage:
-- `getting_started.Rmd`: Basic LSS concepts and usage
+- `fmrilss.Rmd`: Basic LSS concepts and usage (pkgdown "Get started" entry)
 - `oasis_method.Rmd`: OASIS method with ridge regularization
 - `oasis_theory.Rmd`: Mathematical foundations of OASIS
 - `voxel-wise-hrf.Rmd`: Voxel-wise HRF estimation and integration with LSS

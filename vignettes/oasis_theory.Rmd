@@ -1,14 +1,23 @@
 ---
-title: "OASIS Theory: Algebra and Implementation Details"
-author: "fmrilss Development Team"
-date: "`r Sys.Date()`"
+title: 'OASIS Theory: Algebra and Implementation Details'
+author: fmrilss Development Team
+date: '`r Sys.Date()`'
 output:
   rmarkdown::html_vignette:
     mathjax: default
-vignette: >
-  %\VignetteIndexEntry{OASIS Theory: Algebra and Implementation Details}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+vignette: '%\VignetteIndexEntry{OASIS Theory: Algebra and Implementation Details}
+  %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}'
+params:
+  family: red
+css: albers.css
+resource_files:
+- albers.css
+- albers.js
+includes:
+  in_header: |-
+    <script src="albers.js"></script>
+    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+
 ---
 
 ```{r, include = FALSE}

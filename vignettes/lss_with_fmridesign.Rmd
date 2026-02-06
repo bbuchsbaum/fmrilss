@@ -1,12 +1,21 @@
 ---
-title: "Using fmridesign with fmrilss"
-author: "LSS Package Authors"
-date: "`r Sys.Date()`"
+title: Using fmridesign with fmrilss
+author: LSS Package Authors
+date: '`r Sys.Date()`'
 output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Using fmridesign with fmrilss}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+vignette: '%\VignetteIndexEntry{Using fmridesign with fmrilss} %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}'
+params:
+  family: red
+css: albers.css
+resource_files:
+- albers.css
+- albers.js
+includes:
+  in_header: |-
+    <script src="albers.js"></script>
+    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+
 ---
 
 ```{r, include = FALSE}
@@ -17,6 +26,7 @@ knitr::opts_chunk$set(
 ```
 
 ```{r setup}
+if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
 library(fmrilss)
 library(fmridesign)
 library(fmrihrf)
@@ -336,17 +346,17 @@ beta <- lss_design(
 
 The `lss_design()` function provides a modern, formula-based interface for LSS analysis that:
 
-- ✅ Handles **multi-run experiments** correctly with run-relative onsets
-- ✅ Provides **structured baseline** specification
-- ✅ Supports **multi-basis HRFs** with automatic detection
-- ✅ Validates **design compatibility** automatically
-- ✅ Integrates with **fmridesign ecosystem**
+- Handles **multi-run experiments** correctly with run-relative onsets
+- Provides **structured baseline** specification
+- Supports **multi-basis HRFs** with automatic detection
+- Validates **design compatibility** automatically
+- Integrates with the **fmridesign ecosystem**
 
 For simple designs or when you already have design matrices prepared, the traditional `lss()` interface remains fully supported and unchanged.
 
 ## Further Reading
 
-- `vignette("getting_started", package = "fmrilss")` - Traditional LSS interface
+- `vignette("fmrilss")` - Traditional LSS interface
 - `vignette("oasis_method", package = "fmrilss")` - OASIS method details
 - `vignette("a_04_event_models", package = "fmridesign")` - Event model tutorial
 - `vignette("a_03_baseline_model", package = "fmridesign")` - Baseline model tutorial
