@@ -14,4 +14,13 @@ repomix-output.xml
 ^CLAUDE\.md$
 ^data-raw$
 ^examples$
-^VIGNETTE_REVIEW\.md$
+^\.omc$
+^\.vscode$
+^pkgdown$
+^scripts$
+^test_oasis_scale\.R$
+^test_projection_debug\.R$
+^test_sign_debug\.R$
+^test_sign_debug2\.R$
+^\.rcmdcheck_result\.rds$
+^\.planning$

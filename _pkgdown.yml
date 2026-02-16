@@ -2,3 +2,7 @@ url: https://bbuchsbaum.github.io/fmrilss/
 template:
   bootstrap: 5
   package: albersdown
+home:
+  strip_header: true
+  sidebar:
+    structure: [links, license, community, citation, authors, dev]

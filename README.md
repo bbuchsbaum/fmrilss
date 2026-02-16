@@ -1,6 +1,7 @@
 # fmrilss
 
 [![R-CMD-check](https://github.com/bbuchsbaum/fmrilss/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/bbuchsbaum/fmrilss/actions/workflows/R-CMD-check.yaml)
+[![pkgdown](https://github.com/bbuchsbaum/fmrilss/actions/workflows/pkgdown.yaml/badge.svg)](https://bbuchsbaum.github.io/fmrilss/)
 
 Least Squares Separate (LSS) Analysis for fMRI Data.
 
@@ -111,3 +112,8 @@ Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012). Deconvolv
 ## License
 
 GPL-3 
+
+<!-- albersdown:theme-note:start -->
+## Albers theme
+This package uses the albersdown theme. Existing vignette theme hooks are replaced so `albers.css` and local `albers.js` render consistently on CRAN and GitHub Pages. The palette family is provided via `params$family` (default 'red'). The pkgdown site uses `template: { package: albersdown }`.
+<!-- albersdown:theme-note:end -->
