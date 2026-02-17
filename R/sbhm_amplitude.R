@@ -12,7 +12,7 @@
   qr.resid(qrZ, M)
 }
 
-#' Build per-trial basis regressors (each T×r) from SBHM basis + design_spec
+#' Build per-trial basis regressors (each T x r) from SBHM basis + design_spec
 #' @keywords internal
 .sbhm_build_trial_regs <- function(sbhm, design_spec) {
   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
@@ -90,7 +90,7 @@ sbhm_amplitude_ls <- function(Y, sbhm, design_spec, alpha_hat,
   stopifnot(is.matrix(Y), is.matrix(alpha_hat))
   Tlen <- nrow(Y); V <- ncol(Y)
   r <- nrow(alpha_hat)
-  if (ncol(alpha_hat) != V) stop("alpha_hat must be r×V to match Y")
+  if (ncol(alpha_hat) != V) stop("alpha_hat must be r x V to match Y")
 
   regs <- .sbhm_build_trial_regs(sbhm, design_spec)
   ntrials <- length(regs)
@@ -111,7 +111,7 @@ sbhm_amplitude_ls <- function(Y, sbhm, design_spec, alpha_hat,
   amps <- matrix(0, ntrials, V)
   se_mat <- if (isTRUE(return_se)) matrix(NA_real_, ntrials, V) else NULL
   for (v in seq_len(V)) {
-    # Assemble X_v = [regs[[t]] %*% alpha_hat[, v]]_t  (T×ntrials)
+    # Assemble X_v = [regs[[t]] %*% alpha_hat[, v]]_t  (T x ntrials)
     Xcols <- lapply(regs, function(Xt) as.numeric(Xt %*% alpha_hat[, v]))
     Xv <- do.call(cbind, Xcols)
     Xv <- .sbhm_resid(Xv, N_mat)
@@ -139,8 +139,9 @@ sbhm_amplitude_ls <- function(Y, sbhm, design_spec, alpha_hat,
 }
 
 #' Single-shape LSS amplitudes (2x2 per trial) given matched coordinates
-#' Uses one regressor for the trial of interest (A_j α̂) and one for all other trials
-#' (Σ_{t≠j} A_t α̂), with optional fractional ridge on the 2x2 Gram for stability.
+#'
+#' Uses one regressor for the trial of interest and one for all other trials,
+#' with optional fractional ridge on the 2x2 Gram for stability.
 #' @keywords internal
 sbhm_amplitude_lss1 <- function(Y, sbhm, design_spec, alpha_hat,
                                 Nuisance = NULL,
@@ -150,9 +151,9 @@ sbhm_amplitude_lss1 <- function(Y, sbhm, design_spec, alpha_hat,
   stopifnot(is.matrix(Y), is.matrix(alpha_hat))
   Tlen <- nrow(Y); V <- ncol(Y)
   r <- nrow(alpha_hat)
-  if (ncol(alpha_hat) != V) stop("alpha_hat must be r×V to match Y")
+  if (ncol(alpha_hat) != V) stop("alpha_hat must be r x V to match Y")
 
-  # Build basis HRF and per-trial regressors (T×r each)
+  # Build basis HRF and per-trial regressors (T x r each)
   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
   os <- design_spec$cond
   ntrials <- length(os$onsets)
@@ -167,7 +168,7 @@ sbhm_amplitude_lss1 <- function(Y, sbhm, design_spec, alpha_hat,
                             method    = design_spec$method    %||% "conv")
     if (inherits(Xt, "Matrix")) Xt <- as.matrix(Xt)
     if (!is.matrix(Xt)) Xt <- cbind(Xt)
-    regs[[t]] <- Xt  # T×r
+    regs[[t]] <- Xt  # T x r
   }
 
   # Nuisance matrix (intercept + provided + others)
@@ -215,8 +216,8 @@ sbhm_amplitude_lss1 <- function(Y, sbhm, design_spec, alpha_hat,
     yv <- Y_res[, v, drop = FALSE]
 
     for (j in seq_len(ntrials)) {
-      x1 <- x_cols_res[[j]]                   # T×1 (trial j)
-      x2 <- X_sum_res - x1                    # T×1 (others)
+      x1 <- x_cols_res[[j]]                   # T x 1 (trial j)
+      x2 <- X_sum_res - x1                    # T x 1 (others)
       # 2x2 Gram with fractional ridge
       d  <- sum(x1 * x1)
       e  <- sum(x2 * x2)
@@ -230,11 +231,11 @@ sbhm_amplitude_lss1 <- function(Y, sbhm, design_spec, alpha_hat,
         amps[j, v] <- 0
       } else {
         beta_j  <- ((e + lam_b) * n1 - c * n2) / D
-        gamma_j <- (((d + lam_x) * n2) - c * n1) / D
+        gamma_j <- ((d + lam_x) * n2 - c * n1) / D
         amps[j, v] <- as.numeric(beta_j)
         if (isTRUE(return_se)) {
           # SSE and SE via (G_aug)^{-1}
-          # SSE = ||y||^2 - 2(β n1 + γ n2) + β^2 d + γ^2 e + 2βγc
+          # SSE = ||y||^2 - 2(beta n1 + gamma n2) + beta^2 d + gamma^2 e + 2*beta*gamma*c
           y_norm2 <- sum(yv * yv)
           sse <- y_norm2 - 2 * (beta_j * n1 + gamma_j * n2) +
                  (beta_j^2) * d + (gamma_j^2) * e + 2 * beta_j * gamma_j * c

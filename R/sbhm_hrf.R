@@ -14,9 +14,7 @@
 #'
 #' @examples
 #' \dontrun{
-#'   # Given sbhm <- sbhm_build(...)
 #'   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
-#'   # Use in lss(..., method="oasis", oasis=list(design_spec=list(hrf=hrf_B, ...)))
 #' }
 #'
 #' @export

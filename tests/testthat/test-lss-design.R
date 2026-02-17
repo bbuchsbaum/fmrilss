@@ -1,5 +1,3 @@
-context("lss_design integration with fmridesign")
-
 test_that("lss_design requires fmridesign package", {
   skip_if_installed("fmridesign")
 

@@ -14,7 +14,7 @@
 #'   - `precision`: numeric, evaluation precision (default 0.1 sec).
 #'   - `method`: evaluation method for `fmrihrf::evaluate()` (default "conv").
 #'   - `extras`: optional list of additional arguments passed to `hrf_library`.
-#' @param library_H Optional precomputed T×K matrix of candidate HRFs, already
+#' @param library_H Optional precomputed TxK matrix of candidate HRFs, already
 #'   aligned to the TR grid `tgrid` (or `sframe`). Mutually exclusive with `library_spec`.
 #' @param r Target rank for the shared basis (default 6). Clipped to `min(T, K)`.
 #' @param sframe Optional `fmrihrf::sampling_frame`, used to derive the global time
@@ -33,9 +33,9 @@
 #'   projected onto the learned basis to form `alpha_ref`.
 #'
 #' @return A list with components:
-#'   - `B` (T×r): shared orthonormal time basis
+#'   - `B` (Txr): shared orthonormal time basis
 #'   - `S` (length r): singular values
-#'   - `A` (r×K): coordinates of library HRFs in the shared basis
+#'   - `A` (rxK): coordinates of library HRFs in the shared basis
 #'   - `tgrid`: the global time grid used (seconds)
 #'   - `span`: span used for reference HRF
 #'   - `ref`: list with `alpha_ref` (length r) and `name`
@@ -44,7 +44,6 @@
 #' @examples
 #' \dontrun{
 #'   library(fmrihrf)
-#'   # Build a gamma HRF library across a small parameter grid
 #'   param_grid <- expand.grid(shape = c(6, 8, 10), rate = c(0.9, 1.0, 1.1))
 #'   gamma_fun  <- function(shape, rate) fmrihrf::as_hrf(
 #'     fmrihrf::hrf_gamma, params = list(shape = shape, rate = rate)
@@ -56,7 +55,6 @@
 #'     r = 6, sframe = sframe, baseline = c(0, 0.5)
 #'   )
 #'
-#'   # Use the learned basis as an HRF in OASIS designs
 #'   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
 #' }
 #'
@@ -84,7 +82,7 @@ sbhm_build <- function(library_spec = NULL,
     times <- fmrihrf::samples(sframe, global = TRUE)
   }
 
-  # 1) Build/evaluate library matrix H (T×K)
+  # 1) Build/evaluate library matrix H (TxK)
   if (!is.null(library_H)) {
     H <- as.matrix(library_H)
     if (nrow(H) != length(times)) stop("library_H rows must match length(tgrid)")
@@ -139,14 +137,14 @@ sbhm_build <- function(library_spec = NULL,
     H <- sweep(H, 2L, sqrt(colSums(H^2)) + 1e-8, "/")
   }
 
-  # 4) SVD → shared basis (rank r)
+  # 4) SVD -> shared basis (rank r)
   r_eff <- min(r, nrow(H), ncol(H))
   sv <- La.svd(H, nu = r_eff, nv = r_eff)
   # Sanity check: detect degenerate libraries (e.g., identical columns)
   if (r_eff >= 2) {
     if (!is.null(sv$d) && length(sv$d) >= 2) {
       if (sv$d[2] <= (1e-8 * sv$d[1])) {
-        warning("HRF library appears nearly rank-1 (second singular value ≈ 0). " ,
+        warning("HRF library appears nearly rank-1 (second singular value ~ 0). " ,
                 "Check that `library_spec$fun` closes over its parameters. For example:\n",
                 "  fun <- function(shape, rate) as_hrf(function(t) hrf_gamma(t, shape=shape, rate=rate), span=32)")
       }

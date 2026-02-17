@@ -2,9 +2,7 @@
 % Please edit documentation in R/sbhm_amplitude.R
 \name{sbhm_amplitude_lss1}
 \alias{sbhm_amplitude_lss1}
-\title{Single-shape LSS amplitudes (2x2 per trial) given matched coordinates
-Uses one regressor for the trial of interest (A_j α̂) and one for all other trials
-(Σ_{t≠j} A_t α̂), with optional fractional ridge on the 2x2 Gram for stability.}
+\title{Single-shape LSS amplitudes (2x2 per trial) given matched coordinates}
 \usage{
 sbhm_amplitude_lss1(
   Y,
@@ -18,8 +16,7 @@ sbhm_amplitude_lss1(
 )
 }
 \description{
-Single-shape LSS amplitudes (2x2 per trial) given matched coordinates
-Uses one regressor for the trial of interest (A_j α̂) and one for all other trials
-(Σ_{t≠j} A_t α̂), with optional fractional ridge on the 2x2 Gram for stability.
+Uses one regressor for the trial of interest and one for all other trials,
+with optional fractional ridge on the 2x2 Gram for stability.
 }
 \keyword{internal}

@@ -53,14 +53,11 @@
 #'   set.seed(3)
 #'   Tlen <- 180; V <- 4
 #'   sframe <- sampling_frame(blocklens = Tlen, TR = 1)
-#'   # Simple HRF library matrix
 #'   H <- cbind(exp(-seq(0, 30, length.out = Tlen)/5),
 #'              exp(-seq(0, 30, length.out = Tlen)/7))
 #'   sbhm <- sbhm_build(library_H = H, r = 4, sframe = sframe, normalize = TRUE)
-#'   # Events
 #'   onsets <- seq(8, 140, by = 12)
 #'   design_spec <- list(sframe = sframe, cond = list(onsets = onsets, duration = 0, span = 30))
-#'   # Simulate Y
 #'   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
 #'   rr <- fmrihrf::regressor(onsets = onsets, hrf = hrf_B, duration = 0, span = 30, summate = FALSE)
 #'   Xr <- fmrihrf::evaluate(rr, grid = sbhm$tgrid, precision = 0.1, method = "conv")
@@ -68,7 +65,6 @@
 #'   Y <- matrix(rnorm(Tlen*V, sd = .6), Tlen, V)
 #'   Y[,1] <- Y[,1] + Xr %*% alpha_true
 #'   out <- lss_sbhm(Y, sbhm, design_spec)
-#'   # Common override-only pattern:
 #'   out2 <- lss_sbhm(Y, sbhm, design_spec,
 #'                   match = list(topK = 3, soft_blend = TRUE),
 #'                   return = "amplitude")

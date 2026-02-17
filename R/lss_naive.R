@@ -35,10 +35,8 @@
 #'
 #' @examples
 #' \donttest{
-#' # Using same setup as lss() examples
 #' beta_estimates_naive <- lss_naive(Y = Y, bdes = bdes)
-#' 
-#' # Compare with optimized version
+#'
 #' beta_estimates_fast <- lss(Y = Y, bdes = bdes)
 #' max(abs(beta_estimates_naive - beta_estimates_fast))
 #' }

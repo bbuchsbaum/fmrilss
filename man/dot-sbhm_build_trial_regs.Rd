@@ -2,11 +2,11 @@
 % Please edit documentation in R/sbhm_amplitude.R
 \name{.sbhm_build_trial_regs}
 \alias{.sbhm_build_trial_regs}
-\title{Build per-trial basis regressors (each T×r) from SBHM basis + design_spec}
+\title{Build per-trial basis regressors (each T x r) from SBHM basis + design_spec}
 \usage{
 .sbhm_build_trial_regs(sbhm, design_spec)
 }
 \description{
-Build per-trial basis regressors (each T×r) from SBHM basis + design_spec
+Build per-trial basis regressors (each T x r) from SBHM basis + design_spec
 }
 \keyword{internal}

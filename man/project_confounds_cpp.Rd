@@ -29,7 +29,7 @@ This approach uses ~100x less memory for large n and is numerically more stable.
 \examples{
 \dontrun{
 n <- 200; k <- 5; V <- 1000; T <- 50
-X_confounds <- cbind(1, 1:n, rnorm(n*3))  # intercept + trend + noise
+X_confounds <- cbind(1, 1:n, rnorm(n*3))
 Y_data <- matrix(rnorm(n*V), n, V)
 C_trials <- matrix(rnorm(n*T), n, T)
 

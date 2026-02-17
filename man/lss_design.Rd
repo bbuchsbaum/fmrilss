@@ -32,10 +32,21 @@ sampling frame) are used to ensure proper baseline modeling.}
 \item{method}{LSS method to use. Currently only "oasis" is supported for
 event_model integration.}
 
-\item{oasis}{List of OASIS-specific options (see \code{?lss} for details).
-Note: \code{design_spec} is not used when providing event_model.}
+\item{oasis}{List of OASIS-specific options: ridge regularization
+(\code{ridge_x}, \code{ridge_b}, \code{ridge_mode}), standard errors
+(\code{return_se}), etc.  See \code{\link{oasis_options}} and the
+Details section of \code{\link{lss}} for the full list.
+Note: \code{design_spec} is not used when providing event_model, and
+\code{oasis$whiten} is deprecated — use \code{prewhiten} instead.}
 
-\item{prewhiten}{Optional prewhitening specification (see \code{?lss}).}
+\item{prewhiten}{Optional prewhitening specification as a list (or
+\code{NULL} for no whitening).  Controls temporal autocorrelation
+correction via the \pkg{fmriAR} package.  Key fields: \code{method}
+(\code{"ar"}, \code{"arma"}, \code{"none"}), \code{p} (AR order or
+\code{"auto"}), \code{pooling} (\code{"global"}, \code{"voxel"},
+\code{"run"}, \code{"parcel"}), and \code{runs}/\code{parcels}.
+See \code{\link{prewhiten_options}} and \code{\link{lss}} for full
+details and examples.}
 
 \item{blockids}{Optional block/run identifiers for event_model. If NULL,
 extracted from event_model$blockids.}
@@ -89,12 +100,21 @@ Run structure is automatically respected. Event onsets should be run-relative
 (resetting to 0 each run) as per fmridesign convention - conversion to global
 time is handled automatically.
 
+\strong{Prewhitening:}
+
+Use the \code{prewhiten} parameter (not the \code{oasis} list) for temporal
+autocorrelation correction.  For multi-run data, pass
+\code{prewhiten = list(method = "ar", p = 1, pooling = "run", runs = blockids)}
+so that whitening respects run boundaries.
+See \code{\link{lss}} and \code{\link{prewhiten_options}} for full details.
+
 \strong{Validation:}
 
 When \code{validate = TRUE}, the function checks:
 \itemize{
   \item Temporal alignment: nrow(Y) matches total scans in sampling_frame
-  \item Collinearity: Design matrix condition number < 30
+  \item Collinearity: Design matrix condition number < 30 (suppressed when
+    ridge is already configured via \code{oasis$ridge_x} or \code{oasis$ridge_b})
   \item Compatibility: event_model and baseline_model use same sampling_frame
 }
 }
@@ -103,17 +123,14 @@ When \code{validate = TRUE}, the function checks:
 library(fmridesign)
 library(fmrihrf)
 
-# 1. Define temporal structure
 sframe <- sampling_frame(blocklens = c(150, 150), TR = 2)
 
-# 2. Create trial data (run-relative onsets)
 trials <- data.frame(
-  onset = c(10, 30, 50, 70, 90, 110,   # Run 1
-            10, 30, 50, 70, 90, 110),   # Run 2
+  onset = c(10, 30, 50, 70, 90, 110,
+            10, 30, 50, 70, 90, 110),
   run = rep(1:2, each = 6)
 )
 
-# 3. Build event model with trialwise
 emod <- event_model(
   onset ~ trialwise(basis = "spmg1"),
   data = trials,
@@ -121,10 +138,9 @@ emod <- event_model(
   sampling_frame = sframe
 )
 
-# 4. Build baseline model
 motion <- list(
-  matrix(rnorm(150 * 6), 150, 6),  # Run 1: 6 motion params
-  matrix(rnorm(150 * 6), 150, 6)   # Run 2: 6 motion params
+  matrix(rnorm(150 * 6), 150, 6),
+  matrix(rnorm(150 * 6), 150, 6)
 )
 bmodel <- baseline_model(
   basis = "bs",
@@ -133,11 +149,9 @@ bmodel <- baseline_model(
   nuisance_list = motion
 )
 
-# 5. Run LSS
-Y <- matrix(rnorm(300 * 1000), 300, 1000)  # 300 scans, 1000 voxels
+Y <- matrix(rnorm(300 * 1000), 300, 1000)
 beta <- lss_design(Y, emod, bmodel, method = "oasis")
 
-# Output: 12 × 1000 (12 trials, 1000 voxels)
 dim(beta)
 }
 

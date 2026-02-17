@@ -72,7 +72,6 @@ OASIS `design_spec` that uses the SBHM basis HRF, and by mapping
   trials <- data.frame(onset = c(10,30,50, 10,30,50), run = rep(1:2, each=3))
   emod <- event_model(onset ~ trialwise(basis = "spmg1"), data = trials,
                       block = ~run, sampling_frame = sframe)
-  # sbhm <- sbhm_build(...)
   Y <- matrix(rnorm(300*100), 300, 100)
   out <- lss_sbhm_design(Y, sbhm, emod)
 }

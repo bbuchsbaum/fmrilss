@@ -35,7 +35,6 @@
 #'   trials <- data.frame(onset = c(10,30,50, 10,30,50), run = rep(1:2, each=3))
 #'   emod <- event_model(onset ~ trialwise(basis = "spmg1"), data = trials,
 #'                       block = ~run, sampling_frame = sframe)
-#'   # sbhm <- sbhm_build(...)
 #'   Y <- matrix(rnorm(300*100), 300, 100)
 #'   out <- lss_sbhm_design(Y, sbhm, emod)
 #' }
@@ -147,7 +146,7 @@ lss_sbhm_design <- function(Y, sbhm, event_model, baseline_model = NULL,
   } else if (length(TRvec) == 1L) {
     TRvec <- rep(TRvec, length(bl))
   }
-  run_starts <- c(0, cumsum(head(bl * TRvec, -1)))
+  run_starts <- c(0, cumsum(utils::head(bl * TRvec, -1)))
   onsets_global <- onsets_run + run_starts[pmax(1, runs)]
 
   # SBHM basis HRF

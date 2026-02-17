@@ -55,10 +55,8 @@ matching, and an orientation fix.
 \dontrun{
   set.seed(42)
   r <- 4; K <- 12; V <- 3
-  # Random library coordinates with controlled singular values
   A <- matrix(rnorm(r*K), r, K)
   S <- seq(1, 0.2, length.out = r)
-  # Simulated voxel coefficients near column 2
   alpha2 <- A[,2]
   beta_bar <- cbind(alpha2 + rnorm(r, sd = 0.1),
                     A[,7] + rnorm(r, sd = 0.1),

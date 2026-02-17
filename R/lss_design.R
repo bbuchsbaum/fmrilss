@@ -96,17 +96,14 @@
 #' library(fmridesign)
 #' library(fmrihrf)
 #'
-#' # 1. Define temporal structure
 #' sframe <- sampling_frame(blocklens = c(150, 150), TR = 2)
 #'
-#' # 2. Create trial data (run-relative onsets)
 #' trials <- data.frame(
-#'   onset = c(10, 30, 50, 70, 90, 110,   # Run 1
-#'             10, 30, 50, 70, 90, 110),   # Run 2
+#'   onset = c(10, 30, 50, 70, 90, 110,
+#'             10, 30, 50, 70, 90, 110),
 #'   run = rep(1:2, each = 6)
 #' )
 #'
-#' # 3. Build event model with trialwise
 #' emod <- event_model(
 #'   onset ~ trialwise(basis = "spmg1"),
 #'   data = trials,
@@ -114,10 +111,9 @@
 #'   sampling_frame = sframe
 #' )
 #'
-#' # 4. Build baseline model
 #' motion <- list(
-#'   matrix(rnorm(150 * 6), 150, 6),  # Run 1: 6 motion params
-#'   matrix(rnorm(150 * 6), 150, 6)   # Run 2: 6 motion params
+#'   matrix(rnorm(150 * 6), 150, 6),
+#'   matrix(rnorm(150 * 6), 150, 6)
 #' )
 #' bmodel <- baseline_model(
 #'   basis = "bs",
@@ -126,11 +122,9 @@
 #'   nuisance_list = motion
 #' )
 #'
-#' # 5. Run LSS
-#' Y <- matrix(rnorm(300 * 1000), 300, 1000)  # 300 scans, 1000 voxels
+#' Y <- matrix(rnorm(300 * 1000), 300, 1000)
 #' beta <- lss_design(Y, emod, bmodel, method = "oasis")
 #'
-#' # Output: 12 × 1000 (12 trials, 1000 voxels)
 #' dim(beta)
 #' }
 #'

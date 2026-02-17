@@ -27,7 +27,7 @@ sbhm_build(
 - `method`: evaluation method for `fmrihrf::evaluate()` (default "conv").
 - `extras`: optional list of additional arguments passed to `hrf_library`.}
 
-\item{library_H}{Optional precomputed T×K matrix of candidate HRFs, already
+\item{library_H}{Optional precomputed TxK matrix of candidate HRFs, already
 aligned to the TR grid `tgrid` (or `sframe`). Mutually exclusive with `library_spec`.}
 
 \item{r}{Target rank for the shared basis (default 6). Clipped to `min(T, K)`.}
@@ -55,9 +55,9 @@ projected onto the learned basis to form `alpha_ref`.}
 }
 \value{
 A list with components:
-  - `B` (T×r): shared orthonormal time basis
+  - `B` (Txr): shared orthonormal time basis
   - `S` (length r): singular values
-  - `A` (r×K): coordinates of library HRFs in the shared basis
+  - `A` (rxK): coordinates of library HRFs in the shared basis
   - `tgrid`: the global time grid used (seconds)
   - `span`: span used for reference HRF
   - `ref`: list with `alpha_ref` (length r) and `name`
@@ -73,7 +73,6 @@ baseline-removed and L2-normalized, and decomposed via SVD into
 \examples{
 \dontrun{
   library(fmrihrf)
-  # Build a gamma HRF library across a small parameter grid
   param_grid <- expand.grid(shape = c(6, 8, 10), rate = c(0.9, 1.0, 1.1))
   gamma_fun  <- function(shape, rate) fmrihrf::as_hrf(
     fmrihrf::hrf_gamma, params = list(shape = shape, rate = rate)
@@ -85,7 +84,6 @@ baseline-removed and L2-normalized, and decomposed via SVD into
     r = 6, sframe = sframe, baseline = c(0, 0.5)
   )
 
-  # Use the learned basis as an HRF in OASIS designs
   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
 }
 

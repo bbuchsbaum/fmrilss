@@ -45,9 +45,15 @@ Options are:
 \item{block_size}{An integer specifying the voxel block size for parallel
 processing, only applicable when `method = "cpp_optimized"`. Defaults to 96.}
 
-\item{oasis}{A list of options for the OASIS method. See Details for available options.}
+\item{oasis}{A list of options for the OASIS method (ridge, SE, design
+construction, etc.).
+See Details and \code{\link{oasis_options}} for the full list.
+\strong{Note:} \code{oasis$whiten} is deprecated and ignored.
+Use the \code{prewhiten} parameter instead for all temporal whitening.}
 
-\item{prewhiten}{A list of prewhitening options using fmriAR. See Details for available options.}
+\item{prewhiten}{A list of prewhitening options using the \pkg{fmriAR}
+package, or \code{NULL} (no whitening, the default).
+See Details and \code{\link{prewhiten_options}} for the full list.}
 }
 \value{
 A numeric matrix of size T × V containing the trial-wise beta estimates.
@@ -70,7 +76,8 @@ The LSS approach fits a separate GLM for each trial, where each model includes:
 If Nuisance regressors are provided, they are first projected out from both
 Y and X using standard linear regression residualization.
 
-When using method="oasis", the following options are available in the oasis list:
+When using method="oasis", the following options are available in the oasis list
+(see also \code{\link{oasis_options}} for a validated constructor):
 \itemize{
   \item \code{design_spec}: A list for building trial-wise designs from event onsets using fmrihrf.
     Must contain: \code{sframe} (sampling frame), \code{cond} (list with \code{onsets},
@@ -79,48 +86,101 @@ When using method="oasis", the following options are available in the oasis list
   \item \code{K}: Explicit basis dimension for multi-basis HRF models (e.g., 3 for SPMG3).
     If not provided, it's auto-detected from X dimensions or defaults to 1 for single-basis HRFs.
   \item \code{ridge_mode}: Either "absolute" (default) or "fractional". In absolute mode,
-    \code{ridge_x} and \code{ridge_b} are used directly. In fractional mode they are interpreted
-    as multipliers on the mean design energy (\(\lambda_x = \eta_x \cdot \overline{d}\),
-    \(\lambda_b = \eta_b \cdot \overline{s}\)), making the penalty scale automatically with
-    the trial and aggregator regressors that fmrihrf builds. Typical fmrihrf designs have
-    \(\overline{d}, \overline{s} \approx 5{-}15\), so \code{ridge_x = 0.01} corresponds to adding
-    roughly 1% of that energy to the diagonal for each trial.
-  \item \code{ridge_x}: Ridge parameter for trial-specific regressors (default 0). In fractional
-    mode concrete starting points are 0.005 for well-spaced trials, 0.01 for standard rapid ER
-    designs, and 0.02-0.05 when regressors are highly collinear or multi-basis HRFs are used.
-  \item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0). Usually matched
-    to \code{ridge_x} for symmetric conditioning, though you can set it lower (e.g., half) if the
-    combined regressor is already stable.
+    ridge_x and ridge_b are used directly as regularization parameters. In fractional mode,
+    they represent fractions of the mean design energy for adaptive regularization.
+  \item \code{ridge_x}: Ridge parameter for trial-specific regressors (default 0). Controls
+    regularization strength for individual trial estimates.
+  \item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0). Controls
+    regularization strength for the sum of all other trials.
   \item \code{return_se}: Logical, whether to return standard errors (default FALSE). When TRUE,
     returns a list with \code{beta} (trial estimates) and \code{se} (standard errors) components.
   \item \code{return_diag}: Logical, whether to return design diagnostics (default FALSE).
     When TRUE, includes diagnostic information about the design matrix structure.
   \item \code{block_cols}: Integer, voxel block size for memory-efficient processing (default 4096).
     Larger values use more memory but may be faster for systems with sufficient RAM.
-  \item \code{whiten}: Logical, whether to apply AR(1) whitening (default FALSE). When TRUE,
-    estimates AR(1) coefficients and pre-whitens data to account for temporal autocorrelation.
   \item \code{ntrials}: Explicit number of trials (used when K > 1 to determine output dimensions).
     If not provided, calculated as ncol(X) / K.
   \item \code{hrf_grid}: Vector of HRF indices for grid-based HRF selection (advanced use).
     Allows testing multiple HRF shapes simultaneously.
 }
 
-When using the \code{prewhiten} parameter, the following options are available:
+\strong{Prewhitening (temporal autocorrelation correction):}
+
+Use the top-level \code{prewhiten} parameter for all temporal whitening.
+This replaces the old \code{oasis$whiten = "ar1"} syntax, which is now
+deprecated and ignored.  Do \emph{not} put AR options inside the
+\code{oasis} list; they belong in \code{prewhiten}.
+
+The \code{prewhiten} list accepts the following fields
+(see also \code{\link{prewhiten_options}} for a validated constructor):
 \itemize{
-  \item \code{method}: Character, "ar" (default), "arma", or "none" for the noise model type.
-  \item \code{p}: Integer or "auto" for AR order (default "auto").
-  \item \code{q}: Integer for MA order in ARMA models (default 0).
-  \item \code{p_max}: Maximum AR order when p="auto" (default 6).
-  \item \code{pooling}: Character, "global" (default), "voxel", "run", or "parcel" for parameter estimation strategy.
-  \item \code{runs}: Integer vector of run identifiers for run-aware estimation.
-  \item \code{parcels}: Integer vector of parcel memberships for parcel-based pooling.
-  \item \code{exact_first}: Character, "ar1" or "none" for exact AR(1) scaling at segment starts.
+  \item \code{method}: Character, \code{"ar"} (default when the list is
+    non-NULL), \code{"arma"}, or \code{"none"}.
+    \code{"ar"} fits a pure autoregressive model; \code{"arma"} adds a
+    moving-average component (requires \code{q > 0}).
+  \item \code{p}: AR order.
+    An integer, or \code{"auto"} (default) to select via AIC/BIC up to
+    \code{p_max}. Use \code{p = 1} for a simple AR(1) model (the most
+    common choice for fMRI); higher orders are rarely needed but may
+    help with short TRs or multi-band sequences.
+  \item \code{q}: Integer MA order for ARMA models (default 0).  Only
+    relevant when \code{method = "arma"}.
+  \item \code{p_max}: Integer, maximum AR order when \code{p = "auto"}
+    (default 6).
+  \item \code{pooling}: How AR coefficients are estimated across voxels.
+    One of:
+    \describe{
+      \item{\code{"global"}}{(default) A single set of AR coefficients is
+        estimated from the median autocorrelation across all voxels.
+        Fast and usually adequate.}
+      \item{\code{"voxel"}}{Fit a separate AR model per voxel.  Most
+        accurate but slow; consider \code{"parcel"} instead.}
+      \item{\code{"run"}}{Fit one AR model per run (requires \code{runs}).
+        Useful when noise structure differs between runs.}
+      \item{\code{"parcel"}}{Fit one AR model per parcel (requires
+        \code{parcels}). Good compromise between \code{"global"} and
+        \code{"voxel"}.}
+    }
+  \item \code{runs}: Integer vector of length \code{nrow(Y)} giving
+    run/block labels. Required for \code{pooling = "run"} and recommended
+    whenever data span multiple runs so that whitening respects run
+    boundaries.
+  \item \code{parcels}: Integer vector of length \code{ncol(Y)} giving
+    parcel labels.  Required for \code{pooling = "parcel"}.
+  \item \code{exact_first}: Character, \code{"ar1"} (default) or
+    \code{"none"}.  When \code{"ar1"}, the first observation of each
+    segment is scaled by \eqn{\sqrt{1 - \phi_1^2}} for the exact
+    likelihood; \code{"none"} drops the first observation instead.
+  \item \code{compute_residuals}: Logical (default TRUE). When TRUE,
+    OLS residuals from the full design are computed before fitting the
+    noise model.  Set to FALSE only if Y is already residualized.
 }
 
-Prewhitening is applied before the LSS analysis to account for temporal autocorrelation in the
-fMRI time series. The fmriAR package provides flexible AR/ARMA modeling with various pooling
-strategies. For backward compatibility, the old \code{oasis$whiten = "ar1"} syntax is still
-supported and will be converted to the equivalent prewhiten settings.
+\strong{Typical prewhiten recipes:}
+\preformatted{
+  # Simple AR(1) — good default for most fMRI data
+  prewhiten = list(method = "ar", p = 1)
+
+  # Auto-select AR order (AIC), global pooling
+  prewhiten = list(method = "ar", p = "auto")
+
+  # Per-run AR(1) for multi-run data
+  prewhiten = list(method = "ar", p = 1, pooling = "run",
+                   runs = blockids)
+
+  # Parcel-based AR with atlas labels
+  prewhiten = list(method = "ar", p = 1, pooling = "parcel",
+                   parcels = atlas_labels)
+
+  # Or use the validated constructor:
+  prewhiten = prewhiten_options(method = "ar", p = 1, pooling = "run",
+                                runs = blockids)
+}
+
+Prewhitening is applied before the LSS analysis to account for temporal
+autocorrelation in the fMRI time series. Both Y and all design matrices
+(X, Z, Nuisance) are filtered through the same whitening operator so that
+OLS on the whitened system is equivalent to GLS on the original data.
 
 The OASIS method provides a mathematically equivalent but computationally optimized version
 of standard LSS. It reformulates the per-trial GLM fitting as a single matrix operation,
@@ -129,12 +189,10 @@ trials or when processing large datasets. When K > 1 (multi-basis HRFs), the out
 have K*ntrials rows, with basis functions for each trial arranged sequentially.
 }
 \examples{
-# Generate example data
 n_timepoints <- 100
 n_trials <- 10
 n_voxels <- 50
 
-# Create trial design matrix
 X <- matrix(0, n_timepoints, n_trials)
 for(i in 1:n_trials) {
   start <- (i-1) * 8 + 1
@@ -143,40 +201,32 @@ for(i in 1:n_trials) {
   }
 }
 
-# Create data with some signal
 Y <- matrix(rnorm(n_timepoints * n_voxels), n_timepoints, n_voxels)
 true_betas <- matrix(rnorm(n_trials * n_voxels, 0, 0.5), n_trials, n_voxels)
 for(i in 1:n_trials) {
   Y <- Y + X[, i] \%*\% matrix(true_betas[i, ], 1, n_voxels)
 }
 
-# Run LSS analysis
 beta_estimates <- lss(Y, X)
 
-# With experimental regressors (intercept + condition effects)
 Z <- cbind(1, scale(1:n_timepoints))
 beta_estimates_with_regressors <- lss(Y, X, Z = Z)
 
-# With nuisance regression (motion parameters)
 Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)
 beta_estimates_clean <- lss(Y, X, Z = Z, Nuisance = Nuisance)
 
 \dontrun{
-# Using OASIS method with ridge regularization
 beta_oasis <- lss(Y, X, method = "oasis",
                   oasis = list(ridge_x = 0.1, ridge_b = 0.1,
                               ridge_mode = "fractional"))
 
-# OASIS with standard errors
 result_with_se <- lss(Y, X, method = "oasis",
                      oasis = list(return_se = TRUE))
 beta_estimates <- result_with_se$beta
 standard_errors <- result_with_se$se
 
-# Building design from event onsets using fmrihrf
   sframe <- sampling_frame(blocklens = 200, TR = 1.0)
 
-  # OASIS with automatic design construction
   beta_auto <- lss(Y, X = NULL, method = "oasis",
                    oasis = list(
                      design_spec = list(
@@ -192,20 +242,18 @@ standard_errors <- result_with_se$se
                      )
                    ))
 
-  # Multi-basis HRF example (3 basis functions per trial)
   beta_multibasis <- lss(Y, X = NULL, method = "oasis",
                         oasis = list(
                           design_spec = list(
                             sframe = sframe,
                             cond = list(
                               onsets = c(10, 30, 50, 70, 90),
-                              hrf = HRF_SPMG3,  # 3-basis HRF
+                              hrf = HRF_SPMG3,
                               span = 30
                             )
                           ),
-                          K = 3  # Explicit basis dimension
+                          K = 3
                         ))
-  # Returns 15 rows (5 trials * 3 basis functions)
 }
 
 }

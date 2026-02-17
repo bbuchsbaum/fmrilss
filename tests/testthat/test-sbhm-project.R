@@ -39,11 +39,11 @@ test_that("sbhm_project validates input dimensions", {
 
   # Wrong r dimension
   alpha_wrong_r <- matrix(rnorm(4 * V), nrow = 4, ncol = V)
-  expect_error(sbhm_project(beta_rt, alpha_wrong_r), "alpha_hat must be r×V to match beta_rt dims")
+  expect_error(sbhm_project(beta_rt, alpha_wrong_r), "alpha_hat must be rxV to match beta_rt dims")
 
   # Wrong V dimension
   alpha_wrong_v <- matrix(rnorm(r * (V + 1)), nrow = r, ncol = V + 1)
-  expect_error(sbhm_project(beta_rt, alpha_wrong_v), "alpha_hat must be r×V to match beta_rt dims")
+  expect_error(sbhm_project(beta_rt, alpha_wrong_v), "alpha_hat must be rxV to match beta_rt dims")
 })
 
 test_that("sbhm_project requires 3D array for beta_rt", {

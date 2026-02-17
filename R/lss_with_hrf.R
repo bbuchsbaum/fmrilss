@@ -28,9 +28,7 @@
 #' @return numeric matrix (n_trials x n_vox) of trial-wise beta estimates
 #' @examples
 #' \dontrun{
-#' # Minimal use (R backend):
 #' betas <- lss_with_hrf_pure_r(Y, onset_idx, durations, basis, coeffs, Z = NULL, Nuisance = NULL)
-#' # Or with C++ backend:
 #' betas <- lss_with_hrf_pure_r(Y, onset_idx, durations, basis, coeffs, method = "cpp")
 #' }
 #' @keywords internal

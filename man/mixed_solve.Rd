@@ -79,7 +79,6 @@ are estimated using REML or ML.
 }
 \examples{
 \dontrun{
-# Example with random data
 set.seed(123)
 n <- 100
 Y <- rnorm(n)
@@ -87,7 +86,6 @@ Z <- matrix(rnorm(n * 5), n, 5)
 K <- diag(5)
 X <- matrix(1, n, 1)
 
-# Fit mixed model
 result <- mixed_solve(Y, X, Z, K)
 }
 }

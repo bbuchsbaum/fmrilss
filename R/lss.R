@@ -169,12 +169,10 @@
 #' classification analyses. NeuroImage, 59(3), 2636-2643.
 #'
 #' @examples
-#' # Generate example data
 #' n_timepoints <- 100
 #' n_trials <- 10
 #' n_voxels <- 50
-#' 
-#' # Create trial design matrix
+#'
 #' X <- matrix(0, n_timepoints, n_trials)
 #' for(i in 1:n_trials) {
 #'   start <- (i-1) * 8 + 1
@@ -182,41 +180,33 @@
 #'     X[start:(start+5), i] <- 1
 #'   }
 #' }
-#' 
-#' # Create data with some signal
+#'
 #' Y <- matrix(rnorm(n_timepoints * n_voxels), n_timepoints, n_voxels)
 #' true_betas <- matrix(rnorm(n_trials * n_voxels, 0, 0.5), n_trials, n_voxels)
 #' for(i in 1:n_trials) {
 #'   Y <- Y + X[, i] %*% matrix(true_betas[i, ], 1, n_voxels)
 #' }
-#' 
-#' # Run LSS analysis
+#'
 #' beta_estimates <- lss(Y, X)
-#' 
-#' # With experimental regressors (intercept + condition effects)
+#'
 #' Z <- cbind(1, scale(1:n_timepoints))
 #' beta_estimates_with_regressors <- lss(Y, X, Z = Z)
-#' 
-#' # With nuisance regression (motion parameters)
+#'
 #' Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)
 #' beta_estimates_clean <- lss(Y, X, Z = Z, Nuisance = Nuisance)
 #'
 #' \dontrun{
-#' # Using OASIS method with ridge regularization
 #' beta_oasis <- lss(Y, X, method = "oasis",
 #'                   oasis = list(ridge_x = 0.1, ridge_b = 0.1,
 #'                               ridge_mode = "fractional"))
 #'
-#' # OASIS with standard errors
 #' result_with_se <- lss(Y, X, method = "oasis",
 #'                      oasis = list(return_se = TRUE))
 #' beta_estimates <- result_with_se$beta
 #' standard_errors <- result_with_se$se
 #'
-#' # Building design from event onsets using fmrihrf
 #'   sframe <- sampling_frame(blocklens = 200, TR = 1.0)
 #'
-#'   # OASIS with automatic design construction
 #'   beta_auto <- lss(Y, X = NULL, method = "oasis",
 #'                    oasis = list(
 #'                      design_spec = list(
@@ -232,20 +222,18 @@
 #'                      )
 #'                    ))
 #'
-#'   # Multi-basis HRF example (3 basis functions per trial)
 #'   beta_multibasis <- lss(Y, X = NULL, method = "oasis",
 #'                         oasis = list(
 #'                           design_spec = list(
 #'                             sframe = sframe,
 #'                             cond = list(
 #'                               onsets = c(10, 30, 50, 70, 90),
-#'                               hrf = HRF_SPMG3,  # 3-basis HRF
+#'                               hrf = HRF_SPMG3,
 #'                               span = 30
 #'                             )
 #'                           ),
-#'                           K = 3  # Explicit basis dimension
+#'                           K = 3
 #'                         ))
-#'   # Returns 15 rows (5 trials * 3 basis functions)
 #' }
 #'
 #' @export
@@ -624,14 +612,11 @@ get_data_matrix <- function(dset) {
 #'
 #' @examples
 #' \dontrun{
-#' # Create confound matrix (intercept + linear trend)
 #' n <- 100
 #' X_confounds <- cbind(1, 1:n)
-#' 
-#' # Get projection matrix
+#'
 #' Q <- project_confounds(X_confounds)
-#' 
-#' # Apply to data to remove confounds
+#'
 #' Y_clean <- Q %*% Y_raw
 #' }
 #'

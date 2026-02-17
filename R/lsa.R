@@ -27,12 +27,10 @@
 #' each trial separately while treating other trials as nuisance regressors.
 #'
 #' @examples
-#' # Generate example data
 #' n_timepoints <- 100
 #' n_trials <- 10
 #' n_voxels <- 50
 #'
-#' # Create trial design matrix
 #' X <- matrix(0, n_timepoints, n_trials)
 #' for(i in 1:n_trials) {
 #'   start <- (i-1) * 8 + 1
@@ -41,14 +39,12 @@
 #'   }
 #' }
 #'
-#' # Create data with some signal
 #' Y <- matrix(rnorm(n_timepoints * n_voxels), n_timepoints, n_voxels)
 #' true_betas <- matrix(rnorm(n_trials * n_voxels, 0, 0.5), n_trials, n_voxels)
 #' for(i in 1:n_trials) {
 #'   Y <- Y + X[, i] %*% matrix(true_betas[i, ], 1, n_voxels)
 #' }
 #'
-#' # Run LSA analysis
 #' beta_estimates <- lsa(Y, X)
 #'
 #' @export

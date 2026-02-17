@@ -64,17 +64,13 @@ Notes:
 \dontrun{
   library(fmrihrf)
   set.seed(1)
-  # Synthetic data
   Tlen <- 120; V <- 5; r <- 4
   sframe <- sampling_frame(blocklens = Tlen, TR = 1)
-  # Build a tiny basis from a simple library
   H <- cbind(exp(-seq(0, 30, length.out = Tlen)/4),
              exp(-seq(0, 30, length.out = Tlen)/6))
   sbhm <- sbhm_build(library_H = H, r = r, sframe = sframe, normalize = TRUE)
-  # Simple event design: 10 onsets
   onsets <- seq(5, 95, by = 10)
   design_spec <- list(sframe = sframe, cond = list(onsets = onsets, duration = 0, span = 30))
-  # Simulate data: signal in first voxel only
   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
   rr <- fmrihrf::regressor(onsets = onsets, hrf = hrf_B, duration = 0, span = 30, summate = FALSE)
   X <- fmrihrf::evaluate(rr, grid = sbhm$tgrid, precision = 0.1, method = "conv")
