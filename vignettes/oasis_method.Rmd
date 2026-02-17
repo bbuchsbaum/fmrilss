@@ -3,8 +3,10 @@ title: 'The OASIS Method: Optimized Analytic Single-pass Inverse Solution'
 author: fmrilss Development Team
 date: '`r Sys.Date()`'
 output: rmarkdown::html_vignette
-vignette: '%\VignetteIndexEntry{The OASIS Method: Optimized Analytic Single-pass Inverse
-  Solution} %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{The OASIS Method: Optimized Analytic Single-pass Inverse Solution}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
 css: albers.css
@@ -256,6 +258,8 @@ beta_multi <- lss(
 )
 dim(beta_multi)
 ```
+
+The `others` list ensures that condition B's variance is accounted for when estimating condition A betas, preventing omitted-variable bias.
 
 ## Standard Errors
 

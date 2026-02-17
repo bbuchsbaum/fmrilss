@@ -5,8 +5,10 @@ date: '`r Sys.Date()`'
 output:
   rmarkdown::html_vignette:
     mathjax: default
-vignette: '%\VignetteIndexEntry{Voxel-wise HRF Modeling with fmrilss} %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{Voxel-wise HRF Modeling with fmrilss}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
 css: albers.css
@@ -73,6 +75,8 @@ n_trials <- length(onsets)
 
 Each voxel gets a slightly shifted and scaled version of the canonical HRF. This mimics spatial variation in vascular properties.
 
+We create each voxel's HRF by wrapping the canonical shape with a peak shift and width scaling.
+
 ```{r sim-hrfs}
 voxel_hrfs <- lapply(1:n_vox, function(v) {
   peak_shift  <- (v - 3) * 0.5        # -1 to +1 s
@@ -111,10 +115,8 @@ for (v in 1:n_vox) {
 noise_sd <- 0.5; ar_coef <- 0.3
 for (v in 1:n_vox) {
   e <- rnorm(n_time, sd = noise_sd)
-  noise <- Filter(length, Reduce(
-    function(prev, inn) ar_coef * prev + sqrt(1 - ar_coef^2) * inn,
-    e[-1], accumulate = TRUE, init = e[1]))
-  Y[, v] <- Y[, v] + unlist(noise)
+  noise <- as.numeric(stats::filter(e, filter = ar_coef, method = "recursive"))
+  Y[, v] <- Y[, v] + noise
 }
 colnames(Y) <- paste0("V", 1:n_vox)
 ```

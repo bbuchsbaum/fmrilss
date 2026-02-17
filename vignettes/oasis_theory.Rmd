@@ -5,8 +5,10 @@ date: '`r Sys.Date()`'
 output:
   rmarkdown::html_vignette:
     mathjax: default
-vignette: '%\VignetteIndexEntry{OASIS Theory: Algebra and Implementation Details}
-  %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{OASIS Theory: Algebra and Implementation Details}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
 css: albers.css
@@ -37,6 +39,14 @@ knitr::opts_chunk$set(
 
 Optimized Analytic Single-pass Inverse Solution (OASIS) extends Least Squares Separate (LSS) estimation through algebraic reformulation that enables single-pass computation of all trial estimates. For a single-basis HRF (K = 1) without ridge, OASIS reduces exactly to the closed-form LSS solution; the per‑trial 2x2 normal equations are the same. The value of OASIS is in batching those solves efficiently and generalizing the same algebra to multi‑basis HRFs (2Kx2K) with optional ridge and diagnostics. This document provides the mathematical foundation and implementation details.
 
+### Prerequisites
+
+This vignette assumes familiarity with:
+- QR decomposition and orthogonal projection matrices
+- Ridge regression and regularization
+- Matrix calculus and linear algebra
+- The standard LSS formulation
+
 ### Computational Intuition
 
 Standard LSS requires N separate GLM fits for N trials, each involving:
@@ -55,7 +65,7 @@ Total complexity: O(T³ + NT²), a significant reduction when N is large.
 
 ### Visual Comparison of Computational Scaling
 
-```{r complexity-comparison, echo=TRUE, fig.cap="Computational complexity: Classical LSS vs OASIS"}
+```{r complexity-comparison, echo=TRUE, fig.cap="Computational complexity: Classical LSS vs OASIS", fig.alt="Line plot showing classical LSS scaling linearly with trials while OASIS remains nearly flat."}
 # Demonstrate computational scaling
 N_trials <- c(10, 50, 100, 200, 500, 1000)
 T_points <- 200  # Fixed number of timepoints
@@ -80,14 +90,6 @@ polygon(c(N_trials, rev(N_trials)),
 text(500, mean(c(classical_ops[4], oasis_ops[4])),
      'Computational\nSavings', col='darkgreen')
 ```
-
-### Prerequisites
-
-This vignette assumes familiarity with:
-- QR decomposition and orthogonal projection matrices
-- Ridge regression and regularization
-- Matrix calculus and linear algebra
-- The standard LSS formulation
 
 Code references point to `R/oasis_glue.R` and `src/oasis_core.cpp` implementations.
 
@@ -241,11 +243,17 @@ The multi-basis path swaps steps 2–5 for their block equivalents. In both case
 
 Compared to classical LSS (\(N\) separate regressions), OASIS shaves off repeated projections and linear solves, yielding substantial speedups when \(N\) or \(V\) is large.
 
+## Next Steps
+
+- `vignette("oasis_method")` --- practical OASIS usage with ridge, multi-basis HRFs, and standard errors
+- `vignette("fmrilss")` --- foundational LSS concepts
+- `vignette("sbhm")` --- library-constrained voxel-specific HRFs
+
 ## References
 
 - Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012). Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses. *NeuroImage*, 59(3), 2636–2643.
 - fmrilss source files `R/oasis_glue.R` and `src/oasis_core.cpp` (for implementation alignment).
 
-```{r session-info}
+```{r session-info, echo=FALSE}
 sessionInfo()
 ```

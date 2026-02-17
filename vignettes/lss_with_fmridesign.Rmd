@@ -1,10 +1,10 @@
 ---
 title: Using fmridesign with fmrilss
-author: LSS Package Authors
-date: '`r Sys.Date()`'
 output: rmarkdown::html_vignette
-vignette: '%\VignetteIndexEntry{Using fmridesign with fmrilss} %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{Using fmridesign with fmrilss}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
 css: albers.css
@@ -19,15 +19,30 @@ includes:
 ---
 
 ```{r, include = FALSE}
+has_fmridesign <- requireNamespace("fmridesign", quietly = TRUE)
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  eval = has_fmridesign,
+  fig.width = 7,
+  fig.height = 5
 )
 ```
 
 ```{r setup}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
+if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(albersdown::theme_albers(params$family))
+}
 library(fmrilss)
+```
+
+```{r check-package, echo = FALSE}
+if (!has_fmridesign) {
+  message("fmridesign not installed; code chunks not evaluated.")
+}
+```
+
+```{r load-deps, message = FALSE}
 library(fmridesign)
 library(fmrihrf)
 ```
@@ -55,33 +70,84 @@ Use the traditional `lss()` interface when:
 - You're using **internal SBHM pipelines**
 - You already have design matrices prepared
 
-## Quick Start
+## Simulated Data Setup
 
-Here's a minimal example using `lss_design()`:
+To demonstrate the workflow, we'll create simulated fMRI data with realistic trial effects.
 
-```{r quickstart, eval=FALSE}
-# 1. Define temporal structure (single run, 100 scans, TR=2s)
-sframe <- sampling_frame(blocklens = 100, TR = 2)
+```{r simulate-data}
+set.seed(123)
 
-# 2. Create trial data
+# Two runs, 150 scans each, TR = 2s
+n_scans_per_run <- 150
+n_runs <- 2
+n_voxels <- 500
+TR <- 2
+
+# True trial effects (betas) for 6 trials per run
+true_betas <- matrix(rnorm(12 * n_voxels, mean = 1.5, sd = 0.8),
+                     nrow = 12, ncol = n_voxels)
+
+# Trial data with run-relative onsets
 trials <- data.frame(
-  onset = seq(10, 90, by = 20),  # Events every 20 seconds
-  run = 1
+  onset = rep(c(10, 30, 50, 70, 90, 110), times = 2),
+  run = rep(1:2, each = 6)
 )
 
-# 3. Build event model with trialwise design
-emod <- event_model(
+# Sampling frame
+sframe <- sampling_frame(blocklens = rep(n_scans_per_run, n_runs), TR = TR)
+
+# Create design matrix to generate Y
+emod_sim <- event_model(
   onset ~ trialwise(basis = "spmg1"),
   data = trials,
   block = ~run,
   sampling_frame = sframe
 )
 
-# 4. Run LSS
-Y <- matrix(rnorm(100 * 1000), 100, 1000)  # Simulated data
-beta <- lss_design(Y, emod, method = "oasis")
+# Extract trial design matrix and convert to matrix
+X_trial <- as.matrix(design_matrix(emod_sim))
 
-# Result: 5 trials × 1000 voxels
+# Baseline: intercept + linear drift per run
+bmodel_sim <- baseline_model(
+  basis = "poly",
+  degree = 1,
+  sframe = sframe,
+  intercept = "runwise"
+)
+Z_baseline <- as.matrix(design_matrix(bmodel_sim))
+
+# Generate Y with signal + noise
+signal <- X_trial %*% true_betas
+baseline_signal <- Z_baseline %*% matrix(rnorm(ncol(Z_baseline) * n_voxels, sd = 2),
+                                         ncol = n_voxels)
+noise <- matrix(rnorm(nrow(X_trial) * n_voxels, sd = 3),
+                nrow = nrow(X_trial), ncol = n_voxels)
+
+Y <- signal + baseline_signal + noise
+```
+
+## Quick Start
+
+Here's a minimal example using `lss_design()`:
+
+```{r quickstart}
+# Use the first run only for quick start
+trials_run1 <- trials[trials$run == 1, ]
+sframe_run1 <- sampling_frame(blocklens = n_scans_per_run, TR = TR)
+Y_run1 <- Y[1:n_scans_per_run, ]
+
+# Build event model with trialwise design
+emod <- event_model(
+  onset ~ trialwise(basis = "spmg1"),
+  data = trials_run1,
+  block = ~run,
+  sampling_frame = sframe_run1
+)
+
+# Run LSS
+beta <- lss_design(Y_run1, emod, method = "oasis")
+
+# Result: 6 trials × 500 voxels
 dim(beta)
 ```
 
@@ -93,33 +159,23 @@ One of the key advantages of `lss_design()` is automatic handling of multi-run e
 
 **Important:** When using `fmridesign`, onsets should be **run-relative** (resetting to 0 at the start of each run). This is the standard convention for multi-run fMRI experiments.
 
-```{r multirun, eval=FALSE}
-# Define 2 runs with 150 scans each
-sframe <- sampling_frame(blocklens = c(150, 150), TR = 2)
-
-# Trial data with run-relative onsets
-trials <- data.frame(
-  onset = c(10, 30, 50, 70, 90, 110,   # Run 1: onsets relative to run start
-            10, 30, 50, 70, 90, 110),   # Run 2: onsets relative to run start
-  run = rep(1:2, each = 6)
-)
+```{r multirun}
+# Trial data with run-relative onsets (already defined above)
+print(trials)
 
 # Create event model - conversion to global time is automatic
-emod <- event_model(
+emod_multi <- event_model(
   onset ~ trialwise(basis = "spmg1"),
   data = trials,
   block = ~run,
   sampling_frame = sframe
 )
 
-# Simulate data for both runs
-Y <- matrix(rnorm(300 * 1000), 300, 1000)
-
 # Run LSS
-beta <- lss_design(Y, emod, method = "oasis")
+beta_multi <- lss_design(Y, emod_multi, method = "oasis")
 
-# Result: 12 trials × 1000 voxels
-dim(beta)
+# Result: 12 trials × 500 voxels
+dim(beta_multi)
 ```
 
 ### Why Run-Relative Onsets?
@@ -133,45 +189,34 @@ dim(beta)
 
 The `baseline_model` allows you to specify drift correction, block intercepts, and nuisance regressors in a structured way.
 
-```{r baseline, eval=FALSE}
-# Same setup as before
-sframe <- sampling_frame(blocklens = c(150, 150), TR = 2)
-trials <- data.frame(
-  onset = c(10, 30, 50, 70, 90, 110,
-            10, 30, 50, 70, 90, 110),
-  run = rep(1:2, each = 6)
-)
-
-emod <- event_model(
-  onset ~ trialwise(basis = "spmg1"),
-  data = trials,
-  block = ~run,
-  sampling_frame = sframe
-)
-
+```{r baseline}
 # Create baseline model with B-spline drift correction
 bmodel <- baseline_model(
-  basis = "bs",          # B-spline basis
-  degree = 5,            # 5 basis functions per run
+  basis = "bs",
+  degree = 5,
   sframe = sframe,
-  intercept = "runwise"  # Separate intercept per run
+  intercept = "runwise"
 )
 
-Y <- matrix(rnorm(300 * 1000), 300, 1000)
-
 # LSS with baseline correction
-beta <- lss_design(Y, emod, bmodel, method = "oasis")
+beta_baseline <- lss_design(Y, emod_multi, bmodel, method = "oasis")
+
+dim(beta_baseline)
 ```
 
 ### Adding Motion Parameters
 
-```{r motion, eval=FALSE}
-# Load motion parameters (one file per run)
-motion_run1 <- as.matrix(read.table("motion_run1.txt"))  # 150 × 6
-motion_run2 <- as.matrix(read.table("motion_run2.txt"))  # 150 × 6
+For demonstration, we'll create synthetic motion regressors.
+
+```{r motion-demo}
+# Simulate motion parameters (6 motion parameters per run)
+motion_run1 <- matrix(rnorm(n_scans_per_run * 6, sd = 0.5),
+                      nrow = n_scans_per_run, ncol = 6)
+motion_run2 <- matrix(rnorm(n_scans_per_run * 6, sd = 0.5),
+                      nrow = n_scans_per_run, ncol = 6)
 
 # Create baseline model with motion as nuisance
-bmodel <- baseline_model(
+bmodel_motion <- baseline_model(
   basis = "bs",
   degree = 5,
   sframe = sframe,
@@ -179,57 +224,76 @@ bmodel <- baseline_model(
   nuisance_list = list(motion_run1, motion_run2)
 )
 
-beta <- lss_design(Y, emod, bmodel, method = "oasis")
+beta_motion <- lss_design(Y, emod_multi, bmodel_motion, method = "oasis")
+dim(beta_motion)
+```
+
+```{r motion-real, eval = FALSE}
+# In real analysis, load motion from files:
+motion_run1 <- as.matrix(read.table("motion_run1.txt"))
+motion_run2 <- as.matrix(read.table("motion_run2.txt"))
+
+bmodel <- baseline_model(
+  basis = "bs",
+  degree = 5,
+  sframe = sframe,
+  intercept = "runwise",
+  nuisance_list = list(motion_run1, motion_run2)
+)
 ```
 
 ## Multi-Basis HRFs
 
 For multi-basis HRF models (e.g., canonical + temporal + dispersion derivatives), use `nbasis`:
 
-```{r multibasis, eval=FALSE}
+```{r multibasis}
 # Create event model with SPMG3 (3 basis functions)
-emod <- event_model(
+emod_3basis <- event_model(
   onset ~ trialwise(basis = "spmg3", nbasis = 3),
   data = trials,
   block = ~run,
   sampling_frame = sframe
 )
 
-Y <- matrix(rnorm(300 * 1000), 300, 1000)
-
 # LSS will auto-detect K = 3
-beta <- lss_design(Y, emod, method = "oasis")
+beta_3basis <- lss_design(Y, emod_3basis, method = "oasis")
 
-# Output: (12 trials × 3 basis) × 1000 voxels = 36 × 1000
-dim(beta)
+# Output: (12 trials × 3 basis) × 500 voxels = 36 × 500
+dim(beta_3basis)
 
 # Extract canonical basis estimates (every 3rd row starting at 1)
-beta_canonical <- beta[seq(1, nrow(beta), by = 3), ]
-dim(beta_canonical)  # 12 × 1000
+beta_canonical <- beta_3basis[seq(1, nrow(beta_3basis), by = 3), ]
+dim(beta_canonical)
 ```
 
 ## Ridge Regularization
 
 For designs with potential collinearity, use ridge regularization:
 
-```{r ridge, eval=FALSE}
-beta <- lss_design(
-  Y, emod, bmodel,
+```{r ridge}
+beta_ridge <- lss_design(
+  Y, emod_multi, bmodel,
   method = "oasis",
   oasis = list(
     ridge_mode = "fractional",
-    ridge_x = 0.02,    # Ridge for trial regressors
-    ridge_b = 0.02     # Ridge for baseline regressors
+    ridge_x = 0.02,
+    ridge_b = 0.02
   )
 )
+
+dim(beta_ridge)
 ```
 
 ## Comparison with design_spec
 
 ### Using design_spec (old approach)
 
-```{r designspec, eval=FALSE}
-# Manual design_spec construction
+```{r designspec, eval = FALSE}
+# Manual design_spec construction requires global/absolute onsets
+# For run-relative onsets (10, 30, 50, 70, 90, 110) in each of 2 runs,
+# global onsets would be: 10, 30, 50, 70, 90, 110, 310, 330, 350, 370, 390, 410
+# (second run starts at 150 scans × 2s = 300s)
+
 beta_old <- lss(
   Y,
   method = "oasis",
@@ -237,7 +301,7 @@ beta_old <- lss(
     design_spec = list(
       sframe = sframe,
       cond = list(
-        onsets = c(10, 30, 50, ..., 280, 300),  # GLOBAL onsets required!
+        onsets = c(10, 30, 50, 70, 90, 110, 310, 330, 350, 370, 390, 410),
         hrf = HRF_SPMG1,
         span = 30
       )
@@ -255,18 +319,18 @@ beta_old <- lss(
 
 ### Using lss_design() (new approach)
 
-```{r lssdesign, eval=FALSE}
-# Formula-based design
-emod <- event_model(
+```{r lssdesign}
+# Formula-based design with run-relative onsets
+emod_new <- event_model(
   onset ~ trialwise(basis = "spmg1"),
-  data = trials,  # Run-relative onsets
+  data = trials,
   block = ~run,
   sampling_frame = sframe
 )
 
-bmodel <- baseline_model(basis = "bs", degree = 5, sframe = sframe)
+bmodel_new <- baseline_model(basis = "bs", degree = 5, sframe = sframe)
 
-beta_new <- lss_design(Y, emod, bmodel, method = "oasis")
+beta_new <- lss_design(Y, emod_new, bmodel_new, method = "oasis")
 ```
 
 **Advantages:**
@@ -276,25 +340,49 @@ beta_new <- lss_design(Y, emod, bmodel, method = "oasis")
 - **Richer metadata**
 - **Formula-based DSL**
 
+## Validation: Estimated vs True Betas
+
+Let's visualize how well LSS recovers the true trial effects from our simulated data.
+
+```{r validation-plot, fig.alt = "Scatter plot showing estimated LSS betas versus true simulated betas with near-diagonal alignment"}
+# Compare estimated betas (with baseline correction) to true betas
+# Flatten matrices for plotting
+est_vec <- as.vector(beta_baseline)
+true_vec <- as.vector(true_betas)
+
+# Compute correlation
+cor_val <- cor(est_vec, true_vec)
+
+# Plot
+plot(true_vec, est_vec,
+     pch = 16, cex = 0.3, col = rgb(0, 0, 0, 0.3),
+     xlab = "True Beta", ylab = "Estimated Beta",
+     main = sprintf("LSS Recovery (r = %.3f)", cor_val))
+abline(0, 1, col = "red", lwd = 2, lty = 2)
+grid()
+```
+
+The scatter plot shows strong correlation between estimated and true betas, demonstrating successful recovery of trial-wise activation patterns.
+
 ## Advanced: Parametric Modulators
 
-`event_model` supports parametric modulators for trial-by-trial amplitude modulation:
+`event_model` supports parametric modulators for trial-by-trial amplitude modulation. This example demonstrates the syntax but requires special setup.
 
-```{r parametric, eval=FALSE}
+```{r parametric, eval = FALSE}
 # Trial data with reaction times
-trials <- data.frame(
+trials_rt <- data.frame(
   onset = c(10, 30, 50, 70, 90, 110),
   RT = c(0.5, 0.7, 0.6, 0.8, 0.5, 0.9),
   run = 1
 )
 
 # Center RT
-trials$RT_c <- scale(trials$RT, center = TRUE, scale = FALSE)[, 1]
+trials_rt$RT_c <- scale(trials_rt$RT, center = TRUE, scale = FALSE)[, 1]
 
 # Model: trial effects + RT modulation
-emod <- event_model(
+emod_rt <- event_model(
   onset ~ trialwise() + hrf(RT_c),
-  data = trials,
+  data = trials_rt,
   block = ~run,
   sampling_frame = sframe
 )
@@ -311,9 +399,10 @@ emod <- event_model(
 
 **Solution:** Check that `sum(blocklens)` matches `nrow(Y)`:
 
-```{r troubleshoot1, eval=FALSE}
-sframe <- sampling_frame(blocklens = c(150, 150), TR = 2)
-sum(fmrihrf::blocklens(sframe))  # Should equal nrow(Y)
+```{r troubleshoot1}
+sframe_check <- sampling_frame(blocklens = c(150, 150), TR = 2)
+sum(fmrihrf::blocklens(sframe_check))
+nrow(Y)
 ```
 
 ### Error: "event_model and baseline_model have different sampling_frames"
@@ -322,7 +411,7 @@ sum(fmrihrf::blocklens(sframe))  # Should equal nrow(Y)
 
 **Solution:** Use the same `sframe` object for both:
 
-```{r troubleshoot2, eval=FALSE}
+```{r troubleshoot2, eval = FALSE}
 sframe <- sampling_frame(blocklens = c(150, 150), TR = 2)
 
 emod <- event_model(..., sampling_frame = sframe)
@@ -335,7 +424,7 @@ bmodel <- baseline_model(..., sframe = sframe)
 
 **Solution:** Use ridge regularization:
 
-```{r troubleshoot3, eval=FALSE}
+```{r troubleshoot3, eval = FALSE}
 beta <- lss_design(
   Y, emod, bmodel,
   oasis = list(ridge_mode = "fractional", ridge_x = 0.02)
@@ -357,6 +446,10 @@ For simple designs or when you already have design matrices prepared, the tradit
 ## Further Reading
 
 - `vignette("fmrilss")` - Traditional LSS interface
-- `vignette("oasis_method", package = "fmrilss")` - OASIS method details
+- `vignette("oasis_method")` - OASIS method details
 - `vignette("a_04_event_models", package = "fmridesign")` - Event model tutorial
 - `vignette("a_03_baseline_model", package = "fmridesign")` - Baseline model tutorial
+
+```{r session-info, echo = FALSE}
+sessionInfo()
+```

@@ -3,8 +3,10 @@ title: Getting started with fmrilss
 output:
   rmarkdown::html_vignette:
     mathjax: default
-vignette: '%\VignetteIndexEntry{Getting started with fmrilss} %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{Getting started with fmrilss}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
 css: albers.css
@@ -18,7 +20,7 @@ includes:
 
 ---
 
-```{r, include = FALSE}
+```{r setup-opts, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -53,7 +55,9 @@ set.seed(42)
 We'll simulate 12 trials in a 150-TR run with jittered onsets, then convolve with a canonical HRF to build one design-matrix column per trial.
 
 ```{r onsets}
-n_time <- 150; n_trials <- 12; n_vox <- 25
+n_time <- 150
+n_trials <- 12
+n_vox <- 25
 sframe <- sampling_frame(blocklens = n_time, TR = 1)
 
 base <- round(seq(10, n_time - 24, length.out = n_trials))
@@ -118,7 +122,7 @@ cat("Mean variance  LSA:", round(mean(apply(beta_lsa, 2, var)), 3), "\n")
 
 With overlapping regressors, LSA variance is typically higher. A scatter plot shows the relationship:
 
-```{r lss-lsa-scatter, fig.width=5.5, fig.height=5}
+```{r lss-lsa-scatter, fig.width=5.5, fig.height=5, fig.alt="Scatter plot of LSA vs LSS trial-wise betas showing shrinkage."}
 plot(as.vector(beta_lsa), as.vector(beta_full),
      pch = 19, col = adjustcolor("steelblue", 0.3), cex = 0.6,
      xlab = "LSA beta", ylab = "LSS beta",
@@ -184,6 +188,8 @@ If you plan to re-run LSS with different settings, it can be faster to project o
 Q <- project_confounds(Nuisance)
 beta_pre <- lss(Q %*% Y, Q %*% X, Z = Z, method = "r_optimized")
 ```
+
+This is useful when sweeping over hyperparameters (e.g., ridge values) without re-projecting nuisance regressors each time.
 
 ## Next steps
 

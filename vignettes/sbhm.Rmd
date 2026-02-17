@@ -5,8 +5,10 @@ date: '`r Sys.Date()`'
 output:
   rmarkdown::html_vignette:
     mathjax: default
-vignette: '%\VignetteIndexEntry{Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific
-  HRF Estimation} %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
 css: albers.css
@@ -118,7 +120,7 @@ cat("Singular values:", round(sbhm$S, 2), "\n")
 Each basis function captures a principal mode of HRF variation: the main shape,
 timing shifts, width differences, and undershoot features.
 
-```{r visualize-basis, fig.width=10, fig.height=6, eval=eval_chunks}
+```{r visualize-basis, fig.width=10, fig.height=6, eval=eval_chunks, fig.alt="Six panels showing SBHM shared basis functions capturing principal modes of HRF variation."}
 par(mfrow = c(2, 3), mar = c(3, 3, 2, 1))
 for (i in 1:ncol(sbhm$B)) {
   plot(sbhm$tgrid, sbhm$B[, i], type = "l", col = "navy", lwd = 2,
@@ -140,7 +142,7 @@ ve <- sapply(ranks, function(ri) {
 })
 ```
 
-```{r plot-rank, fig.width=8, fig.height=5, eval=eval_chunks}
+```{r plot-rank, fig.width=8, fig.height=5, eval=eval_chunks, fig.alt="Line plot of variance explained vs rank showing elbow around rank 6."}
 plot(ranks, ve / max(ve) * 100, type = "b", pch = 19, col = "navy",
      lwd = 2, xlab = "Rank (r)", ylab = "Variance Explained (%)",
      main = "Choosing SBHM Rank")
@@ -153,7 +155,7 @@ grid()
 A sample of rank-r reconstructed HRFs shows the range of shapes the library
 spans.
 
-```{r library-coverage, fig.width=8, fig.height=5, eval=eval_chunks}
+```{r library-coverage, fig.width=8, fig.height=5, eval=eval_chunks, fig.alt="Overlaid HRF curves showing the range of shapes spanned by the library reconstruction."}
 H_hat <- sbhm$B %*% sbhm$A
 sel <- unique(round(seq(1, ncol(H_hat), length.out = min(ncol(H_hat), 12))))
 matplot(sbhm$tgrid, H_hat[, sel, drop = FALSE], type = "l", lty = 1,
@@ -257,7 +259,7 @@ cat("Margin -- mean:", round(mean(res_sbhm$margin), 3),
     " median:", round(median(res_sbhm$margin), 3), "\n")
 ```
 
-```{r visualize-margin, fig.width=8, fig.height=5, eval=eval_chunks}
+```{r visualize-margin, fig.width=8, fig.height=5, eval=eval_chunks, fig.alt="Histogram of matching confidence margins with median line."}
 hist(res_sbhm$margin, breaks = 20, col = "skyblue", border = "white",
      main = "Matching Confidence (Margin)",
      xlab = "Margin (top1 - top2 cosine score)")
@@ -270,7 +272,7 @@ candidates are nearly interchangeable, and soft blending (see below) may help.
 
 ### Amplitude Recovery
 
-```{r compare-amplitudes, fig.width=8, fig.height=5, eval=eval_chunks}
+```{r compare-amplitudes, fig.width=8, fig.height=5, eval=eval_chunks, fig.alt="Scatter plot of true vs estimated amplitudes showing recovery quality."}
 cor_amp <- cor(as.vector(res_sbhm$amplitude), as.vector(true_amplitudes))
 plot(as.vector(true_amplitudes), as.vector(res_sbhm$amplitude),
      pch = 19, col = adjustcolor("navy", alpha.f = 0.3),
@@ -290,7 +292,7 @@ H_hat <- sbhm$B %*% sbhm$A
 vox_show <- head(order(-res_sbhm$margin), n = min(6, n_voxels))
 ```
 
-```{r matched-vs-true, fig.width=10, fig.height=6, eval=eval_chunks}
+```{r matched-vs-true, fig.width=10, fig.height=6, eval=eval_chunks, fig.alt="Six panels comparing true and matched HRF shapes for the most confident voxels."}
 par(mfrow = c(2, 3), mar = c(3, 3, 2, 1))
 for (v in vox_show) {
   rng <- range(c(H_hat[, true_hrf_idx[v]], H_hat[, res_sbhm$matched_idx[v]]))
@@ -307,7 +309,7 @@ for (v in vox_show) {
 PCA of the library coordinates shows which HRFs were present (true) versus
 selected (matched).
 
-```{r pca-library, fig.width=8, fig.height=5, eval=eval_chunks}
+```{r pca-library, fig.width=8, fig.height=5, eval=eval_chunks, fig.alt="PCA scatter of library coordinates showing true and matched HRF positions."}
 pca <- prcomp(t(sbhm$A), center = TRUE, scale. = TRUE)
 pc <- pca$x[, 1:2, drop = FALSE]
 plot(pc, pch = 16, col = "gray70", xlab = "PC1", ylab = "PC2",
