@@ -12,8 +12,8 @@ NULL
 #'
 #' @param design_spec Optional design spec list used to build `X` via `fmrihrf`.
 #' @param K Optional basis dimension override.
-#' @param ridge_mode `"absolute"` (default) or `"fractional"`.
-#' @param ridge_x,ridge_b Non-negative ridge penalties.
+#' @param ridge_mode `"fractional"` (default) or `"absolute"`.
+#' @param ridge_x,ridge_b Non-negative ridge penalties (defaults 0.05 each).
 #' @param block_cols Voxel block size for blocked products.
 #' @param return_se Logical; return standard errors.
 #' @param return_diag Logical; return diagnostics.
@@ -26,9 +26,9 @@ NULL
 oasis_options <- function(
   design_spec = NULL,
   K = NULL,
-  ridge_mode = c("absolute", "fractional"),
-  ridge_x = 0,
-  ridge_b = 0,
+  ridge_mode = c("fractional", "absolute"),
+  ridge_x = 0.05,
+  ridge_b = 0.05,
   block_cols = 4096L,
   return_se = FALSE,
   return_diag = FALSE,

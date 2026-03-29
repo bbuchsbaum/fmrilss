@@ -15,9 +15,12 @@
 #' @param Nuisance (T x P) confounds (intercept, motion, drift, aCompCor, ...)
 #' @param oasis list of options:
 #'    - design_spec: list describing events/HRF to build X via fmrihrf
-#'    - K: explicit basis dimension (auto-detected if not provided)
-#'    - ridge_mode: "absolute" (default) or "fractional"
-#'    - ridge_x, ridge_b: nonnegative ridge on the [a_j, b_j] Gram (default 0 -> exact LSS)
+#'    - K: explicit basis dimension (recommended when X is supplied directly)
+#'    - infer_K_from_X: logical; if TRUE and K is missing, infer basis
+#'      dimension heuristically from X (default FALSE for safety)
+#'    - ridge_mode: "fractional" (default) or "absolute"
+#'    - ridge_x, ridge_b: nonnegative ridge on the [a_j, b_j] Gram
+#'      (default 0.05 in fractional mode)
 #'    - block_cols: voxel block size (default 4096)
 #'    - return_se: logical (default FALSE)
 #'    - return_diag: logical (default FALSE)
@@ -131,23 +134,10 @@
       N <- ncol(X); ntr <- as.integer(oasis$ntrials)
       if (N %% ntr != 0L) stop(sprintf("ncol(X)=%d is not divisible by ntrials=%d", N, ntr))
       detected_K <- as.integer(N / ntr)
-    } else if (!is.null(X)) {
-      N <- ncol(X)
-      for (Kcand in c(2L,3L,4L,5L,6L,8L,10L,12L)) {
-        if (N %% Kcand != 0L) next
-        ntr <- N / Kcand
-        trials <- seq_len(min(ntr, 8L))
-        ok <- TRUE
-        for (i in trials) {
-          idx <- ((i-1L)*Kcand + 1L):(i*Kcand)
-          B <- X[, idx, drop=FALSE]
-          G <- crossprod(B)
-          Dn <- 1/sqrt(pmax(diag(G), .Machine$double.eps))
-          Cn <- diag(Dn) %*% G %*% diag(Dn)
-          if (mean(abs(Cn[upper.tri(Cn)])) < 0.5) { ok <- FALSE; break }
-        }
-        if (ok) { detected_K <- as.integer(Kcand); break }
-      }
+    } else if (!is.null(X) && isTRUE(oasis$infer_K_from_X %||% FALSE)) {
+      # Heuristic detection can misclassify highly overlapped single-basis designs.
+      # Keep it opt-in for externally supplied X.
+      detected_K <- .detect_basis_dimension(X)
     }
     detected_K
   }
@@ -178,7 +168,7 @@
       X_trials = X,
       design_spec = oasis$design_spec,
       N_nuis = N_nuis,
-      K = oasis$K %||% .detect_basis_dimension(X),
+      K = K,
       lambda_shape = oasis$lambda_shape %||% 0,
       mu_rough     = oasis$mu_rough %||% 0,
       ref_hrf      = oasis$ref_hrf %||% NULL,
@@ -232,8 +222,13 @@
     mats  <- oasis_AtY_SY_blocked(pre$A, pre$s_all, pre$Q, Y, as.integer(oasis$block_cols %||% 4096L))
     
     # Resolve ridge
-    lam   <- .oasis_resolve_ridge(pre, oasis$ridge_x %||% 0, oasis$ridge_b %||% 0,
-                                  oasis$ridge_mode %||% "absolute", K = 1L)
+    lam   <- .oasis_resolve_ridge(
+      pre,
+      oasis$ridge_x %||% 0.05,
+      oasis$ridge_b %||% 0.05,
+      oasis$ridge_mode %||% "fractional",
+      K = 1L
+    )
     
     # Compute betas
     if (isTRUE(oasis$return_se)) {
@@ -250,8 +245,13 @@
     mats <- oasisk_products(pre$A, pre$S, pre$Q, Y, as.integer(oasis$block_cols %||% 4096L))
     
     # Resolve ridge
-    lam  <- .oasis_resolve_ridge(pre, oasis$ridge_x %||% 0, oasis$ridge_b %||% 0,
-                                 oasis$ridge_mode %||% "absolute", K = K)
+    lam  <- .oasis_resolve_ridge(
+      pre,
+      oasis$ridge_x %||% 0.05,
+      oasis$ridge_b %||% 0.05,
+      oasis$ridge_mode %||% "fractional",
+      K = K
+    )
     
     # Compute betas
     B <- oasisk_betas(pre$D, pre$C, pre$E, mats$N1, mats$SY, 

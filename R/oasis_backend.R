@@ -16,8 +16,9 @@
 #' @param oasis list of options:
 #'    - design_spec: list describing events/HRF to build X via fmrihrf
 #'    - K: explicit basis dimension (auto-detected if not provided)
-#'    - ridge_mode: "absolute" (default) or "fractional"
-#'    - ridge_x, ridge_b: nonnegative ridge on the [a_j, b_j] Gram (default 0 -> exact LSS)
+#'    - ridge_mode: "fractional" (default) or "absolute"
+#'    - ridge_x, ridge_b: nonnegative ridge on the [a_j, b_j] Gram
+#'      (default 0.05 in fractional mode)
 #'    - block_cols: voxel block size (default 4096)
 #'    - return_se: logical (default FALSE)
 #'    - return_diag: logical (default FALSE)
@@ -226,8 +227,13 @@
     mats  <- oasis_AtY_SY_blocked(pre$A, pre$s_all, pre$Q, Y, as.integer(oasis$block_cols %||% 4096L))
     
     # Resolve ridge
-    lam   <- .oasis_resolve_ridge(pre, oasis$ridge_x %||% 0, oasis$ridge_b %||% 0,
-                                  oasis$ridge_mode %||% "absolute", K = 1L)
+    lam   <- .oasis_resolve_ridge(
+      pre,
+      oasis$ridge_x %||% 0.05,
+      oasis$ridge_b %||% 0.05,
+      oasis$ridge_mode %||% "fractional",
+      K = 1L
+    )
     
     # Compute betas
     if (isTRUE(oasis$return_se)) {
@@ -244,8 +250,13 @@
     mats <- oasisk_products(pre$A, pre$S, pre$Q, Y, as.integer(oasis$block_cols %||% 4096L))
     
     # Resolve ridge
-    lam  <- .oasis_resolve_ridge(pre, oasis$ridge_x %||% 0, oasis$ridge_b %||% 0,
-                                 oasis$ridge_mode %||% "absolute", K = K)
+    lam  <- .oasis_resolve_ridge(
+      pre,
+      oasis$ridge_x %||% 0.05,
+      oasis$ridge_b %||% 0.05,
+      oasis$ridge_mode %||% "fractional",
+      K = K
+    )
     
     # Compute betas
     B <- oasisk_betas(pre$D, pre$C, pre$E, mats$N1, mats$SY, 

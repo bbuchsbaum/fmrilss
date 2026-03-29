@@ -60,12 +60,14 @@
 #'     to be modeled as nuisances). When provided, X can be NULL and will be constructed automatically.
 #'   \item \code{K}: Explicit basis dimension for multi-basis HRF models (e.g., 3 for SPMG3).
 #'     If not provided, it's auto-detected from X dimensions or defaults to 1 for single-basis HRFs.
-#'   \item \code{ridge_mode}: Either "absolute" (default) or "fractional". In absolute mode,
+#'   \item \code{ridge_mode}: Either "fractional" (default) or "absolute". In absolute mode,
 #'     ridge_x and ridge_b are used directly as regularization parameters. In fractional mode,
 #'     they represent fractions of the mean design energy for adaptive regularization.
-#'   \item \code{ridge_x}: Ridge parameter for trial-specific regressors (default 0). Controls
+#'   \item \code{ridge_x}: Ridge parameter for trial-specific regressors (default 0.05).
+#'     Controls
 #'     regularization strength for individual trial estimates.
-#'   \item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0). Controls
+#'   \item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0.05).
+#'     Controls
 #'     regularization strength for the sum of all other trials.
 #'   \item \code{return_se}: Logical, whether to return standard errors (default FALSE). When TRUE,
 #'     returns a list with \code{beta} (trial estimates) and \code{se} (standard errors) components.
