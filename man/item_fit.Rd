@@ -31,6 +31,5 @@ Numeric weight matrix `W_hat` (`n_features x p`) with
   `item_diagnostics` attribute.
 }
 \description{
-Fit ITEM weights with generalized least squares:
-`W_hat = (Gamma' U^{-1} Gamma + ridge * I)^{-1} Gamma' U^{-1} T_train`.
+Fit ITEM weights with a ridge-stabilized generalized least-squares solve.
 }

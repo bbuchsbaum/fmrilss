@@ -1,7 +1,6 @@
 #' Fit ITEM decoder weights
 #'
-#' Fit ITEM weights with generalized least squares:
-#' `W_hat = (Gamma' U^{-1} Gamma + ridge * I)^{-1} Gamma' U^{-1} T_train`.
+#' Fit ITEM weights with a ridge-stabilized generalized least-squares solve.
 #'
 #' @param Gamma_train Numeric matrix (`n_train x n_features`).
 #' @param T_train Numeric target matrix (`n_train x p`).
@@ -151,7 +150,8 @@ item_predict <- function(Gamma_test, W_hat) {
 #' @param lsa_method LS-A backend (`"r"` or `"cpp"`).
 #' @param solver Solver preference for `item_compute_u()`.
 #' @param u_output Return full `U` matrix or `U_by_run` blocks.
-#' @param C_transform Optional transform matrix for `X = X_t %*% C_transform`.
+#' @param C_transform Optional transform matrix used to map `X_t`
+#'   to the working design matrix `X`.
 #' @param trial_id Optional trial id vector.
 #' @param trial_hash Optional trial hash.
 #' @param meta Optional metadata list.

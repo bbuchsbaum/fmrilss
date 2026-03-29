@@ -49,7 +49,8 @@ item_from_lsa(
 
 \item{u_output}{Return full `U` matrix or `U_by_run` blocks.}
 
-\item{C_transform}{Optional transform matrix for `X = X_t %*% C_transform`.}
+\item{C_transform}{Optional transform matrix used to map `X_t`
+to the working design matrix `X`.}
 
 \item{trial_id}{Optional trial id vector.}
 

@@ -1,8 +1,7 @@
 #' Compute ITEM trial covariance matrix
 #'
-#' Compute the trial covariance term
-#' `U = (X_t' V^{-1} X_t + ridge * I)^{-1}`
-#' using stable solve paths with fallbacks.
+#' Compute the trial covariance term as the inverse of a ridge-stabilized
+#' normal-equation system, using stable solve paths with fallbacks.
 #'
 #' @param X_t Numeric trial-wise design matrix (`n_time x n_trials`).
 #' @param V Optional temporal covariance/precision object.
@@ -11,7 +10,8 @@
 #'   - dense/sparse matrix (`n_time x n_time`),
 #'   - run-block list of square matrices whose block sizes sum to `n_time`.
 #' @param v_type Whether `V` is covariance (`"cov"`) or precision (`"precision"`).
-#' @param ridge Non-negative ridge term added to `X_t' V^{-1} X_t`.
+#' @param ridge Non-negative ridge term added to the trial-wise system matrix
+#'   before inversion.
 #' @param method Preferred solver path (`"chol"`, `"svd"`, or `"pinv"`).
 #' @param run_id Optional trial-level run ids (length `n_trials`). Required only
 #'   when `output = "by_run"`.

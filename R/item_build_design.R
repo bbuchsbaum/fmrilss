@@ -10,8 +10,8 @@
 #'   factor/character/logical vector (classification labels).
 #' @param run_id Optional run/session identifier of length `n_trials`.
 #'   If `NULL`, all trials are assigned to a single run.
-#' @param C_transform Optional transformation matrix used for
-#'   `X = X_t %*% C_transform`. Must have `n_trials` rows when provided.
+#' @param C_transform Optional transformation matrix used to map `X_t`
+#'   to the working design matrix `X`. Must have `n_trials` rows when provided.
 #' @param trial_id Optional trial identifier vector of length `n_trials`.
 #'   Defaults to `colnames(X_t)` when available, else `Trial_1..Trial_n`.
 #' @param trial_hash Optional hash used by alignment guards.

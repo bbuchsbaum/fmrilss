@@ -26,7 +26,8 @@ Accepted forms:
 
 \item{v_type}{Whether `V` is covariance (`"cov"`) or precision (`"precision"`).}
 
-\item{ridge}{Non-negative ridge term added to `X_t' V^{-1} X_t`.}
+\item{ridge}{Non-negative ridge term added to the trial-wise system matrix
+before inversion.}
 
 \item{method}{Preferred solver path (`"chol"`, `"svd"`, or `"pinv"`).}
 
@@ -43,7 +44,6 @@ Numeric matrix `U` by default, or a named list `U_by_run` when
   with rank/condition/solver details.
 }
 \description{
-Compute the trial covariance term
-`U = (X_t' V^{-1} X_t + ridge * I)^{-1}`
-using stable solve paths with fallbacks.
+Compute the trial covariance term as the inverse of a ridge-stabilized
+normal-equation system, using stable solve paths with fallbacks.
 }

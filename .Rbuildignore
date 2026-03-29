@@ -24,3 +24,4 @@ repomix-output.xml
 ^test_sign_debug2\.R$
 ^\.rcmdcheck_result\.rds$
 ^\.planning$
+^figure$
