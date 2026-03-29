@@ -22,24 +22,35 @@ sbhm_hrf <- function(B, tgrid, span) {
   stopifnot(is.matrix(B), is.numeric(B), is.numeric(tgrid))
   if (nrow(B) != length(tgrid)) stop("nrow(B) must equal length(tgrid)")
   r <- ncol(B)
+  tgrid <- as.numeric(tgrid)
+
+  # Ensure monotone grid for stable interpolation.
+  ord <- order(tgrid)
+  if (!all(ord == seq_along(tgrid))) {
+    tgrid <- tgrid[ord]
+    B <- B[ord, , drop = FALSE]
+  }
+  nT <- length(tgrid)
 
   # Closure capturing B and tgrid; returns len(t) × r matrix
   fun <- function(t) {
     t <- as.numeric(t)
     n <- length(t)
     out <- matrix(0, n, r)
-    # Precompute interval indices on tgrid
-    idx <- findInterval(t, tgrid, all.inside = TRUE)
-    idx2 <- pmin(idx + 1L, length(tgrid))
-    dt  <- tgrid[idx2] - tgrid[idx]
-    w   <- (t - tgrid[idx]) / ifelse(dt == 0, 1, dt)
-    for (j in seq_len(r)) {
-      b1 <- B[cbind(idx,  j)]
-      b2 <- B[cbind(idx2, j)]
-      out[, j] <- (1 - w) * b1 + w * b2
-    }
+
+    # HRF support: explicitly zero outside [0, span] and outside interpolation grid.
+    inside <- (t >= 0) & (t <= span) & (t >= tgrid[1L]) & (t <= tgrid[nT])
+    if (!any(inside)) return(out)
+
+    ti <- t[inside]
+    idx <- findInterval(ti, tgrid)
+    idx <- pmax(1L, pmin(idx, nT - 1L))
+    idx2 <- idx + 1L
+    dt <- tgrid[idx2] - tgrid[idx]
+    w <- (ti - tgrid[idx]) / ifelse(dt == 0, 1, dt)
+
+    out[inside, ] <- B[idx, , drop = FALSE] * (1 - w) + B[idx2, , drop = FALSE] * w
     out
   }
   fmrihrf::HRF(fun = fun, name = "SBHM", nbasis = r, span = span)
 }
-

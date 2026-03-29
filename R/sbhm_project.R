@@ -2,7 +2,8 @@
 #'
 #' Given trial-wise coefficients in the shared basis (rxntrialsxV) and the
 #' voxel-specific matched library coordinates `alpha_hat` (rxV), compute scalar
-#' amplitudes per trial and voxel via inner products.
+#' amplitudes per trial and voxel via least-squares projection:
+#' `a = (alpha' beta) / (alpha' alpha)`.
 #'
 #' @param beta_rt 3D array of shape r x ntrials x V containing per-trial
 #'   coefficients in the SBHM basis (as returned by OASIS with K=r, reshaped).
@@ -29,8 +30,14 @@ sbhm_project <- function(beta_rt, alpha_hat) {
   if (nrow(alpha_hat) != r || ncol(alpha_hat) != V) {
     stop("alpha_hat must be rxV to match beta_rt dims")
   }
-  amps <- vapply(seq_len(V), function(v) {
-    colSums(beta_rt[, , v] * alpha_hat[, v])
-  }, numeric(ntrials))
+  denom <- colSums(alpha_hat^2)
+  denom[denom < 1e-12] <- 1
+
+  amps <- matrix(NA_real_, nrow = ntrials, ncol = V)
+  for (v in seq_len(V)) {
+    Bv <- matrix(beta_rt[, , v, drop = FALSE], nrow = r, ncol = ntrials)
+    num <- as.numeric(crossprod(alpha_hat[, v], Bv))
+    amps[, v] <- num / denom[v]
+  }
   amps
 }

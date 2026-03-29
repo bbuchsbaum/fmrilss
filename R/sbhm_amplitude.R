@@ -227,7 +227,17 @@ sbhm_amplitude_lss1 <- function(Y, sbhm, design_spec, alpha_hat,
       lam_x <- (ridge_frac$x %||% 0.01) * d
       lam_b <- (ridge_frac$b %||% 0.01) * e
       D <- (d + lam_x) * (e + lam_b) - c * c
-      if (D <= 0) {
+      # Guard near-singular 2x2 systems in overlap-heavy regimes.
+      D_floor_rel <- ridge_frac$D_floor_rel %||% 1e-8
+      D_scale <- (d + lam_x) * (e + lam_b) + c * c + 1
+      D_floor <- D_floor_rel * D_scale
+      if (!is.finite(D) || D <= D_floor) {
+        # Retry with a mild adaptive ridge boost before giving up.
+        lam_x <- lam_x + (ridge_frac$x_boost %||% 0.05) * pmax(d, 1e-8)
+        lam_b <- lam_b + (ridge_frac$b_boost %||% 0.05) * pmax(e, 1e-8)
+        D <- (d + lam_x) * (e + lam_b) - c * c
+      }
+      if (!is.finite(D) || D <= D_floor) {
         amps[j, v] <- 0
       } else {
         beta_j  <- ((e + lam_b) * n1 - c * n2) / D

@@ -17,7 +17,7 @@
 #' @param ridge Optional list for targeted ridge shrinkage in the prepass solve:
 #'   - `mode`: "fractional" (default) or "absolute". Fractional scales by mean(diag(G)).
 #'   - `lambda`: nonnegative scalar (default 0.01 in fractional mode).
-#'   - `alpha_ref`: r-vector to shrink towards (default `sbhm$ref$alpha_ref`).
+#'   - `alpha_ref`: r-vector to shrink towards (default zero vector).
 #' @param data_fac Optional list for external factorization: `scores` (T×q),
 #'   `loadings` (q×V). If provided, computes X'Y via (X'Scores) × Loadings. In this
 #'   PR2 version, prewhitening is not applied when `data_fac` is used.
@@ -177,7 +177,10 @@ sbhm_prepass <- function(Y, sbhm, design_spec,
   # 6) Targeted ridge (optional) towards alpha_ref
   ridge$mode   <- ridge$mode %||% "fractional"
   ridge$lambda <- ridge$lambda %||% 0.01
-  alpha_ref <- ridge$alpha_ref %||% sbhm$ref$alpha_ref
+  alpha_ref <- ridge$alpha_ref %||% rep(0, r)
+  alpha_ref <- as.numeric(alpha_ref)
+  if (length(alpha_ref) == 1L) alpha_ref <- rep(alpha_ref, r)
+  if (length(alpha_ref) != r) stop("ridge$alpha_ref must have length r")
   lam <- as.numeric(ridge$lambda)
   if (tolower(ridge$mode) == "fractional") {
     lam <- lam * mean(diag(G))

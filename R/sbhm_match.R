@@ -18,6 +18,11 @@
 #'     lambda_v = tau/(snr_v + tau). Otherwise lambda = tau.
 #' @param topK Integer, return top-K scores/weights if >1 (default 1).
 #' @param whiten Logical, divide coefficients by S before normalization (default TRUE).
+#' @param sv_floor_rel Relative singular-value floor used when `whiten=TRUE`
+#'   (default `1e-6`).
+#' @param whiten_power Numeric in `[0, 1]` controlling whitening strength when
+#'   `whiten=TRUE`. Uses division by `S^whiten_power` (`1` = full whitening,
+#'   `0.5` = partial whitening, `0` = no whitening). Default `1`.
 #' @param orient_ref Logical, flip beta_bar columns when their dot with `ref` is
 #'   negative before matching (default TRUE).
 #'
@@ -47,6 +52,8 @@ sbhm_match <- function(beta_bar, S, A,
                        shrink = list(tau = 0, ref = NULL, snr = NULL),
                        topK = 1,
                        whiten = TRUE,
+                       sv_floor_rel = 1e-6,
+                       whiten_power = 1,
                        orient_ref = TRUE) {
   stopifnot(is.matrix(beta_bar), is.numeric(S), is.matrix(A))
   r <- nrow(A)
@@ -82,9 +89,19 @@ sbhm_match <- function(beta_bar, S, A,
 
   # Shape-only whitening and L2 normalization
   if (isTRUE(whiten)) {
-    S_safe <- pmax(S, .Machine$double.eps)
-    beta_w <- beta_bar / S_safe
-    A_w    <- A / S_safe
+    p <- as.numeric(whiten_power %||% 1)
+    if (!is.finite(p)) p <- 1
+    p <- max(0, min(1, p))
+    smax <- suppressWarnings(max(S, na.rm = TRUE))
+    rel_floor <- if (is.finite(smax) && smax > 0) {
+      pmax(0, as.numeric(sv_floor_rel)) * smax
+    } else {
+      .Machine$double.eps
+    }
+    S_safe <- pmax(S, rel_floor, .Machine$double.eps)
+    S_scale <- S_safe^p
+    beta_w <- beta_bar / S_scale
+    A_w    <- A / S_scale
   } else {
     beta_w <- beta_bar
     A_w    <- A
