@@ -1,16 +1,13 @@
 ---
 title: 'OASIS Theory: Algebra and Implementation Details'
-author: fmrilss Development Team
-date: '`r Sys.Date()`'
 output:
   rmarkdown::html_vignette:
     mathjax: default
-vignette: >
-  %\VignetteIndexEntry{OASIS Theory: Algebra and Implementation Details}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+vignette: |
+  %\VignetteIndexEntry{OASIS Theory: Algebra and Implementation Details} %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}
 params:
   family: red
+  preset: homage
 css: albers.css
 resource_files:
 - albers.css
@@ -22,7 +19,7 @@ includes:
 
 ---
 
-```{r, include = FALSE}
+```{r setup-opts, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -38,6 +35,8 @@ knitr::opts_chunk$set(
 ## Motivation
 
 Optimized Analytic Single-pass Inverse Solution (OASIS) extends Least Squares Separate (LSS) estimation through algebraic reformulation that enables single-pass computation of all trial estimates. For a single-basis HRF (K = 1) without ridge, OASIS reduces exactly to the closed-form LSS solution; the per‑trial 2x2 normal equations are the same. The value of OASIS is in batching those solves efficiently and generalizing the same algebra to multi‑basis HRFs (2Kx2K) with optional ridge and diagnostics. This document provides the mathematical foundation and implementation details.
+
+Read this after `vignette("oasis_method")` if you want the linear algebra behind the user-facing API. The code chunks below are there to make the main scaling claims executable rather than purely narrative.
 
 ### Prerequisites
 
@@ -89,6 +88,17 @@ polygon(c(N_trials, rev(N_trials)),
         col=rgb(0.2, 0.8, 0.2, 0.3), border=NA)
 text(500, mean(c(classical_ops[4], oasis_ops[4])),
      'Computational\nSavings', col='darkgreen')
+```
+
+```{r complexity-summary}
+complexity_summary <- data.frame(
+  Trials = N_trials,
+  Classical = classical_ops,
+  OASIS = oasis_ops,
+  SpeedupRatio = classical_ops / oasis_ops
+)
+complexity_summary
+stopifnot(all(complexity_summary$SpeedupRatio > 1))
 ```
 
 Code references point to `R/oasis_glue.R` and `src/oasis_core.cpp` implementations.

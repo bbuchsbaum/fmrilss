@@ -1,16 +1,13 @@
 ---
 title: Voxel-wise HRF Modeling with fmrilss
-author: fmrilss Development Team
-date: '`r Sys.Date()`'
 output:
   rmarkdown::html_vignette:
     mathjax: default
-vignette: >
-  %\VignetteIndexEntry{Voxel-wise HRF Modeling with fmrilss}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+vignette: |
+  %\VignetteIndexEntry{Voxel-wise HRF Modeling with fmrilss} %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}
 params:
   family: red
+  preset: homage
 css: albers.css
 resource_files:
 - albers.css
@@ -22,7 +19,7 @@ includes:
 
 ---
 
-```{r, include = FALSE}
+```{r setup-opts, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -35,18 +32,26 @@ knitr::opts_chunk$set(
 )
 ```
 
+```{r setup-theme, include = FALSE}
+if (requireNamespace("ggplot2", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(
+    albersdown::theme_albers(family = params$family, preset = params$preset)
+  )
+}
+```
+
 ## Why HRF Variability Matters
 
 Vascular properties, neurovascular coupling, and acquisition protocols all influence the hemodynamic response. Relying on a single canonical HRF shape can bias trial-wise estimates, especially across brain regions or clinical populations.
 
 This vignette shows how to estimate voxel-specific HRFs and incorporate them into LSS. You should be familiar with the core LSS workflow (`vignette("fmrilss")`) and `fmrihrf` basics.
 
-**Alternative approach:** For library-constrained voxel-specific HRF estimation with 5--20x speedup, see `vignette("sbhm")`.
+**Alternative approach:** For a library-constrained method that is usually faster and more stable, see `vignette("sbhm")`.
 
 ## Setup
 
 ```{r setup}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
 library(fmrilss)
 library(fmrihrf)
 set.seed(123)
@@ -222,8 +227,15 @@ cors  <- c(Standard  = cor(as.vector(standard_betas), as.vector(true_betas)),
 rmses <- c(Standard  = sqrt(mean((standard_betas - true_betas)^2)),
            VoxelHRF  = sqrt(mean((voxel_betas    - true_betas)^2)),
            OASIS     = sqrt(mean((oasis_canonical - true_betas)^2)))
-data.frame(Correlation = round(cors, 3), RMSE = round(rmses, 3))
+comparison_summary <- data.frame(
+  Correlation = round(cors, 3),
+  RMSE = round(rmses, 3)
+)
+comparison_summary
+stopifnot(all(is.finite(cors)), all(is.finite(rmses)))
 ```
+
+These metrics give you a direct accuracy check on the simulated data rather than relying on a visual impression alone.
 
 ### Scatter plots
 

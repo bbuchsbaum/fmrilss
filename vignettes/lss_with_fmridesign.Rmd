@@ -1,12 +1,11 @@
 ---
 title: Using fmridesign with fmrilss
 output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Using fmridesign with fmrilss}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+vignette: |
+  %\VignetteIndexEntry{Using fmridesign with fmrilss} %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}
 params:
   family: red
+  preset: homage
 css: albers.css
 resource_files:
 - albers.css
@@ -18,21 +17,28 @@ includes:
 
 ---
 
-```{r, include = FALSE}
+```{r setup-opts, include = FALSE}
 has_fmridesign <- requireNamespace("fmridesign", quietly = TRUE)
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   eval = has_fmridesign,
   fig.width = 7,
-  fig.height = 5
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE
 )
+
+if (has_fmridesign &&
+    requireNamespace("ggplot2", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(
+    albersdown::theme_albers(family = params$family, preset = params$preset)
+  )
+}
 ```
 
 ```{r setup}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) {
-  ggplot2::theme_set(albersdown::theme_albers(params$family))
-}
 library(fmrilss)
 ```
 
@@ -149,6 +155,7 @@ beta <- lss_design(Y_run1, emod, method = "oasis")
 
 # Result: 6 trials × 500 voxels
 dim(beta)
+stopifnot(all(dim(beta) == c(6, n_voxels)), all(is.finite(beta)))
 ```
 
 ## Multi-Run Experiments
@@ -350,19 +357,23 @@ Let's visualize how well LSS recovers the true trial effects from our simulated 
 est_vec <- as.vector(beta_baseline)
 true_vec <- as.vector(true_betas)
 
-# Compute correlation
-cor_val <- cor(est_vec, true_vec)
+recovery_summary <- data.frame(
+  Correlation = cor(est_vec, true_vec),
+  RMSE = sqrt(mean((est_vec - true_vec)^2))
+)
+recovery_summary
+stopifnot(all(is.finite(as.matrix(recovery_summary))))
 
 # Plot
 plot(true_vec, est_vec,
      pch = 16, cex = 0.3, col = rgb(0, 0, 0, 0.3),
      xlab = "True Beta", ylab = "Estimated Beta",
-     main = sprintf("LSS Recovery (r = %.3f)", cor_val))
+     main = sprintf("LSS Recovery (r = %.3f)", recovery_summary$Correlation))
 abline(0, 1, col = "red", lwd = 2, lty = 2)
 grid()
 ```
 
-The scatter plot shows strong correlation between estimated and true betas, demonstrating successful recovery of trial-wise activation patterns.
+The fit is not perfect because the simulation adds substantial baseline structure and noise, but the recovered betas still track the ground truth in a way that is easy to diagnose numerically and visually.
 
 ## Advanced: Parametric Modulators
 

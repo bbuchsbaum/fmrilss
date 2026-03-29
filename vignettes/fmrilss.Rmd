@@ -3,12 +3,11 @@ title: Getting started with fmrilss
 output:
   rmarkdown::html_vignette:
     mathjax: default
-vignette: >
-  %\VignetteIndexEntry{Getting started with fmrilss}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+vignette: |
+  %\VignetteIndexEntry{Getting started with fmrilss} %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}
 params:
   family: red
+  preset: homage
 css: albers.css
 resource_files:
 - albers.css
@@ -33,6 +32,15 @@ knitr::opts_chunk$set(
 )
 ```
 
+```{r setup-theme, include = FALSE}
+if (requireNamespace("ggplot2", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(
+    albersdown::theme_albers(family = params$family, preset = params$preset)
+  )
+}
+```
+
 ## Why fmrilss?
 
 In rapid event-related fMRI, hemodynamic responses from consecutive trials overlap, making trial-by-trial beta estimates unstable. This is a problem for MVPA, RSA, and connectivity analyses that need reliable single-trial activation patterns.
@@ -44,7 +52,6 @@ Least Squares Separate (LSS; Mumford et al., 2012) solves this by fitting a sepa
 ## Quick example
 
 ```{r setup}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
 library(fmrihrf)
 library(fmrilss)
 set.seed(42)
@@ -90,6 +97,13 @@ Y <- X %*% true_betas +
      matrix(rnorm(n_time * n_vox), n_time, n_vox)
 ```
 
+```{r simulate-check}
+stopifnot(
+  all(dim(Y) == c(n_time, n_vox)),
+  all(is.finite(Y))
+)
+```
+
 ### Run LSS
 
 At its simplest, `lss()` needs only the data and the trial design:
@@ -103,6 +117,10 @@ Include `Z` and `Nuisance` for a more complete model:
 
 ```{r lss-full}
 beta_full <- lss(Y, X, Z = Z, Nuisance = Nuisance)
+stopifnot(
+  all(dim(beta_full) == c(n_trials, n_vox)),
+  all(is.finite(beta_full))
+)
 ```
 
 That's it --- `beta_full` is a `r nrow(beta_full)` x `r ncol(beta_full)` matrix of trial-by-voxel estimates.
@@ -116,11 +134,22 @@ beta_lsa <- lsa(Y, X, Z = Z, Nuisance = Nuisance)
 ```
 
 ```{r compare-variance}
-cat("Mean variance  LSS:", round(mean(apply(beta_full, 2, var)), 3), "\n")
-cat("Mean variance  LSA:", round(mean(apply(beta_lsa, 2, var)), 3), "\n")
+comparison_summary <- data.frame(
+  Method = c("LSS", "LSA"),
+  CorrelationToTruth = c(
+    cor(as.vector(beta_full), as.vector(true_betas)),
+    cor(as.vector(beta_lsa), as.vector(true_betas))
+  ),
+  MeanTrialVariance = c(
+    mean(apply(beta_full, 2, var)),
+    mean(apply(beta_lsa, 2, var))
+  )
+)
+comparison_summary
+stopifnot(all(is.finite(as.matrix(comparison_summary[, -1]))))
 ```
 
-With overlapping regressors, LSA variance is typically higher. A scatter plot shows the relationship:
+In this simulation, LSS is both less variable and closer to the known trial effects. A scatter plot shows how the two estimators relate to each other:
 
 ```{r lss-lsa-scatter, fig.width=5.5, fig.height=5, fig.alt="Scatter plot of LSA vs LSS trial-wise betas showing shrinkage."}
 plot(as.vector(beta_lsa), as.vector(beta_full),

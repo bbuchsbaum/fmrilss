@@ -1,14 +1,11 @@
 ---
 title: 'The OASIS Method: Optimized Analytic Single-pass Inverse Solution'
-author: fmrilss Development Team
-date: '`r Sys.Date()`'
 output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{The OASIS Method: Optimized Analytic Single-pass Inverse Solution}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+vignette: |
+  %\VignetteIndexEntry{The OASIS Method: Optimized Analytic Single-pass Inverse Solution} %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}
 params:
   family: red
+  preset: homage
 css: albers.css
 resource_files:
 - albers.css
@@ -20,7 +17,7 @@ includes:
 
 ---
 
-```{r setup, include = FALSE}
+```{r setup-opts, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -33,8 +30,16 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r theme-setup}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
+```{r setup-theme, include = FALSE}
+if (requireNamespace("ggplot2", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(
+    albersdown::theme_albers(family = params$family, preset = params$preset)
+  )
+}
+```
+
+```{r setup}
 library(fmrihrf)
 library(fmrilss)
 set.seed(42)
@@ -95,7 +100,7 @@ beta_oasis <- lss(
 dim(beta_oasis)
 ```
 
-The result is an `n_trials x n_voxels` matrix, exactly the same shape you get from the other LSS backends.
+The result is an `n_trials x n_voxels` matrix, exactly the same shape you get from the other LSS backends. By default, OASIS applies 5% fractional ridge regularization, which is worth keeping in mind when you compare it to unregularized LSS fits.
 
 ## Equivalence to LSS
 
@@ -105,8 +110,10 @@ With a single-basis HRF and no ridge penalty, OASIS returns the same coefficient
 Z <- cbind(1, scale(1:n_time))
 b_lss   <- lss(Y, X_trials, Z = Z, method = "cpp_optimized")
 b_oasis <- lss(Y, X_trials, Z = Z, method = "oasis",
-               oasis = list(ridge_x = 0, ridge_b = 0))
-max(abs(b_lss - b_oasis))
+               oasis = list(ridge_mode = "absolute", ridge_x = 0, ridge_b = 0))
+equiv_err <- max(abs(b_lss - b_oasis))
+equiv_err
+stopifnot(equiv_err < 1e-10)
 ```
 
 Use the plain LSS backends when you have a fixed single-basis `X` and want the leanest dependency surface. Prefer OASIS when you need built-in design construction, multi-basis HRFs, ridge, or standard errors.
@@ -120,6 +127,15 @@ In rapid designs, close trial spacing produces correlated regressors. Ridge regr
 You specify fixed penalty values added to the diagonal of the per-trial normal equations.
 
 ```{r ridge-absolute}
+beta_noridge <- lss(
+  Y = Y, X = NULL, method = "oasis",
+  oasis = list(
+    design_spec = list(sframe = sframe,
+      cond = list(onsets = onsets, hrf = fmrihrf::HRF_SPMG1, span = 30)),
+    ridge_mode = "absolute", ridge_x = 0, ridge_b = 0
+  )
+)
+
 beta_abs <- lss(
   Y = Y, X = NULL, method = "oasis",
   oasis = list(
@@ -132,7 +148,7 @@ beta_abs <- lss(
 
 ### Fractional Ridge
 
-The penalty scales relative to the mean diagonal energy in the design, adapting automatically to your data.
+The penalty scales relative to the mean diagonal energy in the design, adapting automatically to your data. A 5% fractional ridge is also the package default when you do not override the ridge settings.
 
 ```{r ridge-fractional}
 beta_frac <- lss(
@@ -148,8 +164,15 @@ beta_frac <- lss(
 Notice the variance reduction compared to the unregularized estimates:
 
 ```{r ridge-compare}
-cat("Mean var (no ridge):", round(mean(apply(beta_oasis, 2, var)), 4), "\n")
-cat("Mean var (frac 5%):", round(mean(apply(beta_frac, 2, var)), 4), "\n")
+ridge_summary <- data.frame(
+  Fit = c("No ridge", "Fractional 5%"),
+  MeanTrialVariance = c(
+    mean(apply(beta_noridge, 2, var)),
+    mean(apply(beta_frac, 2, var))
+  )
+)
+ridge_summary
+stopifnot(ridge_summary$MeanTrialVariance[2] < ridge_summary$MeanTrialVariance[1])
 ```
 
 Practical starting points for fractional ridge: 0.005 for well-separated trials (ISI >= 6 s), 0.01 for typical rapid designs, and 0.02--0.05 for very dense events or multi-basis models. See `?lss` for details.
@@ -279,6 +302,10 @@ res_se <- lss(
 ```{r se-tstats}
 t_stats <- res_se$beta / res_se$se
 cat("Mean |t|:", round(mean(abs(t_stats)), 2), "\n")
+stopifnot(
+  all(dim(res_se$beta) == dim(res_se$se)),
+  all(is.finite(res_se$se))
+)
 ```
 
 Trials with larger standard errors typically have more overlapping neighbours or occur during noisier periods.

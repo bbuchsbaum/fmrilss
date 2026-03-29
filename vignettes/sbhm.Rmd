@@ -1,16 +1,13 @@
 ---
 title: 'Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation'
-author: fmrilss Development Team
-date: '`r Sys.Date()`'
 output:
   rmarkdown::html_vignette:
     mathjax: default
-vignette: >
-  %\VignetteIndexEntry{Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+vignette: |
+  %\VignetteIndexEntry{Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation} %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}
 params:
   family: red
+  preset: homage
 css: albers.css
 resource_files:
 - albers.css
@@ -22,7 +19,7 @@ includes:
 
 ---
 
-```{r, include = FALSE}
+```{r setup-opts, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -46,6 +43,15 @@ n_time <- if (fast_mode) 160 else 200
 set.seed(123)
 ```
 
+```{r setup-theme, include = FALSE}
+if (requireNamespace("ggplot2", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(
+    albersdown::theme_albers(family = params$family, preset = params$preset)
+  )
+}
+```
+
 ## The Problem
 
 Real fMRI data shows substantial HRF variability across brain regions. A single
@@ -64,7 +70,6 @@ The pipeline has four steps:
 In practice, `lss_sbhm()` runs all four steps in a single call.
 
 ```{r setup, message=FALSE, warning=FALSE}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
 library(fmrihrf)
 library(fmrilss)
 
@@ -267,8 +272,9 @@ abline(v = median(res_sbhm$margin), col = "red", lwd = 2, lty = 2)
 grid()
 ```
 
-Rules of thumb: margin > 0.1 means high confidence; below 0.05 the top
-candidates are nearly interchangeable, and soft blending (see below) may help.
+In this simulation the median margin is small, which means many voxels sit close
+to multiple library members. That is exactly the regime where soft blending (see
+below) can help.
 
 ### Amplitude Recovery
 
@@ -280,6 +286,16 @@ plot(as.vector(true_amplitudes), as.vector(res_sbhm$amplitude),
      main = paste0("Amplitude Recovery (r = ", round(cor_amp, 3), ")"))
 abline(0, 1, col = "red", lwd = 2, lty = 2)
 grid()
+```
+
+```{r recovery-summary, eval=eval_chunks}
+recovery_summary <- data.frame(
+  HRFMatchingAccuracy = accuracy,
+  AmplitudeCorrelation = cor_amp,
+  MedianMargin = median(res_sbhm$margin)
+)
+recovery_summary
+stopifnot(all(is.finite(as.matrix(recovery_summary))))
 ```
 
 ### Recovered HRF Shapes
