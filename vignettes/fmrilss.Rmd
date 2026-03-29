@@ -170,15 +170,13 @@ beta_oasis <- lss(
     design_spec = list(
       sframe = sframe,
       cond = list(onsets = onsets, hrf = HRF_SPMG1, span = 24)
-    ),
-    ridge_mode = "fractional",
-    ridge_x = 0.01, ridge_b = 0.01
+    )
   )
 )
 dim(beta_oasis)
 ```
 
-Setting `X = NULL` lets OASIS construct the design internally from `design_spec`. See `vignette("oasis_method")` for ridge tuning, multi-basis HRFs, standard errors, and diagnostics.
+Setting `X = NULL` lets OASIS construct the design internally from `design_spec`. Fractional ridge regularization (5%) is applied by default to stabilize overlapping designs. See `vignette("oasis_method")` for ridge tuning, multi-basis HRFs, standard errors, and diagnostics.
 
 ## Nuisance pre-projection
 
