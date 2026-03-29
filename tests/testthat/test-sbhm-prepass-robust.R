@@ -212,3 +212,28 @@ test_that("Small ridge reduces error vs no ridge in ill-conditioned design", {
   rmse <- function(b) sqrt(mean((b - alpha_true)^2))
   expect_lt(rmse(pre1$beta_bar[,1]), rmse(pre0$beta_bar[,1]))
 })
+
+test_that("Default prepass ridge target is zero-reference", {
+  set.seed(1007)
+  library(fmrihrf)
+
+  Tlen <- 100; V <- 2; r <- 3
+  sframe <- sampling_frame(blocklens = Tlen, TR = 1)
+  H <- cbind(
+    exp(-seq(0, 25, length.out = Tlen)/4),
+    exp(-seq(0, 25, length.out = Tlen)/6),
+    exp(-seq(0, 25, length.out = Tlen)/8)
+  )
+  sbhm <- sbhm_build(library_H = H, r = r, sframe = sframe, normalize = TRUE)
+  onsets <- seq(8, 80, by = 12)
+  design_spec <- list(sframe = sframe, cond = list(onsets = onsets, duration = 0, span = 25))
+
+  Y <- matrix(rnorm(Tlen * V), Tlen, V)
+  pre_default <- sbhm_prepass(Y, sbhm, design_spec, ridge = list(mode = "absolute", lambda = 0.02))
+  pre_zero <- sbhm_prepass(
+    Y, sbhm, design_spec,
+    ridge = list(mode = "absolute", lambda = 0.02, alpha_ref = rep(0, ncol(sbhm$B)))
+  )
+
+  expect_equal(pre_default$beta_bar, pre_zero$beta_bar, tolerance = 1e-12)
+})

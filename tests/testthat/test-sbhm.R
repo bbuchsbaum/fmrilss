@@ -95,3 +95,25 @@ test_that("sbhm pipeline produces plausible results end-to-end", {
   expect_equal(dim(out$coeffs_r)[3], V)
 })
 
+test_that("sbhm_hrf is zero outside support and avoids extrapolation artifacts", {
+  skip_on_cran()
+  library(fmrihrf)
+  set.seed(14)
+
+  Tlen <- 80
+  sframe <- sampling_frame(blocklens = Tlen, TR = 1)
+  H <- cbind(
+    exp(-seq(0, 20, length.out = Tlen)/4),
+    exp(-seq(0, 20, length.out = Tlen)/7)
+  )
+  sbhm <- sbhm_build(library_H = H, r = 2, sframe = sframe, normalize = TRUE)
+  hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
+
+  eval_t <- c(-2, -0.1, 0, 1, sbhm$span, sbhm$span + 0.1, sbhm$span + 2)
+  Hv <- fmrihrf::evaluate(hrf_B, grid = eval_t, precision = 0.1, method = "conv")
+  Hv <- as.matrix(Hv)
+
+  outside <- (eval_t < 0) | (eval_t > sbhm$span)
+  expect_true(all(abs(Hv[outside, , drop = FALSE]) < 1e-12))
+  expect_true(all(is.finite(Hv)))
+})

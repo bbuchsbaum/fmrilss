@@ -7,9 +7,9 @@ test_that("oasis_options creates valid options with defaults", {
   # Check defaults
   expect_null(opts$design_spec)
   expect_null(opts$K)
-  expect_equal(opts$ridge_mode, "absolute")
-  expect_equal(opts$ridge_x, 0)
-  expect_equal(opts$ridge_b, 0)
+  expect_equal(opts$ridge_mode, "fractional")
+  expect_equal(opts$ridge_x, 0.05)
+  expect_equal(opts$ridge_b, 0.05)
   expect_equal(opts$block_cols, 4096L)
   expect_false(opts$return_se)
   expect_false(opts$return_diag)

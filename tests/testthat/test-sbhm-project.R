@@ -1,4 +1,4 @@
-test_that("sbhm_project computes correct inner products", {
+test_that("sbhm_project computes least-squares scalar projections", {
   set.seed(123)
   r <- 3       # basis dimension
   ntrials <- 10
@@ -15,16 +15,20 @@ test_that("sbhm_project computes correct inner products", {
   expect_equal(dim(amps), c(ntrials, V))
 
   # Verify computation manually for first voxel
+  d1 <- sum(alpha_hat[, 1]^2)
+  if (d1 < 1e-12) d1 <- 1
   expected_v1 <- numeric(ntrials)
   for (t in 1:ntrials) {
-    expected_v1[t] <- sum(beta_rt[, t, 1] * alpha_hat[, 1])
+    expected_v1[t] <- sum(beta_rt[, t, 1] * alpha_hat[, 1]) / d1
   }
   expect_equal(amps[, 1], expected_v1, tolerance = 1e-12)
 
   # Verify computation manually for second voxel
+  d2 <- sum(alpha_hat[, 2]^2)
+  if (d2 < 1e-12) d2 <- 1
   expected_v2 <- numeric(ntrials)
   for (t in 1:ntrials) {
-    expected_v2[t] <- sum(beta_rt[, t, 2] * alpha_hat[, 2])
+    expected_v2[t] <- sum(beta_rt[, t, 2] * alpha_hat[, 2]) / d2
   }
   expect_equal(amps[, 2], expected_v2, tolerance = 1e-12)
 })
@@ -74,8 +78,6 @@ test_that("sbhm_project requires matrix for alpha_hat", {
 })
 
 test_that("sbhm_project handles edge case of r=1", {
-  # Note: r=1 case has a known dimension-drop issue in the function
-  # When r=1, beta_rt[,,v] becomes a vector and colSums fails
   set.seed(567)
   r <- 1
   ntrials <- 8
@@ -83,14 +85,11 @@ test_that("sbhm_project handles edge case of r=1", {
 
   beta_rt <- array(rnorm(r * ntrials * V), dim = c(r, ntrials, V))
   alpha_hat <- matrix(rnorm(r * V), nrow = r, ncol = V)
-
-  # Function currently errors on r=1 due to dimension drop
-  expect_error(sbhm_project(beta_rt, alpha_hat), "must be an array")
+  amps <- sbhm_project(beta_rt, alpha_hat)
+  expect_equal(dim(amps), c(ntrials, V))
 })
 
 test_that("sbhm_project handles edge case of single trial", {
-  # Note: single trial case has a known dimension-drop issue in the function
-  # This test documents the expected error
   set.seed(678)
   r <- 3
   ntrials <- 1
@@ -98,9 +97,8 @@ test_that("sbhm_project handles edge case of single trial", {
 
   beta_rt <- array(rnorm(r * ntrials * V), dim = c(r, ntrials, V))
   alpha_hat <- matrix(rnorm(r * V), nrow = r, ncol = V)
-
-  # Function currently errors on single trial due to dimension drop
-  expect_error(sbhm_project(beta_rt, alpha_hat), "must be an array")
+  amps <- sbhm_project(beta_rt, alpha_hat)
+  expect_equal(dim(amps), c(ntrials, V))
 })
 
 test_that("sbhm_project handles edge case of single voxel", {
@@ -162,4 +160,18 @@ test_that("sbhm_project produces zero amplitudes when orthogonal", {
 
   # All amplitudes should be zero (or very close)
   expect_true(all(abs(amps) < 1e-12))
+})
+
+test_that("sbhm_project is finite when alpha_hat has zero columns", {
+  set.seed(902)
+  r <- 3
+  ntrials <- 6
+  V <- 2
+
+  beta_rt <- array(rnorm(r * ntrials * V), dim = c(r, ntrials, V))
+  alpha_hat <- matrix(0, nrow = r, ncol = V)
+
+  amps <- sbhm_project(beta_rt, alpha_hat)
+  expect_true(all(is.finite(amps)))
+  expect_true(all(amps == 0))
 })
