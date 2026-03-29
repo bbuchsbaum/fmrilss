@@ -11,7 +11,7 @@
 if (requireNamespace("pkgload", quietly = TRUE)) {
   pkgload::load_all(".", quiet = TRUE)
 }
-source("bench/stglmnet_vs_fmrilss_harness.R")
+source("bench/benchmark_harness.R")
 has_hrfals <- requireNamespace("hrfals", quietly = TRUE)
 want_hrfals <- identical(Sys.getenv("INCLUDE_HRFALS", "0"), "1")
 use_hrfals <- isTRUE(want_hrfals && has_hrfals)
@@ -79,6 +79,8 @@ base_args <- list(
   n_runs = 2,
   n_trials = 36,
   n_vox = 12,
+  n_conditions = 3,
+  condition_effect = 1.0,
   cv_folds = 4,
   include_oasis = TRUE,
   oasis_grid = expand.grid(
@@ -123,7 +125,7 @@ base_args <- list(
   trace = FALSE
 )
 
-suite <- benchmark_stglmnet_vs_fmrilss_suite(
+suite <- benchmark_lss_methods_suite(
   scenarios = scenarios,
   base_args = base_args,
   base_seed = 20260310L,

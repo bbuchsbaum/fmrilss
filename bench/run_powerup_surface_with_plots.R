@@ -7,7 +7,7 @@ suppressPackageStartupMessages({
 if (requireNamespace("pkgload", quietly = TRUE)) {
   pkgload::load_all(".", quiet = TRUE)
 }
-source("bench/stglmnet_vs_fmrilss_harness.R")
+source("bench/benchmark_harness.R")
 has_hrfals <- requireNamespace("hrfals", quietly = TRUE)
 want_hrfals <- identical(Sys.getenv("INCLUDE_HRFALS", "0"), "1")
 use_hrfals <- isTRUE(want_hrfals && has_hrfals)
@@ -19,11 +19,24 @@ if (!has_hrfals) {
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
+lookup_pretty <- function(x, map) {
+  out <- unname(map[as.character(x)])
+  miss <- is.na(out) | !nzchar(out)
+  out[miss] <- as.character(x)[miss]
+  out
+}
+
 out_dir <- file.path("bench", "results")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 stamp <- format(Sys.time(), "%Y%m%d-%H%M%S")
 power_reps <- as.integer(Sys.getenv("POWER_REPS", "40"))
 surface_reps <- as.integer(Sys.getenv("SURFACE_REPS", "20"))
+run_profile <- if (power_reps <= 2L && surface_reps <= 2L) "smoke" else "full"
+run_profile_label <- if (run_profile == "smoke") {
+  sprintf("Smoke run only (%d power reps; %d HRF-surface reps). Use for plumbing, not conclusions.", power_reps, surface_reps)
+} else {
+  sprintf("Full benchmark run (%d power reps; %d HRF-surface reps). Suitable for recommendation summaries.", power_reps, surface_reps)
+}
 
 # ---------- Shared helpers ----------------------------------------------------
 
@@ -90,6 +103,228 @@ add_orientation_fields <- function(df) {
   df$amp_regime <- sub(".*__(amp_[^_]+)$", "\\1", df$scenario)
   df$cell <- sub("^(h[0-9]+_[^_]+_[^_]+)__.*$", "\\1", df$scenario)
   df
+}
+
+add_orientation_labels <- function(df) {
+  if (!is.data.frame(df) || nrow(df) < 1L) return(df)
+
+  hrf_map <- c(
+    nominal = "Well-specified HRF",
+    lag2_widen1p5 = "Misspecified HRF (+2 s lag, +1.5 s wider)"
+  )
+  ar_map <- c(
+    ar_iid = "Independent noise",
+    ar_mod = "Moderate AR(1) noise",
+    ar_high = "High AR(1) noise"
+  )
+  isi_map <- c(
+    isi_dense = "Dense timing",
+    isi_mid = "Intermediate timing",
+    isi_sparse = "Sparse timing"
+  )
+  amp_map <- c(
+    amp_none = "No amplitude variability",
+    amp_mod = "Moderate amplitude variability",
+    amp_high = "High amplitude variability"
+  )
+
+  df$hrf_label <- lookup_pretty(df$hrf_regime, hrf_map)
+  df$ar_label <- lookup_pretty(df$ar_regime, ar_map)
+  df$isi_label <- lookup_pretty(df$isi_regime, isi_map)
+  df$amp_label <- lookup_pretty(df$amp_regime, amp_map)
+  df$cell_label <- paste(df$ar_label, df$isi_label, df$amp_label, sep = " / ")
+  df$scenario_label <- paste(df$cell_label, "|", df$hrf_label)
+  df
+}
+
+add_surface_labels <- function(df) {
+  if (!is.data.frame(df) || nrow(df) < 1L) return(df)
+
+  regime_map <- c(
+    easy = "Easy setting",
+    medium = "Moderate setting",
+    hard = "Hard setting"
+  )
+
+  df$regime_label <- lookup_pretty(df$regime, regime_map)
+  df$widen_label <- paste0("HRF widen = ", df$widen, " s")
+  df$lag_label <- paste0("HRF lag = ", df$lag, " s")
+  df$mismatch_band <- ifelse(
+    df$lag == 0 & df$widen == 0,
+    "Well-specified",
+    ifelse(df$lag + df$widen <= 2, "Moderate mismatch", "Strong mismatch")
+  )
+  df
+}
+
+top_recommendation_rows <- function(df, group_cols) {
+  if (!is.data.frame(df) || nrow(df) < 1L) return(data.frame())
+  key <- interaction(df[, group_cols, drop = FALSE], drop = TRUE, lex.order = TRUE)
+  out <- lapply(split(df, key), function(d) {
+    d <- d[order(-d$n, -d$mean_margin, -d$mean_score), , drop = FALSE]
+    d[1L, , drop = FALSE]
+  })
+  out <- do.call(rbind, out)
+  rownames(out) <- NULL
+  out
+}
+
+write_benchmark_brief <- function(
+  path,
+  run_profile_label,
+  power_recommend,
+  surface_recommend,
+  recommendation_summary,
+  st_variant_summary = data.frame()
+) {
+  lines <- c(
+    "# Benchmark Brief",
+    "",
+    run_profile_label,
+    "",
+    "## Terms",
+    "- Well-specified HRF: the estimator uses the same HRF family that generated the signal.",
+    "- Misspecified HRF (+2 s lag, +1.5 s wider): the true signal is slower and delayed relative to the estimation basis.",
+    "- Dense/intermediate/sparse timing: events are packed closely together, moderately spaced, or well separated in time.",
+    "- Balanced recommendation: winner from the benchmark's combined score over recovery, bias, stability, classification, and speed.",
+    ""
+  )
+
+  power_bal <- power_recommend[power_recommend$profile == "balanced", , drop = FALSE]
+  if (nrow(power_bal) > 0L) {
+    power_counts <- aggregate(
+      cbind(n = score_margin, mean_margin = score_margin, mean_score = overall_score) ~ hrf_label + recommended_pretty,
+      data = transform(power_bal, n = 1),
+      FUN = function(x) c(sum = length(x), mean = mean(x, na.rm = TRUE))
+    )
+    power_counts <- data.frame(
+      hrf_label = power_counts$hrf_label,
+      recommended_pretty = power_counts$recommended_pretty,
+      n = power_counts$n[, "sum"],
+      mean_margin = power_counts$mean_margin[, "mean"],
+      mean_score = power_counts$mean_score[, "mean"],
+      stringsAsFactors = FALSE
+    )
+    power_top <- top_recommendation_rows(power_counts, "hrf_label")
+
+    lines <- c(lines, "## Power-Up Recommendations")
+    for (i in seq_len(nrow(power_top))) {
+      lines <- c(
+        lines,
+        sprintf(
+          "- %s: %s is the most common balanced recommendation in %d scenarios, with mean winner margin %.3f.",
+          power_top$hrf_label[i],
+          power_top$recommended_pretty[i],
+          power_top$n[i],
+          power_top$mean_margin[i]
+        )
+      )
+    }
+    lines <- c(lines, "")
+  }
+
+  surface_bal <- surface_recommend[surface_recommend$profile == "balanced", , drop = FALSE]
+  if (nrow(surface_bal) > 0L) {
+    surface_counts <- aggregate(
+      cbind(n = score_margin, mean_margin = score_margin, mean_score = overall_score) ~ regime_label + mismatch_band + recommended_pretty,
+      data = transform(surface_bal, n = 1),
+      FUN = function(x) c(sum = length(x), mean = mean(x, na.rm = TRUE))
+    )
+    surface_counts <- data.frame(
+      regime_label = surface_counts$regime_label,
+      mismatch_band = surface_counts$mismatch_band,
+      recommended_pretty = surface_counts$recommended_pretty,
+      n = surface_counts$n[, "sum"],
+      mean_margin = surface_counts$mean_margin[, "mean"],
+      mean_score = surface_counts$mean_score[, "mean"],
+      stringsAsFactors = FALSE
+    )
+    surface_top <- top_recommendation_rows(surface_counts, c("regime_label", "mismatch_band"))
+
+    lines <- c(lines, "## HRF-Mismatch Guidance")
+    for (i in seq_len(nrow(surface_top))) {
+      lines <- c(
+        lines,
+        sprintf(
+          "- %s, %s: %s is the most common recommendation in %d cells, with mean winner margin %.3f.",
+          surface_top$regime_label[i],
+          surface_top$mismatch_band[i],
+          surface_top$recommended_pretty[i],
+          surface_top$n[i],
+          surface_top$mean_margin[i]
+        )
+      )
+    }
+    lines <- c(lines, "")
+  }
+
+  if (is.data.frame(recommendation_summary) && nrow(recommendation_summary) > 0L) {
+    rs <- recommendation_summary[recommendation_summary$profile == "balanced", , drop = FALSE]
+    rs <- rs[order(-rs$n_scenarios, -rs$mean_score), , drop = FALSE]
+    if (nrow(rs) > 0L) {
+      lines <- c(lines, "## Overall Balanced Ranking")
+      for (i in seq_len(min(5L, nrow(rs)))) {
+        lines <- c(
+          lines,
+          sprintf(
+            "- %s: selected in %d scenarios; mean score %.3f; mean elapsed %.3f s.",
+            rs$method[i],
+            rs$n_scenarios[i],
+            rs$mean_score[i],
+            rs$mean_elapsed_sec[i]
+          )
+        )
+      }
+      lines <- c(lines, "")
+    }
+  }
+
+  if (is.data.frame(st_variant_summary) && nrow(st_variant_summary) > 0L) {
+    lines <- c(lines, "## Internal stglmnet Variants")
+    for (i in seq_len(min(5L, nrow(st_variant_summary)))) {
+      lines <- c(
+        lines,
+        sprintf(
+          "- %s: best internal stglmnet variant in %d scenarios; mean correlation %.3f.",
+          st_variant_summary$method_pretty[i],
+          st_variant_summary$n_scenarios[i],
+          st_variant_summary$mean_cor[i]
+        )
+      )
+    }
+    lines <- c(lines, "")
+  }
+
+  writeLines(lines, con = path, useBytes = TRUE)
+}
+
+summarize_best_st_variant <- function(df, pretty_methods) {
+  if (!is.data.frame(df) || nrow(df) < 1L) return(data.frame())
+  st_df <- df[grepl("^st_", df$method), , drop = FALSE]
+  if (nrow(st_df) < 1L) return(data.frame())
+
+  split_by_scenario <- split(st_df, st_df$scenario)
+  winners <- lapply(split_by_scenario, function(d) {
+    d <- d[order(-d$mean_cor, d$mean_rmse, d$mean_elapsed_sec, na.last = TRUE), , drop = FALSE]
+    d[1L, , drop = FALSE]
+  })
+  winners <- do.call(rbind, winners)
+  rownames(winners) <- NULL
+  winners$method_pretty <- lookup_pretty(winners$method, pretty_methods)
+
+  agg <- aggregate(
+    cbind(n_scenarios = mean_cor, mean_cor = mean_cor, mean_rmse = mean_rmse) ~ method_pretty,
+    data = transform(winners, n_scenarios = 1),
+    FUN = function(x) c(sum = length(x), mean = mean(x, na.rm = TRUE))
+  )
+  out <- data.frame(
+    method_pretty = agg$method_pretty,
+    n_scenarios = agg$n_scenarios[, "sum"],
+    mean_cor = agg$mean_cor[, "mean"],
+    mean_rmse = agg$mean_rmse[, "mean"],
+    stringsAsFactors = FALSE
+  )
+  out[order(-out$n_scenarios, -out$mean_cor), , drop = FALSE]
 }
 
 condense_oasis_per_rep <- function(metrics_long) {
@@ -164,6 +399,7 @@ power_base_args <- list(
   n_runs = 2,
   n_trials = 36,
   n_vox = 12,
+  n_conditions = 3,
   cv_folds = 4,
   include_oasis = TRUE,
   oasis_grid = expand.grid(
@@ -204,7 +440,7 @@ power_base_args <- list(
   trace = FALSE
 )
 
-power_suite <- benchmark_stglmnet_vs_fmrilss_suite(
+power_suite <- benchmark_lss_methods_suite(
   scenarios = power_scenarios,
   base_args = power_base_args,
   base_seed = 20260401L,
@@ -215,18 +451,32 @@ power_long <- power_suite$metrics_long
 power_long <- add_orientation_fields(power_long)
 power_condensed_long <- condense_oasis_per_rep(power_long)
 power_condensed_long <- add_orientation_fields(power_condensed_long)
+primary_st_name <- unique(power_suite$pairwise_summary$primary_st)
+primary_st_name <- primary_st_name[is.finite(nchar(primary_st_name))]
+if (length(primary_st_name) < 1L) {
+  primary_st_name <- unique(vapply(power_suite$results, function(x) x$primary_st, character(1)))
+}
+primary_st_name <- primary_st_name[1L]
 
 # Summaries
 power_summary <- .bmk_suite_method_summary(power_long)
 power_condensed_summary <- .bmk_suite_method_summary(power_condensed_long)
 
-power_pairwise <- do.call(rbind, list(
-  pairwise_ci(power_condensed_long, "st_default", "fmrilss_lss"),
-  pairwise_ci(power_condensed_long, "st_default", "fmrilss_oasis_best"),
-  pairwise_ci(power_condensed_long, "st_default", "fmrilss_sbhm")
+power_pairwise <- .bmk_bind_rows(list(
+  pairwise_ci(power_condensed_long, primary_st_name, "fmrilss_lss"),
+  pairwise_ci(power_condensed_long, primary_st_name, "fmrilss_oasis_best"),
+  pairwise_ci(power_condensed_long, primary_st_name, "fmrilss_sbhm")
 ))
-power_pairwise <- add_orientation_fields(power_pairwise)
-power_pairwise$comparison <- paste0(power_pairwise$method_a, " - ", power_pairwise$method_b)
+if (is.null(power_pairwise)) {
+  power_pairwise <- data.frame()
+} else {
+  power_pairwise <- add_orientation_fields(power_pairwise)
+  power_pairwise$comparison <- paste0(power_pairwise$method_a, " - ", power_pairwise$method_b)
+}
+power_recommend <- power_suite$recommendations
+power_recommend <- power_recommend[power_recommend$profile == "balanced", , drop = FALSE]
+power_recommend <- add_orientation_fields(power_recommend)
+power_recommend <- add_orientation_labels(power_recommend)
 
 # Write power-up outputs
 write.csv(power_long, file.path(out_dir, paste0("powerup-18x40-metrics-long-", stamp, ".csv")), row.names = FALSE)
@@ -234,6 +484,8 @@ write.csv(power_condensed_long, file.path(out_dir, paste0("powerup-18x40-metrics
 write.csv(power_summary, file.path(out_dir, paste0("powerup-18x40-summary-", stamp, ".csv")), row.names = FALSE)
 write.csv(power_condensed_summary, file.path(out_dir, paste0("powerup-18x40-condensed-summary-", stamp, ".csv")), row.names = FALSE)
 write.csv(power_pairwise, file.path(out_dir, paste0("powerup-18x40-pairwise-ci-", stamp, ".csv")), row.names = FALSE)
+write.csv(power_suite$recommendations, file.path(out_dir, paste0("powerup-18x40-recommendations-", stamp, ".csv")), row.names = FALSE)
+write.csv(power_suite$recommendation_summary, file.path(out_dir, paste0("powerup-18x40-recommendation-summary-", stamp, ".csv")), row.names = FALSE)
 
 # ---------- 2) HRF mismatch surface ------------------------------------------
 
@@ -290,6 +542,7 @@ surface_base_args <- list(
   n_runs = 2,
   n_trials = 36,
   n_vox = 12,
+  n_conditions = 3,
   cv_folds = 4,
   include_oasis = TRUE,
   oasis_grid = data.frame(
@@ -329,7 +582,7 @@ surface_base_args <- list(
   trace = FALSE
 )
 
-surface_suite <- benchmark_stglmnet_vs_fmrilss_suite(
+surface_suite <- benchmark_lss_methods_suite(
   scenarios = surface_scenarios,
   base_args = surface_base_args,
   base_seed = 20260501L,
@@ -345,17 +598,32 @@ surface_summary <- .bmk_suite_method_summary(surface_long)
 surface_summary$regime <- sub("__.*$", "", surface_summary$scenario)
 surface_summary$lag <- as.numeric(sub(".*__lag([0-9.]+)__widen.*$", "\\1", surface_summary$scenario))
 surface_summary$widen <- as.numeric(sub(".*__widen([0-9.]+)$", "\\1", surface_summary$scenario))
+surface_summary <- add_surface_labels(surface_summary)
+surface_recommend <- surface_suite$recommendations
+surface_recommend <- surface_recommend[surface_recommend$profile == "balanced", , drop = FALSE]
+surface_recommend$regime <- sub("__.*$", "", surface_recommend$scenario)
+surface_recommend$lag <- surface_recommend$true_hrf_lag_sec
+surface_recommend$widen <- surface_recommend$true_hrf_widen_sec
+surface_recommend <- add_surface_labels(surface_recommend)
 
 write.csv(surface_long, file.path(out_dir, paste0("hrf-surface-metrics-long-", stamp, ".csv")), row.names = FALSE)
 write.csv(surface_summary, file.path(out_dir, paste0("hrf-surface-summary-", stamp, ".csv")), row.names = FALSE)
+write.csv(surface_suite$recommendations, file.path(out_dir, paste0("hrf-surface-recommendations-", stamp, ".csv")), row.names = FALSE)
+write.csv(surface_suite$recommendation_summary, file.path(out_dir, paste0("hrf-surface-recommendation-summary-", stamp, ".csv")), row.names = FALSE)
 
 # ---------- 3) Plots ----------------------------------------------------------
 
 pretty_methods <- c(
-  st_default = "stglmnet",
+  st_pool_compcv_wnever = "stglmnet: pooled CV (no overlap weighting)",
+  st_pool_compcv = "stglmnet: pooled CV",
+  st_pool_joint_mult = "stglmnet: joint multiplier",
+  st_pool_joint_mult_1se = "stglmnet: joint multiplier (1SE)",
+  st_pool_compcv_wB = "stglmnet: pooled CV + B weighting",
+  st_pool_mean = "stglmnet: mean pooled",
   fmrilss_lss = "LSS",
   fmrilss_sbhm = "SBHM",
   fmrilss_oasis_best = "OASIS (best)",
+  `fmrilss_oasis[K=1|fractional|x=0.05|b=0.05]` = "OASIS",
   "hrfals_fastlss[r]" = "hrfals fastLSS (R)",
   "hrfals_fastlss[cpp]" = "hrfals fastLSS (C++)",
   "hrfals_fit[ls_svd_only]" = "hrfals fit (ls_svd_only)",
@@ -363,87 +631,149 @@ pretty_methods <- c(
   "hrfals_fit[cf_als]" = "hrfals fit (cf_als)",
   `fmrilss_oasis[fractional|x=0.05|b=0.05]` = "OASIS (frac 0.05/0.05)"
 )
+pretty_methods[primary_st_name] <- "stglmnet (default)"
+
+power_display_methods <- intersect(
+  c(primary_st_name, "fmrilss_lss", "fmrilss_oasis_best", "fmrilss_sbhm"),
+  unique(power_condensed_summary$method)
+)
+surface_display_methods <- intersect(
+  c(primary_st_name, "fmrilss_lss", "fmrilss_oasis[K=1|fractional|x=0.05|b=0.05]", "fmrilss_sbhm"),
+  unique(surface_summary$method)
+)
+
+recommendation_brief <- file.path(out_dir, paste0("benchmark-brief-", stamp, ".md"))
+power_st_variant_summary <- summarize_best_st_variant(power_condensed_summary, pretty_methods)
+surface_st_variant_summary <- summarize_best_st_variant(surface_summary, pretty_methods)
 
 # Power-up PDF
 power_pdf <- file.path(out_dir, paste0("powerup-18x40-plots-", stamp, ".pdf"))
 pdf(power_pdf, width = 13, height = 8)
 
-pp <- power_condensed_summary
+pp <- power_condensed_summary[power_condensed_summary$method %in% power_display_methods, , drop = FALSE]
 pp <- add_orientation_fields(pp)
-pp$method_pretty <- pretty_methods[pp$method] %||% pp$method
-pp$cell_pretty <- paste(pp$ar_regime, pp$isi_regime, pp$amp_regime, sep = " | ")
+pp <- add_orientation_labels(pp)
+pp$method_pretty <- lookup_pretty(pp$method, pretty_methods)
 
-p1 <- ggplot(pp, aes(x = method_pretty, y = reorder(cell_pretty, cell_pretty), fill = mean_cor)) +
-  geom_tile(color = "white", linewidth = 0.2) +
-  facet_wrap(~hrf_regime, ncol = 1, scales = "free_y") +
-  scale_fill_gradient(low = "#f7fbff", high = "#08306b") +
+power_recommend$recommended_pretty <- lookup_pretty(power_recommend$recommended_method, pretty_methods)
+cell_levels <- unique(power_recommend$cell_label)
+power_recommend$cell_label <- factor(power_recommend$cell_label, levels = rev(cell_levels))
+power_recommend$hrf_label <- factor(power_recommend$hrf_label, levels = unique(power_recommend$hrf_label))
+
+p1 <- ggplot(power_recommend, aes(x = score_margin, y = cell_label, color = recommended_pretty)) +
+  geom_segment(aes(x = 0, xend = score_margin, y = cell_label, yend = cell_label), alpha = 0.45, linewidth = 0.8) +
+  geom_point(size = 3.2) +
+  facet_wrap(~ hrf_label, ncol = 1, scales = "free_y") +
   labs(
-    title = "Power-Up (18 scenarios, n_reps=40): Mean Correlation",
-    x = NULL,
-    y = "Scenario Cell (AR | ISI | Amplitude)",
-    fill = "Mean Cor"
+    title = "How decisive is the recommendation?",
+    subtitle = run_profile_label,
+    x = "Balanced-score margin over the runner-up",
+    y = NULL,
+    color = "Recommended method"
   ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    axis.text.x = element_text(angle = 30, hjust = 1),
-    panel.grid = element_blank(),
-    strip.text = element_text(face = "bold")
-  )
+  bmk_plot_theme(base_size = 12)
 print(p1)
 
-pw <- power_pairwise
-pw$method_b_pretty <- pretty_methods[pw$method_b] %||% pw$method_b
-pw$cell_pretty <- paste(pw$ar_regime, pw$isi_regime, pw$amp_regime, sep = " | ")
-
-p2 <- ggplot(pw, aes(x = delta_cor_mean, y = reorder(cell_pretty, cell_pretty), color = method_b_pretty)) +
-  geom_vline(xintercept = 0, linetype = 2, color = "gray40") +
-  geom_errorbar(
-    aes(xmin = delta_cor_ci_lo, xmax = delta_cor_ci_hi),
-    width = 0.15,
-    orientation = "y",
-    alpha = 0.8
-  ) +
-  geom_point(size = 2.0) +
-  facet_wrap(~hrf_regime, ncol = 1, scales = "free_y") +
-  scale_color_brewer(palette = "Dark2") +
+power_counts <- aggregate(
+  list(n = power_recommend$scenario),
+  by = list(hrf_label = power_recommend$hrf_label, recommended_pretty = power_recommend$recommended_pretty),
+  FUN = length
+)
+p2 <- ggplot(power_counts, aes(x = n, y = recommended_pretty, fill = hrf_label)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.6) +
   labs(
-    title = "Pairwise Delta Correlation with 95% Empirical CI",
-    subtitle = "Delta = stglmnet - comparator",
-    x = "Delta Correlation",
-    y = "Scenario Cell",
-    color = "Comparator"
+    title = "Which method gets picked most often?",
+    subtitle = "Counts over the 18 power-up scenarios",
+    x = "Number of scenarios",
+    y = NULL,
+    fill = NULL
   ) +
-  theme_minimal(base_size = 12) +
-  theme(strip.text = element_text(face = "bold"))
+  bmk_plot_theme(base_size = 12)
 print(p2)
 
-pm <- aggregate(cbind(mean_sign_acc, mean_abs_slope_bias, mean_abs_intercept_bias) ~ hrf_regime + method_pretty, data = pp, FUN = mean, na.rm = TRUE)
+if (nrow(power_st_variant_summary) > 0L) {
+  p2b <- ggplot(power_st_variant_summary, aes(x = n_scenarios, y = reorder(method_pretty, n_scenarios), fill = method_pretty)) +
+    geom_col(width = 0.65, show.legend = FALSE) +
+    labs(
+      title = "Which internal stglmnet variant wins most often?",
+      subtitle = "Best internal variant by scenario, using mean correlation within the stglmnet family.",
+      x = "Number of scenarios won",
+      y = NULL
+    ) +
+    bmk_plot_theme(base_size = 12)
+  print(p2b)
+}
 
-p3 <- ggplot(pm, aes(x = method_pretty, y = mean_sign_acc, fill = hrf_regime)) +
-  geom_col(position = position_dodge(width = 0.7), width = 0.65) +
-  scale_fill_brewer(palette = "Set2") +
-  labs(
-    title = "Diagnostic Metric: Sign Accuracy",
-    x = NULL,
-    y = "Mean Sign Accuracy",
-    fill = "HRF Regime"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(axis.text.x = element_text(angle = 25, hjust = 1))
-print(p3)
+pw <- power_pairwise
+if (nrow(pw) > 0L) {
+  pw <- add_orientation_labels(pw)
+  pw$method_b_pretty <- lookup_pretty(pw$method_b, pretty_methods)
+  pw$cell_label <- factor(pw$cell_label, levels = rev(cell_levels))
 
-p4 <- ggplot(pm, aes(x = method_pretty, y = mean_abs_slope_bias, fill = hrf_regime)) +
-  geom_col(position = position_dodge(width = 0.7), width = 0.65) +
-  scale_fill_brewer(palette = "Set2") +
+  p3 <- bmk_plot_pairwise_delta(
+    data = pw,
+    x = "delta_cor_mean",
+    y = "cell_label",
+    color = "method_b_pretty",
+    facet_rows = "hrf_label",
+    xmin = "delta_cor_ci_lo",
+    xmax = "delta_cor_ci_hi",
+    title = "stglmnet versus the other contenders",
+    subtitle = "Positive values favor stglmnet on mean correlation",
+    x_lab = "Delta correlation",
+    y_lab = NULL,
+    base_size = 12
+  )
+  print(p3)
+}
+
+pm <- aggregate(
+  cbind(mean_cor, mean_sign_acc, mean_elapsed_sec, success_rate) ~ hrf_label + method_pretty,
+  data = pp,
+  FUN = mean,
+  na.rm = TRUE
+)
+
+p4 <- ggplot(pm, aes(x = mean_cor, y = method_pretty, color = method_pretty)) +
+  geom_segment(aes(x = 0, xend = mean_cor, y = method_pretty, yend = method_pretty), alpha = 0.35, linewidth = 0.8) +
+  geom_point(size = 3.2) +
+  facet_wrap(~ hrf_label, ncol = 1) +
   labs(
-    title = "Diagnostic Metric: Absolute Slope Bias (lower is better)",
-    x = NULL,
-    y = "Mean |Slope Bias|",
-    fill = "HRF Regime"
+    title = "Average recovery by method",
+    subtitle = "Higher is better. This is the simplest read on which estimators recover trialwise betas most faithfully.",
+    x = "Mean correlation with truth",
+    y = NULL,
+    color = "Method"
   ) +
-  theme_minimal(base_size = 12) +
-  theme(axis.text.x = element_text(angle = 25, hjust = 1))
+  bmk_plot_theme(base_size = 12)
 print(p4)
+
+p5 <- ggplot(pm, aes(x = mean_elapsed_sec, y = mean_cor, color = method_pretty, label = method_pretty)) +
+  geom_point(size = 3.2) +
+  geom_text(check_overlap = TRUE, nudge_x = max(pm$mean_elapsed_sec, na.rm = TRUE) * 0.02, show.legend = FALSE) +
+  facet_wrap(~ hrf_label) +
+  labs(
+    title = "Recovery versus compute time",
+    subtitle = "Upper-left is better: more recovery for less runtime.",
+    x = "Mean elapsed time (sec)",
+    y = "Mean correlation",
+    color = "Method"
+  ) +
+  bmk_plot_theme(base_size = 12)
+print(p5)
+
+p6 <- ggplot(pm, aes(x = method_pretty, y = mean_sign_acc, fill = hrf_label)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.65) +
+  coord_flip() +
+  labs(
+    title = "Sign accuracy check",
+    subtitle = "Higher is better. This catches whether methods preserve effect direction reliably.",
+    x = NULL,
+    y = "Mean sign accuracy",
+    fill = NULL
+  ) +
+  bmk_plot_theme(base_size = 12)
+print(p6)
 
 dev.off()
 
@@ -451,69 +781,97 @@ dev.off()
 surface_pdf <- file.path(out_dir, paste0("hrf-surface-plots-", stamp, ".pdf"))
 pdf(surface_pdf, width = 13, height = 8)
 
-ss <- surface_summary
-ss$method_pretty <- pretty_methods[ss$method] %||% ss$method
+ss <- surface_summary[surface_summary$method %in% surface_display_methods, , drop = FALSE]
+ss$method_pretty <- lookup_pretty(ss$method, pretty_methods)
+ss$regime_label <- factor(ss$regime_label, levels = c("Easy setting", "Moderate setting", "Hard setting"))
+ss$widen_label <- factor(ss$widen_label, levels = paste0("HRF widen = ", widens, " s"))
 
-p5 <- ggplot(ss, aes(x = factor(lag), y = factor(widen), fill = mean_cor)) +
-  geom_tile(color = "white", linewidth = 0.25) +
-  facet_grid(method_pretty ~ regime) +
-  scale_fill_gradient(low = "#fff5f0", high = "#67000d") +
+p7 <- ggplot(ss, aes(x = lag, y = mean_cor, color = method_pretty, group = method_pretty)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.4) +
+  facet_grid(regime_label ~ widen_label) +
   labs(
-    title = "HRF Surface: Mean Correlation",
-    x = "True HRF Lag (s)",
-    y = "True HRF Widen (s)",
-    fill = "Mean Cor"
+    title = "Recovery as HRF lag mismatch grows",
+    subtitle = run_profile_label,
+    x = "True HRF lag shift (sec)",
+    y = "Mean correlation",
+    color = "Method"
   ) +
-  theme_minimal(base_size = 11) +
-  theme(strip.text = element_text(face = "bold"), panel.grid = element_blank())
-print(p5)
-
-p6 <- ggplot(ss, aes(x = factor(lag), y = factor(widen), fill = mean_sign_acc)) +
-  geom_tile(color = "white", linewidth = 0.25) +
-  facet_grid(method_pretty ~ regime) +
-  scale_fill_gradient(low = "#f7fcf5", high = "#00441b") +
-  labs(
-    title = "HRF Surface: Mean Sign Accuracy",
-    x = "True HRF Lag (s)",
-    y = "True HRF Widen (s)",
-    fill = "Sign Acc"
-  ) +
-  theme_minimal(base_size = 11) +
-  theme(strip.text = element_text(face = "bold"), panel.grid = element_blank())
-print(p6)
-
-p7 <- ggplot(ss, aes(x = factor(lag), y = factor(widen), fill = mean_abs_slope_bias)) +
-  geom_tile(color = "white", linewidth = 0.25) +
-  facet_grid(method_pretty ~ regime) +
-  scale_fill_gradient(low = "#f7f7f7", high = "#252525") +
-  labs(
-    title = "HRF Surface: Mean Absolute Slope Bias (lower is better)",
-    x = "True HRF Lag (s)",
-    y = "True HRF Widen (s)",
-    fill = "|Slope Bias|"
-  ) +
-  theme_minimal(base_size = 11) +
-  theme(strip.text = element_text(face = "bold"), panel.grid = element_blank())
+  bmk_plot_theme(base_size = 11)
 print(p7)
 
-p8 <- ggplot(ss, aes(x = factor(lag), y = factor(widen), fill = mean_rmse)) +
-  geom_tile(color = "white", linewidth = 0.25) +
-  facet_grid(method_pretty ~ regime) +
-  scale_fill_gradient(low = "#ffffe5", high = "#662506") +
+p8 <- ggplot(ss, aes(x = lag, y = mean_sign_acc, color = method_pretty, group = method_pretty)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.4) +
+  facet_grid(regime_label ~ widen_label) +
   labs(
-    title = "HRF Surface: Mean RMSE",
-    x = "True HRF Lag (s)",
-    y = "True HRF Widen (s)",
-    fill = "RMSE"
+    title = "Sign accuracy as HRF lag mismatch grows",
+    subtitle = "Higher is better. This plot is often easier to read than a surface tile map.",
+    x = "True HRF lag shift (sec)",
+    y = "Mean sign accuracy",
+    color = "Method"
   ) +
-  theme_minimal(base_size = 11) +
-  theme(strip.text = element_text(face = "bold"), panel.grid = element_blank())
+  bmk_plot_theme(base_size = 11)
 print(p8)
 
+p9 <- ggplot(ss, aes(x = lag, y = mean_rmse, color = method_pretty, group = method_pretty)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.4) +
+  facet_grid(regime_label ~ widen_label) +
+  labs(
+    title = "RMSE as HRF lag mismatch grows",
+    subtitle = "Lower is better.",
+    x = "True HRF lag shift (sec)",
+    y = "Mean RMSE",
+    color = "Method"
+  ) +
+  bmk_plot_theme(base_size = 11)
+print(p9)
+
+surface_recommend$recommended_pretty <- lookup_pretty(surface_recommend$recommended_method, pretty_methods)
+surface_recommend$regime_label <- factor(surface_recommend$regime_label, levels = c("Easy setting", "Moderate setting", "Hard setting"))
+surface_recommend$mismatch_band <- factor(surface_recommend$mismatch_band, levels = c("Well-specified", "Moderate mismatch", "Strong mismatch"))
+surface_counts <- aggregate(
+  list(n = surface_recommend$scenario),
+  by = list(
+    regime_label = surface_recommend$regime_label,
+    mismatch_band = surface_recommend$mismatch_band,
+    recommended_pretty = surface_recommend$recommended_pretty
+  ),
+  FUN = length
+)
+
+p10 <- ggplot(surface_counts, aes(x = mismatch_band, y = n, fill = recommended_pretty)) +
+  geom_col(position = "fill") +
+  facet_wrap(~ regime_label) +
+  labs(
+    title = "How recommendations shift as HRF mismatch increases",
+    subtitle = "Each bar shows the share of cells assigned to each method.",
+    x = NULL,
+    y = "Share of cells",
+    fill = "Recommended method"
+  ) +
+  bmk_plot_theme(base_size = 11)
+print(p10)
+
 dev.off()
+
+recommendation_summary_pretty <- power_suite$recommendation_summary
+recommendation_summary_pretty$method <- lookup_pretty(recommendation_summary_pretty$method, pretty_methods)
+write_benchmark_brief(
+  path = recommendation_brief,
+  run_profile_label = run_profile_label,
+  power_recommend = power_recommend,
+  surface_recommend = surface_recommend,
+  recommendation_summary = recommendation_summary_pretty,
+  st_variant_summary = power_st_variant_summary
+)
 
 cat("\nCompleted. Files written:\n")
 cat(" -", normalizePath(power_pdf), "\n")
 cat(" -", normalizePath(surface_pdf), "\n")
 cat(" -", normalizePath(file.path(out_dir, paste0("powerup-18x40-pairwise-ci-", stamp, ".csv"))), "\n")
+cat(" -", normalizePath(file.path(out_dir, paste0("powerup-18x40-recommendations-", stamp, ".csv"))), "\n")
 cat(" -", normalizePath(file.path(out_dir, paste0("hrf-surface-summary-", stamp, ".csv"))), "\n")
+cat(" -", normalizePath(file.path(out_dir, paste0("hrf-surface-recommendations-", stamp, ".csv"))), "\n")
+cat(" -", normalizePath(recommendation_brief), "\n")

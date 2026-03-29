@@ -1,21 +1,23 @@
 #!/usr/bin/env Rscript
 
-# Scenario-driven benchmark runner for stglmnet vs fmrilss.
+# Scenario-driven benchmark runner for LSS methods.
 # Usage:
-#   Rscript bench/run_stglmnet_vs_fmrilss_suite.R
+#   Rscript bench/run_benchmark_suite.R
 
 if (requireNamespace("pkgload", quietly = TRUE)) {
   pkgload::load_all(".", quiet = TRUE)
 }
-source("bench/stglmnet_vs_fmrilss_harness.R")
+source("bench/benchmark_harness.R")
 has_hrfals <- requireNamespace("hrfals", quietly = TRUE)
 if (!has_hrfals) {
   cat("Package 'hrfals' not available: running without hrfals methods.\n")
 }
 
-scenarios <- default_stglmnet_vs_fmrilss_scenarios("wide")
+# The "wide" preset covers SNR, TR, and prewhitening scenario variations
+# in addition to the core noise and ISI regimes.
+scenarios <- default_benchmark_scenarios("wide")
 
-suite <- benchmark_stglmnet_vs_fmrilss_suite(
+suite <- benchmark_lss_methods_suite(
   scenarios = scenarios,
   base_args = list(
     n_reps = 20,
@@ -23,6 +25,7 @@ suite <- benchmark_stglmnet_vs_fmrilss_suite(
     n_runs = 2,
     n_trials = 48,
     n_vox = 16,
+    n_conditions = 3,
     isi = 1.2,
     cv_folds = 5,
     include_oasis = TRUE,

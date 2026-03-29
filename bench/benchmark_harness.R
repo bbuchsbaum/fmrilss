@@ -1,5 +1,5 @@
 # Benchmark harness under active development.
-# Source with: source("bench/stglmnet_vs_fmrilss_harness.R")
+# Source with: source("bench/benchmark_harness.R")
 
 # Utility: light null coalesce.
 .bmk_or <- function(x, y) {
@@ -163,9 +163,10 @@
 
 # Utility: build trial-wise fmri design matrix via fmridesign.
 .bmk_trial_design <- function(events, n_tp, tr, basis = "spmg1", precision = 0.3, return_model = FALSE) {
+  basis_arg <- paste0("\"", gsub("\"", "\\\\\"", as.character(basis)), "\"")
   rhs <- sprintf(
-    "fmridesign::trialwise(basis=%s, add_sum=FALSE, normalize=FALSE)",
-    dQuote(as.character(basis))
+    "fmridesign::trialwise(basis=%s, add_sum=FALSE)",
+    basis_arg
   )
   form <- stats::as.formula(paste("onset ~", rhs))
   sframe <- fmrihrf::sampling_frame(blocklens = as.integer(n_tp), TR = as.numeric(tr))
@@ -549,7 +550,8 @@
   noise_spike_scale = 0,
   noise_spike_shared = FALSE,
   noise_innov_dist = c("normal", "t"),
-  noise_df = 6
+  noise_df = 6,
+  spatial_rho = 0
 ) {
   noise_model <- match.arg(noise_model)
   noise_innov_dist <- match.arg(noise_innov_dist)
@@ -644,6 +646,17 @@
         }
         out[idx, v] <- series
       }
+    }
+  }
+
+  # Apply spatial (cross-voxel) correlation via exponential decay kernel.
+  spatial_rho <- as.numeric(spatial_rho)
+  if (is.finite(spatial_rho) && spatial_rho > 0 && n_vox > 1L) {
+    dmat <- abs(outer(seq_len(n_vox), seq_len(n_vox), "-"))
+    Sigma <- spatial_rho^dmat
+    L <- tryCatch(chol(Sigma), error = function(e) NULL)
+    if (!is.null(L)) {
+      out <- out %*% L
     }
   }
 
@@ -850,8 +863,79 @@
     rmse = sqrt(mean((bh - bt)^2)),
     slope_bias = safe_mean(slopes - 1),
     intercept_bias = safe_mean(intercepts),
-    sign_acc = safe_mean(sign_acc)
+    sign_acc = safe_mean(sign_acc),
+    per_voxel_cor = as.numeric(cors)
   )
+}
+
+# Utility: generate condition-structured betas with discriminable condition means.
+.bmk_sample_beta_conditions <- function(
+  n_trial,
+  n_vox,
+  n_conditions = 3L,
+  condition_effect = 1,
+  beta_dist = "normal",
+  beta_scale = 1,
+  beta_df = 4,
+  beta_lognorm_sdlog = 0.6,
+  beta_sparsity = 0
+) {
+  n_conditions <- max(2L, as.integer(n_conditions))
+  n_trial <- as.integer(n_trial)
+  n_vox <- as.integer(n_vox)
+  condition_labels <- rep(seq_len(n_conditions), length.out = n_trial)
+
+  # Base trial variability
+  beta_base <- .bmk_sample_beta(
+    n_trial = n_trial,
+    n_vox = n_vox,
+    beta_dist = beta_dist,
+    beta_scale = beta_scale,
+    beta_df = beta_df,
+    beta_lognorm_sdlog = beta_lognorm_sdlog,
+    beta_sparsity = beta_sparsity
+  )
+
+  # Add condition-specific spatial patterns (each condition has a unique
+  # voxel mean pattern, scaled by condition_effect)
+  cond_patterns <- matrix(
+    stats::rnorm(n_conditions * n_vox, sd = as.numeric(condition_effect)),
+    nrow = n_conditions,
+    ncol = n_vox
+  )
+  for (j in seq_len(n_trial)) {
+    beta_base[j, ] <- beta_base[j, ] + cond_patterns[condition_labels[j], ]
+  }
+  list(beta = beta_base, condition_labels = condition_labels)
+}
+
+# Utility: leave-one-trial-out correlation-based classifier.
+# For each held-out trial, compute mean pattern per condition from remaining
+# trials, classify to nearest mean (by Pearson correlation), return accuracy.
+.bmk_classif_accuracy <- function(beta_hat, condition_labels) {
+  beta_hat <- as.matrix(beta_hat)
+  n <- nrow(beta_hat)
+  labels <- as.integer(condition_labels)
+  if (n < 2L || length(unique(labels)) < 2L) return(NA_real_)
+  if (length(labels) != n) return(NA_real_)
+
+  correct <- 0L
+  for (i in seq_len(n)) {
+    train_idx <- seq_len(n)[-i]
+    train_labels <- labels[train_idx]
+    conds <- sort(unique(train_labels))
+    means <- vapply(conds, function(c) {
+      colMeans(beta_hat[train_idx[train_labels == c], , drop = FALSE])
+    }, numeric(ncol(beta_hat)))
+    # means is n_vox x n_conditions
+    test_vec <- beta_hat[i, ]
+    sims <- suppressWarnings(stats::cor(test_vec, means))
+    if (any(is.finite(sims))) {
+      pred <- conds[which.max(sims)]
+      if (pred == labels[i]) correct <- correct + 1L
+    }
+  }
+  correct / n
 }
 
 # Utility: summarize per-method benchmark results.
@@ -879,6 +963,8 @@
       mean_sign_acc = mean(d$sign_acc, na.rm = TRUE),
       median_sign_acc = stats::median(d$sign_acc, na.rm = TRUE),
       sd_sign_acc = stats::sd(d$sign_acc, na.rm = TRUE),
+      mean_classif_acc = mean(d$classif_acc, na.rm = TRUE),
+      mean_elapsed_sec = mean(d$elapsed_sec, na.rm = TRUE),
       success_rate = mean(as.logical(d$ok), na.rm = TRUE),
       stringsAsFactors = FALSE
     )
@@ -912,6 +998,8 @@
       mean_sign_acc = mean(d$sign_acc, na.rm = TRUE),
       median_sign_acc = stats::median(d$sign_acc, na.rm = TRUE),
       sd_sign_acc = stats::sd(d$sign_acc, na.rm = TRUE),
+      mean_classif_acc = mean(d$classif_acc, na.rm = TRUE),
+      mean_elapsed_sec = mean(d$elapsed_sec, na.rm = TRUE),
       success_rate = mean(as.logical(d$ok), na.rm = TRUE),
       stringsAsFactors = FALSE
     )
@@ -926,6 +1014,266 @@
   x <- x[is.finite(x)]
   if (length(x) < 1L) return(c(NA_real_, NA_real_))
   as.numeric(stats::quantile(x, probs = probs, names = FALSE, type = 8))
+}
+
+# Utility: flatten nested parameter lists into a single-row metadata record.
+.bmk_flatten_named <- function(x, prefix = NULL) {
+  out <- list()
+  if (is.null(x)) return(out)
+
+  if (is.data.frame(x)) {
+    x <- as.list(x)
+  }
+
+  if (is.list(x) && !inherits(x, c("POSIXct", "POSIXt", "Date"))) {
+    nms <- names(x)
+    if (is.null(nms)) nms <- paste0("v", seq_along(x))
+    for (i in seq_along(x)) {
+      nm <- nms[i]
+      key <- if (is.null(prefix) || !nzchar(prefix)) nm else paste(prefix, nm, sep = ".")
+      out <- c(out, .bmk_flatten_named(x[[i]], prefix = key))
+    }
+    return(out)
+  }
+
+  key <- .bmk_or(prefix, "value")
+  if (length(x) == 1L) {
+    out[[key]] <- if (is.factor(x)) as.character(x) else x
+  } else {
+    out[[key]] <- paste(as.character(x), collapse = ",")
+  }
+  out
+}
+
+# Utility: convert a named list to a one-row data frame.
+.bmk_row_df <- function(x) {
+  if (!length(x)) return(data.frame())
+  out <- lapply(x, function(v) if (is.null(v)) NA else v)
+  as.data.frame(out, stringsAsFactors = FALSE, optional = TRUE)
+}
+
+# Utility: bind data frames with heterogeneous columns by filling missing values.
+.bmk_bind_rows <- function(rows) {
+  rows <- Filter(function(x) is.data.frame(x) && nrow(x) > 0L, rows)
+  if (!length(rows)) return(NULL)
+
+  cols <- unique(unlist(lapply(rows, names), use.names = FALSE))
+  rows <- lapply(rows, function(d) {
+    missing <- setdiff(cols, names(d))
+    if (length(missing)) {
+      for (nm in missing) d[[nm]] <- NA
+    }
+    d <- d[, cols, drop = FALSE]
+    rownames(d) <- NULL
+    d
+  })
+
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
+  out
+}
+
+# Utility: attach flattened scenario metadata to a benchmark table.
+.bmk_attach_scenario_metadata <- function(df, scenario_design, by = "scenario") {
+  if (!is.data.frame(df) || nrow(df) < 1L) return(df)
+  if (!is.data.frame(scenario_design) || nrow(scenario_design) < 1L) return(df)
+  if (!by %in% names(df) || !by %in% names(scenario_design)) return(df)
+
+  keep <- setdiff(names(scenario_design), by)
+  if (!length(keep)) return(df)
+
+  idx <- match(df[[by]], scenario_design[[by]])
+  extra <- scenario_design[idx, keep, drop = FALSE]
+  rownames(extra) <- NULL
+  cbind(df, extra)
+}
+
+# Utility: rescale a metric to [0, 1], with optional inversion.
+.bmk_rescale01 <- function(x, higher_better = TRUE) {
+  x <- as.numeric(x)
+  fin <- is.finite(x)
+  out <- rep(NA_real_, length(x))
+  if (!any(fin)) return(out)
+
+  lo <- min(x[fin], na.rm = TRUE)
+  hi <- max(x[fin], na.rm = TRUE)
+  if (!is.finite(hi - lo) || (hi - lo) <= 0) {
+    out[fin] <- 1
+  } else if (isTRUE(higher_better)) {
+    out[fin] <- (x[fin] - lo) / (hi - lo)
+  } else {
+    out[fin] <- (hi - x[fin]) / (hi - lo)
+  }
+  out
+}
+
+# Utility: recommendation profiles for choosing methods under different priorities.
+.bmk_recommend_profiles <- function() {
+  list(
+    balanced = c(
+      recovery = 0.35,
+      rmse = 0.15,
+      sign = 0.10,
+      bias = 0.15,
+      stability = 0.15,
+      speed = 0.05,
+      consistency = 0.05
+    ),
+    accuracy = c(
+      recovery = 0.45,
+      rmse = 0.20,
+      sign = 0.10,
+      bias = 0.15,
+      stability = 0.05,
+      consistency = 0.05
+    ),
+    stability = c(
+      stability = 0.35,
+      recovery = 0.25,
+      consistency = 0.15,
+      rmse = 0.10,
+      bias = 0.10,
+      speed = 0.05
+    ),
+    speed = c(
+      speed = 0.35,
+      recovery = 0.25,
+      stability = 0.15,
+      rmse = 0.10,
+      bias = 0.10,
+      sign = 0.05
+    ),
+    classification = c(
+      classification = 0.35,
+      recovery = 0.25,
+      rmse = 0.10,
+      stability = 0.10,
+      bias = 0.10,
+      speed = 0.10
+    )
+  )
+}
+
+# Utility: explain why a method was recommended within a scenario.
+.bmk_recommendation_reason <- function(top, runner_up = NULL) {
+  if (is.null(runner_up) || nrow(runner_up) < 1L) {
+    return("Only available method in this scenario.")
+  }
+
+  reasons <- character(0)
+  if (is.finite(top$mean_cor - runner_up$mean_cor) && (top$mean_cor - runner_up$mean_cor) > 0.02) {
+    reasons <- c(reasons, "best recovery")
+  }
+  if (is.finite(runner_up$mean_elapsed_sec) && is.finite(top$mean_elapsed_sec) &&
+      top$mean_elapsed_sec < (0.8 * runner_up$mean_elapsed_sec)) {
+    reasons <- c(reasons, "materially faster")
+  }
+  if (is.finite(top$success_rate - runner_up$success_rate) && (top$success_rate - runner_up$success_rate) > 0.05) {
+    reasons <- c(reasons, "more stable")
+  }
+
+  top_bias <- mean(c(top$mean_abs_slope_bias, top$mean_abs_intercept_bias), na.rm = TRUE)
+  runner_bias <- mean(c(runner_up$mean_abs_slope_bias, runner_up$mean_abs_intercept_bias), na.rm = TRUE)
+  if (is.finite(top_bias) && is.finite(runner_bias) && top_bias < (0.9 * runner_bias)) {
+    reasons <- c(reasons, "lower bias")
+  }
+
+  if (!length(reasons)) {
+    reasons <- "best overall tradeoff"
+  }
+
+  paste(reasons, collapse = ", ")
+}
+
+# Utility: scenario-by-profile method recommendations from suite summaries.
+.bmk_recommend_methods <- function(scenario_method_summary, profiles = .bmk_recommend_profiles()) {
+  if (!is.data.frame(scenario_method_summary) || nrow(scenario_method_summary) < 1L) {
+    return(data.frame())
+  }
+
+  spl <- split(scenario_method_summary, scenario_method_summary$scenario)
+  rows <- unlist(lapply(names(spl), function(sc) {
+    d <- spl[[sc]]
+    d$score_recovery <- .bmk_rescale01(d$mean_cor, higher_better = TRUE)
+    d$score_rmse <- .bmk_rescale01(d$mean_rmse, higher_better = FALSE)
+    d$score_sign <- .bmk_rescale01(d$mean_sign_acc, higher_better = TRUE)
+    d$score_slope_bias <- .bmk_rescale01(d$mean_abs_slope_bias, higher_better = FALSE)
+    d$score_intercept_bias <- .bmk_rescale01(d$mean_abs_intercept_bias, higher_better = FALSE)
+    d$score_bias <- rowMeans(d[, c("score_slope_bias", "score_intercept_bias"), drop = FALSE], na.rm = TRUE)
+    d$score_stability <- .bmk_rescale01(d$success_rate, higher_better = TRUE)
+    d$score_speed <- .bmk_rescale01(d$mean_elapsed_sec, higher_better = FALSE)
+    d$score_consistency <- .bmk_rescale01(d$sd_cor, higher_better = FALSE)
+    d$score_classification <- .bmk_rescale01(d$mean_classif_acc, higher_better = TRUE)
+
+    lapply(names(profiles), function(profile_name) {
+      weights <- profiles[[profile_name]]
+      score_cols <- paste0("score_", names(weights))
+      weight_vals <- as.numeric(weights)
+      score_mat <- as.matrix(d[, score_cols, drop = FALSE])
+
+      overall <- vapply(seq_len(nrow(score_mat)), function(i) {
+        ok <- is.finite(score_mat[i, ]) & is.finite(weight_vals)
+        if (!any(ok)) return(NA_real_)
+        sum(score_mat[i, ok] * weight_vals[ok]) / sum(weight_vals[ok])
+      }, numeric(1))
+
+      d$overall_score <- overall
+      ord <- order(-d$overall_score, -d$mean_cor, d$mean_rmse, d$mean_elapsed_sec, na.last = TRUE)
+      top <- d[ord[1L], , drop = FALSE]
+      runner_up <- if (nrow(d) > 1L) d[ord[2L], , drop = FALSE] else NULL
+      score_margin <- if (!is.null(runner_up) && nrow(runner_up) > 0L) {
+        top$overall_score - runner_up$overall_score
+      } else {
+        NA_real_
+      }
+
+      data.frame(
+        scenario = sc,
+        profile = profile_name,
+        recommended_method = as.character(top$method[1]),
+        runner_up_method = if (!is.null(runner_up) && nrow(runner_up) > 0L) as.character(runner_up$method[1]) else NA_character_,
+        overall_score = as.numeric(top$overall_score[1]),
+        runner_up_score = if (!is.null(runner_up) && nrow(runner_up) > 0L) as.numeric(runner_up$overall_score[1]) else NA_real_,
+        score_margin = as.numeric(score_margin[1]),
+        mean_cor = as.numeric(top$mean_cor[1]),
+        mean_rmse = as.numeric(top$mean_rmse[1]),
+        mean_sign_acc = as.numeric(top$mean_sign_acc[1]),
+        mean_elapsed_sec = as.numeric(top$mean_elapsed_sec[1]),
+        success_rate = as.numeric(top$success_rate[1]),
+        reason = .bmk_recommendation_reason(top, runner_up),
+        stringsAsFactors = FALSE
+      )
+    })
+  }), recursive = FALSE)
+
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
+  out
+}
+
+# Utility: aggregate recommendation winners across profiles.
+.bmk_recommendation_summary <- function(recommendations) {
+  if (!is.data.frame(recommendations) || nrow(recommendations) < 1L) {
+    return(data.frame())
+  }
+
+  grp <- split(recommendations, interaction(recommendations$profile, recommendations$recommended_method, drop = TRUE))
+  out <- do.call(rbind, lapply(grp, function(d) {
+    data.frame(
+      profile = as.character(d$profile[1]),
+      method = as.character(d$recommended_method[1]),
+      n_scenarios = nrow(d),
+      mean_score = mean(d$overall_score, na.rm = TRUE),
+      mean_margin = mean(d$score_margin, na.rm = TRUE),
+      mean_cor = mean(d$mean_cor, na.rm = TRUE),
+      mean_rmse = mean(d$mean_rmse, na.rm = TRUE),
+      mean_elapsed_sec = mean(d$mean_elapsed_sec, na.rm = TRUE),
+      success_rate = mean(d$success_rate, na.rm = TRUE),
+      stringsAsFactors = FALSE
+    )
+  }))
+  rownames(out) <- NULL
+  out[order(out$profile, out$n_scenarios, out$mean_score, decreasing = TRUE), , drop = FALSE]
 }
 
 # Utility: resolve lss() from a loaded development session first.
@@ -950,23 +1298,9 @@
   stop("Could not find sbhm_build(). Load or install 'fmrilss' first.", call. = FALSE)
 }
 
-# Utility: default stglmnet benchmark method library, synchronized with stglmnet
-# internals when available.
+# Utility: default stglmnet benchmark method library for the internal fmrilss
+# backend.
 .bmk_default_st_configs <- function(alpha, lambda, overlap_adaptive = TRUE) {
-  if (requireNamespace("stglmnet", quietly = TRUE)) {
-    ns <- asNamespace("stglmnet")
-    if (exists(".st_default_st_configs", envir = ns, inherits = FALSE)) {
-      fn <- get(".st_default_st_configs", envir = ns)
-      cfg <- tryCatch(
-        fn(alpha = alpha, lambda = lambda, overlap_adaptive = overlap_adaptive),
-        error = function(e) NULL
-      )
-      if (is.list(cfg) && length(cfg) > 0L) {
-        return(cfg)
-      }
-    }
-  }
-
   st_mult <- if (isTRUE(overlap_adaptive)) "multiplicative" else "none"
   list(
     st_pool_compcv_wnever = list(
@@ -1008,6 +1342,20 @@
       pool_scale_by_overlap = TRUE,
       alpha = alpha,
       lambda = lambda,
+      standardize = FALSE,
+      intercept = FALSE
+    ),
+    st_pool_joint_mult_1se = list(
+      overlap_strategy = st_mult,
+      overlap_exponent = 2,
+      overlap_strength = 1,
+      pool_to_mean = TRUE,
+      pool_strength = 1.2,
+      pool_mean_penalty = 0.2,
+      pool_scale_by_overlap = TRUE,
+      alpha = alpha,
+      lambda = lambda,
+      cv_select = "1se",
       standardize = FALSE,
       intercept = FALSE
     ),
@@ -1152,7 +1500,7 @@
 }
 
 # Preset scenario collections for quick and wide sweeps.
-default_stglmnet_vs_fmrilss_scenarios <- function(kind = c("quick", "wide")) {
+default_benchmark_scenarios <- function(kind = c("quick", "wide")) {
   kind <- match.arg(kind)
 
   quick <- list(
@@ -1167,6 +1515,12 @@ default_stglmnet_vs_fmrilss_scenarios <- function(kind = c("quick", "wide")) {
   c(
     quick,
     list(
+      ar1_prewhitened = list(
+        name = "ar1_prewhitened",
+        noise_model = "ar1",
+        ar_rho = 0.5,
+        lss_prewhiten = list(method = "ar", order = 1)
+      ),
       ar1_high = list(name = "ar1_high", noise_model = "ar1", ar_rho = 0.6),
       ar1_heterogeneous = list(
         name = "ar1_heterogeneous",
@@ -1294,6 +1648,28 @@ default_stglmnet_vs_fmrilss_scenarios <- function(kind = c("quick", "wide")) {
         true_hrf_lag_trial_sd = 0.4,
         true_hrf_widen_trial_sd = 0.4
       ),
+      snr_high = list(
+        name = "snr_high",
+        noise_sd = 0.6
+      ),
+      snr_low = list(
+        name = "snr_low",
+        noise_sd = 2.4
+      ),
+      snr_very_low = list(
+        name = "snr_very_low",
+        noise_sd = 4.0
+      ),
+      tr_hcp = list(
+        name = "tr_hcp",
+        tr = 0.72,
+        n_tp = 200L
+      ),
+      tr_standard = list(
+        name = "tr_standard",
+        tr = 2.0,
+        n_tp = 80L
+      ),
       combined_hard = list(
         name = "combined_hard",
         noise_model = "arma11",
@@ -1317,7 +1693,7 @@ default_stglmnet_vs_fmrilss_scenarios <- function(kind = c("quick", "wide")) {
   )
 }
 
-#' Benchmark stglmnet vs fmrilss on single-trial beta recovery.
+#' Benchmark LSS methods on single-trial beta recovery.
 #'
 #' This benchmark now supports controlled scenario stressors including:
 #' - AR/ARMA noise and innovation tails,
@@ -1326,7 +1702,7 @@ default_stglmnet_vs_fmrilss_scenarios <- function(kind = c("quick", "wide")) {
 #' - trial amplitude variability,
 #' - HRF basis/timing mismatch between data generation and estimation,
 #' - voxel/trial HRF heterogeneity in lag and broadening.
-benchmark_stglmnet_vs_fmrilss <- function(
+benchmark_lss_methods <- function(
   n_reps = 30,
   seed = 20260227L,
   n_tp = 150L,
@@ -1348,11 +1724,14 @@ benchmark_stglmnet_vs_fmrilss <- function(
   noise_spike_shared = FALSE,
   noise_innov_dist = c("normal", "t"),
   noise_df = 6,
+  spatial_rho = 0,
   beta_sparsity = 0,
   beta_dist = c("normal", "laplace", "t", "lognormal"),
   beta_scale = 1,
   beta_df = 4,
   beta_lognorm_sdlog = 0.6,
+  n_conditions = 0L,
+  condition_effect = 1,
   trial_amplitude_model = c("none", "lognormal", "gamma"),
   trial_amplitude_cv = 0,
   trial_amplitude_outlier_prob = 0,
@@ -1424,18 +1803,25 @@ benchmark_stglmnet_vs_fmrilss <- function(
   ),
   sbhm_prewhiten = lss_prewhiten,
   n_runs = 1L,
+  resample_events = FALSE,
+  fast_mode = FALSE,
   trace = FALSE
 ) {
-  if (!requireNamespace("stglmnet", quietly = TRUE)) {
-    stop("Package 'stglmnet' is required for benchmark_stglmnet_vs_fmrilss().", call. = FALSE)
-  }
   if (!requireNamespace("fmridesign", quietly = TRUE)) {
-    stop("Package 'fmridesign' is required for benchmark_stglmnet_vs_fmrilss().", call. = FALSE)
+    stop("Package 'fmridesign' is required for benchmark_lss_methods().", call. = FALSE)
   }
   if (!requireNamespace("fmrihrf", quietly = TRUE)) {
-    stop("Package 'fmrihrf' is required for benchmark_stglmnet_vs_fmrilss().", call. = FALSE)
+    stop("Package 'fmrihrf' is required for benchmark_lss_methods().", call. = FALSE)
   }
   lss_fn <- .bmk_get_lss()
+
+  if (isTRUE(fast_mode)) {
+    if (missing(n_reps) || identical(n_reps, formals()$n_reps)) n_reps <- 2L
+    if (missing(n_vox) || identical(n_vox, formals()$n_vox)) n_vox <- 3L
+    if (missing(n_trials) || identical(n_trials, formals()$n_trials)) n_trials <- 10L
+    if (missing(n_tp) || identical(n_tp, formals()$n_tp)) n_tp <- 60L
+  }
+
   hrfals_lss_mode_a_fn <- if (isTRUE(include_hrfals)) .bmk_get_hrfals_lss_mode_a() else NULL
   hrfals_create_cfals_design_fn <- if (isTRUE(include_hrfals)) .bmk_get_hrfals_create_cfals_design() else NULL
   hrfals_from_design_fn <- if (isTRUE(include_hrfals)) .bmk_get_hrfals_from_design() else NULL
@@ -1636,11 +2022,20 @@ benchmark_stglmnet_vs_fmrilss <- function(
   if (is.null(names(st_configs)) || any(names(st_configs) == "")) {
     names(st_configs) <- paste0("st_", seq_along(st_configs))
   }
-  if (is.null(primary_st)) primary_st <- names(st_configs)[1L]
+  if (is.null(primary_st)) {
+    if ("st_pool_joint_mult_1se" %in% names(st_configs)) {
+      primary_st <- "st_pool_joint_mult_1se"
+    } else if ("st_pool_joint_mult" %in% names(st_configs)) {
+      primary_st <- "st_pool_joint_mult"
+    } else {
+      primary_st <- names(st_configs)[1L]
+    }
+  }
 
   if (isTRUE(include_oasis)) {
     if (is.null(oasis_grid)) {
       oasis_grid <- expand.grid(
+        K = c(1L, 2L),
         ridge_mode = c("absolute", "fractional"),
         ridge_x = c(0, 0.005, 0.02),
         ridge_b = c(0, 0.005, 0.02),
@@ -1650,6 +2045,7 @@ benchmark_stglmnet_vs_fmrilss <- function(
     }
   } else {
     oasis_grid <- data.frame(
+      K = integer(0),
       ridge_mode = character(0),
       ridge_x = numeric(0),
       ridge_b = numeric(0),
@@ -1659,10 +2055,10 @@ benchmark_stglmnet_vs_fmrilss <- function(
 
   n_methods <- length(st_configs) +
     1L +
-    if (isTRUE(include_hrfals)) length(hrfals_modes) else 0L +
-    if (isTRUE(include_hrfals)) length(hrfals_fit_methods) else 0L +
-    if (isTRUE(include_oasis)) nrow(oasis_grid) else 0L +
-    if (isTRUE(include_sbhm)) 1L else 0L
+    (if (isTRUE(include_hrfals)) length(hrfals_modes) else 0L) +
+    (if (isTRUE(include_hrfals)) length(hrfals_fit_methods) else 0L) +
+    (if (isTRUE(include_oasis)) nrow(oasis_grid) else 0L) +
+    (if (isTRUE(include_sbhm)) 1L else 0L)
   rows <- vector("list", as.integer(n_reps) * n_methods)
   idx <- 0L
   sbhm_diag_rows <- vector("list", if (isTRUE(include_sbhm)) as.integer(n_reps) else 0L)
@@ -1672,16 +2068,35 @@ benchmark_stglmnet_vs_fmrilss <- function(
   for (r in seq_len(as.integer(n_reps))) {
     if (isTRUE(trace)) cat(sprintf("benchmark rep %d/%d\n", r, n_reps))
     set.seed(as.integer(seed) + r - 1L)
+    # TODO: implement per-rep event resampling when resample_events = TRUE
 
-    beta_true <- .bmk_sample_beta(
-      n_trial = n_trial_eff,
-      n_vox = n_vox,
-      beta_dist = beta_dist,
-      beta_scale = beta_scale,
-      beta_df = beta_df,
-      beta_lognorm_sdlog = beta_lognorm_sdlog,
-      beta_sparsity = beta_sparsity
-    )
+    n_cond_eff <- as.integer(n_conditions)
+    cond_labels <- NULL
+    if (is.finite(n_cond_eff) && n_cond_eff >= 2L) {
+      cond_out <- .bmk_sample_beta_conditions(
+        n_trial = n_trial_eff,
+        n_vox = n_vox,
+        n_conditions = n_cond_eff,
+        condition_effect = condition_effect,
+        beta_dist = beta_dist,
+        beta_scale = beta_scale,
+        beta_df = beta_df,
+        beta_lognorm_sdlog = beta_lognorm_sdlog,
+        beta_sparsity = beta_sparsity
+      )
+      beta_true <- cond_out$beta
+      cond_labels <- cond_out$condition_labels
+    } else {
+      beta_true <- .bmk_sample_beta(
+        n_trial = n_trial_eff,
+        n_vox = n_vox,
+        beta_dist = beta_dist,
+        beta_scale = beta_scale,
+        beta_df = beta_df,
+        beta_lognorm_sdlog = beta_lognorm_sdlog,
+        beta_sparsity = beta_sparsity
+      )
+    }
 
     amps <- .bmk_trial_amplitudes(
       n_trial = n_trial_eff,
@@ -1707,7 +2122,8 @@ benchmark_stglmnet_vs_fmrilss <- function(
       noise_spike_scale = noise_spike_scale,
       noise_spike_shared = noise_spike_shared,
       noise_innov_dist = noise_innov_dist,
-      noise_df = noise_df
+      noise_df = noise_df,
+      spatial_rho = spatial_rho
     )
 
     true_signal <- .bmk_make_true_signal(
@@ -1719,6 +2135,8 @@ benchmark_stglmnet_vs_fmrilss <- function(
       true_hrf_lag_trial_sd = true_hrf_lag_trial_sd,
       true_hrf_widen_trial_sd = true_hrf_widen_trial_sd
     )
+    empirical_snr <- stats::sd(as.numeric(true_signal)) /
+      max(stats::sd(as.numeric(E)), .Machine$double.eps)
     hsum <- attr(true_signal, "hrf_heterogeneity_summary")
     if (is.null(hsum)) hsum <- c(mean_abs_lag = NA_real_, max_abs_lag = NA_real_, mean_widen = NA_real_, max_widen = NA_real_)
     true_hrf_diag_rows[[r]] <- data.frame(
@@ -1727,6 +2145,7 @@ benchmark_stglmnet_vs_fmrilss <- function(
       max_abs_lag = as.numeric(hsum[["max_abs_lag"]]),
       mean_widen = as.numeric(hsum[["mean_widen"]]),
       max_widen = as.numeric(hsum[["max_widen"]]),
+      empirical_snr = empirical_snr,
       stringsAsFactors = FALSE
     )
 
@@ -1739,79 +2158,63 @@ benchmark_stglmnet_vs_fmrilss <- function(
       cfg$cv_args <- NULL
 
       st_defaults <- list(
-        y = Y,
-        X_trial = X_trial,
-        X_nuisance = if (isTRUE(st_match_lss_nuisance)) Z_lss else NULL,
+        mode = "cv",
         run_id = run_id,
         alpha = alpha,
         lambda = lambda,
         standardize = FALSE,
-        intercept = FALSE
+        intercept = FALSE,
+        cv_folds = as.integer(cv_folds),
+        cv_type.measure = cv_type.measure,
+        cv_fold_scheme = if (n_runs > 1L) "run" else "random"
       )
-      st_args <- utils::modifyList(st_defaults, cfg, keep.null = TRUE)
-
-      fit_st <- tryCatch(do.call(stglmnet::stglmnet, st_args), error = function(e) e)
-      score <- list(
-        cor = NA_real_,
-        rmse = NA_real_,
-        slope_bias = NA_real_,
-        intercept_bias = NA_real_,
-        sign_acc = NA_real_
-      )
-      ok <- FALSE
-      msg <- NA_character_
-
-      if (!inherits(fit_st, "error")) {
-        fold_scheme <- if (n_runs > 1L) "run" else "random"
-        cv_defaults <- list(
-          object = fit_st,
-          nfolds = as.integer(cv_folds),
-          type.measure = cv_type.measure,
-          engine = "manual",
-          fold_scheme = fold_scheme
+      st_opts <- utils::modifyList(st_defaults, cfg, keep.null = TRUE)
+      if (length(cv_args)) {
+        cv_map <- list(
+          cv_foldid = cv_args$foldid,
+          cv_folds = cv_args$nfolds,
+          cv_type.measure = cv_args$type.measure,
+          cv_fold_scheme = cv_args$fold_scheme,
+          overlap_low_threshold = cv_args$overlap_low_threshold,
+          composite_weights = cv_args$composite_weights
         )
-        cv_call <- utils::modifyList(cv_defaults, cv_args, keep.null = TRUE)
-        cv_st <- tryCatch(do.call(stglmnet::cv.stglmnet, cv_call), error = function(e) e)
-
-        if (!inherits(cv_st, "error")) {
-          s <- if (!is.null(cv_st$lambda.min)) {
-            cv_st$lambda.min
-          } else if (!is.null(cv_st$lambda.max)) {
-            cv_st$lambda.max
-          } else {
-            utils::tail(fit_st$fit$lambda, 1L)
-          }
-
-          if (!(length(s) == 1L && is.finite(s))) {
-            lam_finite <- fit_st$fit$lambda[is.finite(fit_st$fit$lambda)]
-            s <- if (length(lam_finite)) utils::tail(lam_finite, 1L) else NA_real_
-          }
-
-          if (is.finite(s)) {
-            beta_st <- tryCatch(
-              .bmk_extract_trial_betas(
-                fit_st$fit,
-                ntrial = n_trial_eff,
-                s = s,
-                pool_fit = .bmk_or(fit_st$pooling, NULL)
-              ),
-              error = function(e) e
-            )
-            if (!inherits(beta_st, "error")) {
-              score <- .bmk_score_betas(beta_st, beta_true)
-              ok <- TRUE
-            } else {
-              msg <- conditionMessage(beta_st)
-            }
-          } else {
-            msg <- "No finite lambda selected by CV."
-          }
-        } else {
-          msg <- conditionMessage(cv_st)
+        cv_map <- cv_map[!vapply(cv_map, is.null, logical(1))]
+        if (length(cv_map)) {
+          st_opts <- utils::modifyList(st_opts, cv_map, keep.null = TRUE)
         }
-      } else {
-        msg <- conditionMessage(fit_st)
       }
+
+      timing_st <- system.time({
+        beta_st <- tryCatch(
+          lss_fn(
+            Y = Y,
+            X = X_trial,
+            Z = if (isTRUE(st_match_lss_nuisance)) Z_lss else NULL,
+            method = "stglmnet",
+            stglmnet = st_opts
+          ),
+          error = function(e) e
+        )
+        score <- list(
+          cor = NA_real_,
+          rmse = NA_real_,
+          slope_bias = NA_real_,
+          intercept_bias = NA_real_,
+          sign_acc = NA_real_,
+          classif_acc = NA_real_
+        )
+        ok <- FALSE
+        msg <- NA_character_
+
+        if (!inherits(beta_st, "error")) {
+          if (is.list(beta_st) && !is.null(beta_st$beta)) beta_st <- beta_st$beta
+          score <- .bmk_score_betas(as.matrix(beta_st), beta_true)
+          if (!is.null(cond_labels)) score$classif_acc <- .bmk_classif_accuracy(beta_st, cond_labels)
+          ok <- TRUE
+        } else {
+          msg <- conditionMessage(beta_st)
+        }
+      })
 
       idx <- idx + 1L
       rows[[idx]] <- data.frame(
@@ -1822,6 +2225,8 @@ benchmark_stglmnet_vs_fmrilss <- function(
         slope_bias = score$slope_bias,
         intercept_bias = score$intercept_bias,
         sign_acc = score$sign_acc,
+        classif_acc = .bmk_or(score$classif_acc, NA_real_),
+        elapsed_sec = as.numeric(timing_st[["elapsed"]]),
         ok = ok,
         message = msg,
         stringsAsFactors = FALSE
@@ -1831,24 +2236,28 @@ benchmark_stglmnet_vs_fmrilss <- function(
     lss_args <- list(Y = Y, X = X_trial, Z = Z_lss, method = lss_method)
     if (!is.null(lss_prewhiten)) lss_args$prewhiten <- lss_prewhiten
 
-    beta_lss <- tryCatch(do.call(lss_fn, lss_args), error = function(e) e)
-    score_lss <- list(
-      cor = NA_real_,
-      rmse = NA_real_,
-      slope_bias = NA_real_,
-      intercept_bias = NA_real_,
-      sign_acc = NA_real_
-    )
-    ok_lss <- FALSE
-    msg_lss <- NA_character_
+    timing_lss <- system.time({
+      beta_lss <- tryCatch(do.call(lss_fn, lss_args), error = function(e) e)
+      score_lss <- list(
+        cor = NA_real_,
+        rmse = NA_real_,
+        slope_bias = NA_real_,
+        intercept_bias = NA_real_,
+        sign_acc = NA_real_,
+        classif_acc = NA_real_
+      )
+      ok_lss <- FALSE
+      msg_lss <- NA_character_
 
-    if (!inherits(beta_lss, "error")) {
-      if (is.list(beta_lss) && !is.null(beta_lss$beta)) beta_lss <- beta_lss$beta
-      score_lss <- .bmk_score_betas(beta_lss, beta_true)
-      ok_lss <- TRUE
-    } else {
-      msg_lss <- conditionMessage(beta_lss)
-    }
+      if (!inherits(beta_lss, "error")) {
+        if (is.list(beta_lss) && !is.null(beta_lss$beta)) beta_lss <- beta_lss$beta
+        score_lss <- .bmk_score_betas(beta_lss, beta_true)
+        if (!is.null(cond_labels)) score_lss$classif_acc <- .bmk_classif_accuracy(beta_lss, cond_labels)
+        ok_lss <- TRUE
+      } else {
+        msg_lss <- conditionMessage(beta_lss)
+      }
+    })
 
     idx <- idx + 1L
     rows[[idx]] <- data.frame(
@@ -1859,6 +2268,8 @@ benchmark_stglmnet_vs_fmrilss <- function(
       slope_bias = score_lss$slope_bias,
       intercept_bias = score_lss$intercept_bias,
       sign_acc = score_lss$sign_acc,
+      classif_acc = .bmk_or(score_lss$classif_acc, NA_real_),
+      elapsed_sec = as.numeric(timing_lss[["elapsed"]]),
       ok = ok_lss,
       message = msg_lss,
       stringsAsFactors = FALSE
@@ -1870,32 +2281,36 @@ benchmark_stglmnet_vs_fmrilss <- function(
       for (hm in hrfals_modes) {
         use_cpp <- identical(hm, "cpp")
         mname <- sprintf("hrfals_fastlss[%s]", hm)
-        beta_hrfals <- tryCatch(
-          hrfals_lss_mode_a_fn(
-            Y = Y,
-            A = A_hrfals,
-            C = X_trial,
-            p_vec = p_hrfals,
-            lambda_ridge = hrfals_lambda_ridge,
-            use_cpp = use_cpp
-          ),
-          error = function(e) e
-        )
-        score_hrfals <- list(
-          cor = NA_real_,
-          rmse = NA_real_,
-          slope_bias = NA_real_,
-          intercept_bias = NA_real_,
-          sign_acc = NA_real_
-        )
-        ok_hrfals <- FALSE
-        msg_hrfals <- NA_character_
-        if (!inherits(beta_hrfals, "error")) {
-          score_hrfals <- .bmk_score_betas(beta_hrfals, beta_true)
-          ok_hrfals <- TRUE
-        } else {
-          msg_hrfals <- conditionMessage(beta_hrfals)
-        }
+        timing_hrfals <- system.time({
+          beta_hrfals <- tryCatch(
+            hrfals_lss_mode_a_fn(
+              Y = Y,
+              A = A_hrfals,
+              C = X_trial,
+              p_vec = p_hrfals,
+              lambda_ridge = hrfals_lambda_ridge,
+              use_cpp = use_cpp
+            ),
+            error = function(e) e
+          )
+          score_hrfals <- list(
+            cor = NA_real_,
+            rmse = NA_real_,
+            slope_bias = NA_real_,
+            intercept_bias = NA_real_,
+            sign_acc = NA_real_,
+            classif_acc = NA_real_
+          )
+          ok_hrfals <- FALSE
+          msg_hrfals <- NA_character_
+          if (!inherits(beta_hrfals, "error")) {
+            score_hrfals <- .bmk_score_betas(beta_hrfals, beta_true)
+            if (!is.null(cond_labels)) score_hrfals$classif_acc <- .bmk_classif_accuracy(beta_hrfals, cond_labels)
+            ok_hrfals <- TRUE
+          } else {
+            msg_hrfals <- conditionMessage(beta_hrfals)
+          }
+        })
 
         idx <- idx + 1L
         rows[[idx]] <- data.frame(
@@ -1906,6 +2321,8 @@ benchmark_stglmnet_vs_fmrilss <- function(
           slope_bias = score_hrfals$slope_bias,
           intercept_bias = score_hrfals$intercept_bias,
           sign_acc = score_hrfals$sign_acc,
+          classif_acc = .bmk_or(score_hrfals$classif_acc, NA_real_),
+          elapsed_sec = as.numeric(timing_hrfals[["elapsed"]]),
           ok = ok_hrfals,
           message = msg_hrfals,
           stringsAsFactors = FALSE
@@ -1927,60 +2344,64 @@ benchmark_stglmnet_vs_fmrilss <- function(
 
       for (hm in hrfals_fit_methods) {
         mname <- sprintf("hrfals_fit[%s]", hm)
-        score_hfit <- list(
-          cor = NA_real_,
-          rmse = NA_real_,
-          slope_bias = NA_real_,
-          intercept_bias = NA_real_,
-          sign_acc = NA_real_
-        )
-        ok_hfit <- FALSE
-        msg_hfit <- NA_character_
-
-        if (!inherits(hrfals_design_obj, "error")) {
-          fit_h <- tryCatch(
-            hrfals_from_design_fn(
-              y = Y,
-              design = hrfals_design_obj,
-              method = hm,
-              control = hrfals_control
-            ),
-            error = function(e) e
+        timing_hfit <- system.time({
+          score_hfit <- list(
+            cor = NA_real_,
+            rmse = NA_real_,
+            slope_bias = NA_real_,
+            intercept_bias = NA_real_,
+            sign_acc = NA_real_,
+            classif_acc = NA_real_
           )
-          if (!inherits(fit_h, "error")) {
-            beta_hfit <- if (is.list(fit_h) && !is.null(fit_h$beta_amps)) {
-              as.matrix(fit_h$beta_amps)
-            } else if (is.list(fit_h) && !is.null(fit_h$beta)) {
-              as.matrix(fit_h$beta)
-            } else {
-              NULL
-            }
-            if (is.null(beta_hfit) || !is.matrix(beta_hfit)) {
-              msg_hfit <- "hrfals fit did not return beta_amps matrix."
-            } else {
-              # Align to trial design ordering when possible.
-              if (!is.null(rownames(beta_hfit)) && !is.null(colnames(X_trial))) {
-                idx_align <- match(colnames(X_trial), rownames(beta_hfit))
-                if (all(!is.na(idx_align))) {
-                  beta_hfit <- beta_hfit[idx_align, , drop = FALSE]
+          ok_hfit <- FALSE
+          msg_hfit <- NA_character_
+
+          if (!inherits(hrfals_design_obj, "error")) {
+            fit_h <- tryCatch(
+              hrfals_from_design_fn(
+                y = Y,
+                design = hrfals_design_obj,
+                method = hm,
+                control = hrfals_control
+              ),
+              error = function(e) e
+            )
+            if (!inherits(fit_h, "error")) {
+              beta_hfit <- if (is.list(fit_h) && !is.null(fit_h$beta_amps)) {
+                as.matrix(fit_h$beta_amps)
+              } else if (is.list(fit_h) && !is.null(fit_h$beta)) {
+                as.matrix(fit_h$beta)
+              } else {
+                NULL
+              }
+              if (is.null(beta_hfit) || !is.matrix(beta_hfit)) {
+                msg_hfit <- "hrfals fit did not return beta_amps matrix."
+              } else {
+                # Align to trial design ordering when possible.
+                if (!is.null(rownames(beta_hfit)) && !is.null(colnames(X_trial))) {
+                  idx_align <- match(colnames(X_trial), rownames(beta_hfit))
+                  if (all(!is.na(idx_align))) {
+                    beta_hfit <- beta_hfit[idx_align, , drop = FALSE]
+                  }
+                }
+                if (nrow(beta_hfit) != n_trial_eff) {
+                  msg_hfit <- sprintf(
+                    "hrfals beta row mismatch: expected %d rows, got %d.",
+                    n_trial_eff, nrow(beta_hfit)
+                  )
+                } else {
+                  score_hfit <- .bmk_score_betas(beta_hfit, beta_true)
+                  if (!is.null(cond_labels)) score_hfit$classif_acc <- .bmk_classif_accuracy(beta_hfit, cond_labels)
+                  ok_hfit <- TRUE
                 }
               }
-              if (nrow(beta_hfit) != n_trial_eff) {
-                msg_hfit <- sprintf(
-                  "hrfals beta row mismatch: expected %d rows, got %d.",
-                  n_trial_eff, nrow(beta_hfit)
-                )
-              } else {
-                score_hfit <- .bmk_score_betas(beta_hfit, beta_true)
-                ok_hfit <- TRUE
-              }
+            } else {
+              msg_hfit <- conditionMessage(fit_h)
             }
           } else {
-            msg_hfit <- conditionMessage(fit_h)
+            msg_hfit <- conditionMessage(hrfals_design_obj)
           }
-        } else {
-          msg_hfit <- conditionMessage(hrfals_design_obj)
-        }
+        })
 
         idx <- idx + 1L
         rows[[idx]] <- data.frame(
@@ -1991,6 +2412,8 @@ benchmark_stglmnet_vs_fmrilss <- function(
           slope_bias = score_hfit$slope_bias,
           intercept_bias = score_hfit$intercept_bias,
           sign_acc = score_hfit$sign_acc,
+          classif_acc = .bmk_or(score_hfit$classif_acc, NA_real_),
+          elapsed_sec = as.numeric(timing_hfit[["elapsed"]]),
           ok = ok_hfit,
           message = msg_hfit,
           stringsAsFactors = FALSE
@@ -2002,7 +2425,8 @@ benchmark_stglmnet_vs_fmrilss <- function(
       for (g in seq_len(nrow(oasis_grid))) {
         grid_row <- oasis_grid[g, , drop = FALSE]
         mname <- sprintf(
-          "fmrilss_oasis[%s|x=%g|b=%g]",
+          "fmrilss_oasis[K=%d|%s|x=%g|b=%g]",
+          as.integer(.bmk_or(grid_row$K, 1L)),
           as.character(grid_row$ridge_mode),
           as.numeric(grid_row$ridge_x),
           as.numeric(grid_row$ridge_b)
@@ -2014,7 +2438,7 @@ benchmark_stglmnet_vs_fmrilss <- function(
           Z = Z_lss,
           method = "oasis",
           oasis = list(
-            K = 1L,
+            K = as.integer(.bmk_or(grid_row$K, 1L)),
             infer_K_from_X = FALSE,
             ridge_mode = as.character(grid_row$ridge_mode),
             ridge_x = as.numeric(grid_row$ridge_x),
@@ -2023,24 +2447,28 @@ benchmark_stglmnet_vs_fmrilss <- function(
         )
         if (!is.null(oasis_prewhiten)) lss_oasis_args$prewhiten <- oasis_prewhiten
 
-        beta_oasis <- tryCatch(do.call(lss_fn, lss_oasis_args), error = function(e) e)
-        score_oasis <- list(
-          cor = NA_real_,
-          rmse = NA_real_,
-          slope_bias = NA_real_,
-          intercept_bias = NA_real_,
-          sign_acc = NA_real_
-        )
-        ok_oasis <- FALSE
-        msg_oasis <- NA_character_
+        timing_oasis <- system.time({
+          beta_oasis <- tryCatch(do.call(lss_fn, lss_oasis_args), error = function(e) e)
+          score_oasis <- list(
+            cor = NA_real_,
+            rmse = NA_real_,
+            slope_bias = NA_real_,
+            intercept_bias = NA_real_,
+            sign_acc = NA_real_,
+            classif_acc = NA_real_
+          )
+          ok_oasis <- FALSE
+          msg_oasis <- NA_character_
 
-        if (!inherits(beta_oasis, "error")) {
-          if (is.list(beta_oasis) && !is.null(beta_oasis$beta)) beta_oasis <- beta_oasis$beta
-          score_oasis <- .bmk_score_betas(beta_oasis, beta_true)
-          ok_oasis <- TRUE
-        } else {
-          msg_oasis <- conditionMessage(beta_oasis)
-        }
+          if (!inherits(beta_oasis, "error")) {
+            if (is.list(beta_oasis) && !is.null(beta_oasis$beta)) beta_oasis <- beta_oasis$beta
+            score_oasis <- .bmk_score_betas(beta_oasis, beta_true)
+            if (!is.null(cond_labels)) score_oasis$classif_acc <- .bmk_classif_accuracy(beta_oasis, cond_labels)
+            ok_oasis <- TRUE
+          } else {
+            msg_oasis <- conditionMessage(beta_oasis)
+          }
+        })
 
         idx <- idx + 1L
         rows[[idx]] <- data.frame(
@@ -2051,6 +2479,8 @@ benchmark_stglmnet_vs_fmrilss <- function(
           slope_bias = score_oasis$slope_bias,
           intercept_bias = score_oasis$intercept_bias,
           sign_acc = score_oasis$sign_acc,
+          classif_acc = .bmk_or(score_oasis$classif_acc, NA_real_),
+          elapsed_sec = as.numeric(timing_oasis[["elapsed"]]),
           ok = ok_oasis,
           message = msg_oasis,
           stringsAsFactors = FALSE
@@ -2059,28 +2489,31 @@ benchmark_stglmnet_vs_fmrilss <- function(
     }
 
     if (isTRUE(include_sbhm)) {
-      sbhm_fit <- tryCatch(
-        lss_sbhm_design_fn(
-          Y = Y,
-          sbhm = sbhm_obj,
-          event_model = design_est$event_model,
-          baseline_model = sbhm_baseline_model,
-          prewhiten = sbhm_prewhiten,
-          match = sbhm_match,
-          oasis = sbhm_oasis,
-          amplitude = sbhm_amplitude,
-          return = "amplitude",
-          validate = FALSE
-        ),
-        error = function(e) e
-      )
+      timing_sbhm <- system.time({
+        sbhm_fit <- tryCatch(
+          lss_sbhm_design_fn(
+            Y = Y,
+            sbhm = sbhm_obj,
+            event_model = design_est$event_model,
+            baseline_model = sbhm_baseline_model,
+            prewhiten = sbhm_prewhiten,
+            match = sbhm_match,
+            oasis = sbhm_oasis,
+            amplitude = sbhm_amplitude,
+            return = "amplitude",
+            validate = FALSE
+          ),
+          error = function(e) e
+        )
+      })
 
       score_sbhm <- list(
         cor = NA_real_,
         rmse = NA_real_,
         slope_bias = NA_real_,
         intercept_bias = NA_real_,
-        sign_acc = NA_real_
+        sign_acc = NA_real_,
+        classif_acc = NA_real_
       )
       ok_sbhm <- FALSE
       msg_sbhm <- NA_character_
@@ -2107,6 +2540,7 @@ benchmark_stglmnet_vs_fmrilss <- function(
           sbhm_fit
         }
         score_sbhm <- .bmk_score_betas(beta_sbhm, beta_true)
+        if (!is.null(cond_labels)) score_sbhm$classif_acc <- .bmk_classif_accuracy(beta_sbhm, cond_labels)
         ok_sbhm <- TRUE
         diag_row$ok <- TRUE
         if (is.list(sbhm_fit)) {
@@ -2149,6 +2583,8 @@ benchmark_stglmnet_vs_fmrilss <- function(
         slope_bias = score_sbhm$slope_bias,
         intercept_bias = score_sbhm$intercept_bias,
         sign_acc = score_sbhm$sign_acc,
+        classif_acc = .bmk_or(score_sbhm$classif_acc, NA_real_),
+        elapsed_sec = as.numeric(timing_sbhm[["elapsed"]]),
         ok = ok_sbhm,
         message = msg_sbhm,
         stringsAsFactors = FALSE
@@ -2271,9 +2707,12 @@ benchmark_stglmnet_vs_fmrilss <- function(
       noise_spike_shared = noise_spike_shared,
       noise_innov_dist = noise_innov_dist,
       noise_df = noise_df,
+      spatial_rho = spatial_rho,
       beta_sparsity = beta_sparsity,
       beta_dist = beta_dist,
       beta_scale = beta_scale,
+      n_conditions = n_conditions,
+      condition_effect = condition_effect,
       trial_amplitude_model = trial_amplitude_model,
       trial_amplitude_cv = trial_amplitude_cv,
       trial_amplitude_outlier_prob = trial_amplitude_outlier_prob,
@@ -2285,7 +2724,9 @@ benchmark_stglmnet_vs_fmrilss <- function(
       lss_intercept = lss_intercept,
       st_match_lss_nuisance = st_match_lss_nuisance,
       include_sbhm = include_sbhm,
-      sbhm_rank = if (isTRUE(include_sbhm)) sbhm_rank else NA_integer_
+      sbhm_rank = if (isTRUE(include_sbhm)) sbhm_rank else NA_integer_,
+      fast_mode = isTRUE(fast_mode),
+      resample_events = isTRUE(resample_events)
     ),
     primary_st = primary_st,
     metrics = as.data.frame(rep_metrics),
@@ -2297,13 +2738,13 @@ benchmark_stglmnet_vs_fmrilss <- function(
     oasis_grid = oasis_grid
   )
 
-  class(out) <- "stglmnet_benchmark"
+  class(out) <- "lss_benchmark"
   out
 }
 
 # Run multiple benchmark scenarios and aggregate outcomes.
-benchmark_stglmnet_vs_fmrilss_suite <- function(
-  scenarios = default_stglmnet_vs_fmrilss_scenarios("wide"),
+benchmark_lss_methods_suite <- function(
+  scenarios = default_benchmark_scenarios("wide"),
   base_args = list(),
   base_seed = 20260301L,
   trace = TRUE
@@ -2316,6 +2757,7 @@ benchmark_stglmnet_vs_fmrilss_suite <- function(
   rows <- vector("list", ns)
   sbhm_diag_rows <- vector("list", ns)
   true_hrf_diag_rows <- vector("list", ns)
+  scenario_design_rows <- vector("list", ns)
 
   for (i in seq_len(ns)) {
     sc <- scenario_list[[i]]
@@ -2331,9 +2773,14 @@ benchmark_stglmnet_vs_fmrilss_suite <- function(
 
     if (isTRUE(trace)) cat(sprintf("scenario %d/%d: %s\n", i, ns, sc_name))
 
-    fit <- do.call(benchmark_stglmnet_vs_fmrilss, args)
+    fit <- do.call(benchmark_lss_methods, args)
     fit$scenario <- sc_name
     fit$scenario_args <- sc
+
+    scenario_design_rows[[i]] <- .bmk_row_df(c(
+      list(scenario = sc_name),
+      .bmk_flatten_named(fit$params)
+    ))
 
     ml <- fit$metrics_long
     ml$scenario <- sc_name
@@ -2356,19 +2803,29 @@ benchmark_stglmnet_vs_fmrilss_suite <- function(
     rows[[i]] <- ml
   }
 
-  metrics_long <- do.call(rbind, rows)
+  metrics_long <- .bmk_bind_rows(rows)
   rownames(metrics_long) <- NULL
-  sbhm_diag_long <- do.call(rbind, Filter(Negate(is.null), sbhm_diag_rows))
+  sbhm_diag_long <- .bmk_bind_rows(sbhm_diag_rows)
   if (is.null(sbhm_diag_long)) sbhm_diag_long <- data.frame()
-  true_hrf_diag_long <- do.call(rbind, Filter(Negate(is.null), true_hrf_diag_rows))
+  true_hrf_diag_long <- .bmk_bind_rows(true_hrf_diag_rows)
   if (is.null(true_hrf_diag_long)) true_hrf_diag_long <- data.frame()
+  scenario_design <- .bmk_bind_rows(scenario_design_rows)
+  if (is.null(scenario_design)) scenario_design <- data.frame()
 
   scenario_method_summary <- .bmk_suite_method_summary(metrics_long)
 
-  pairwise_summary <- do.call(rbind, lapply(results, function(x) {
+  pairwise_summary <- .bmk_bind_rows(lapply(results, function(x) {
     m <- x$metrics
     dcor <- m$cor_st - m$cor_lss
     drmse <- m$rmse_st - m$rmse_lss
+    p_cor <- tryCatch(
+      stats::wilcox.test(dcor, mu = 0, exact = FALSE)$p.value,
+      error = function(e) NA_real_
+    )
+    p_rmse <- tryCatch(
+      stats::wilcox.test(drmse, mu = 0, exact = FALSE)$p.value,
+      error = function(e) NA_real_
+    )
     dsign <- m$sign_acc_st - m$sign_acc_lss
     dslope <- m$slope_bias_st - m$slope_bias_lss
     dabs_slope <- abs(m$slope_bias_st) - abs(m$slope_bias_lss)
@@ -2397,9 +2854,11 @@ benchmark_stglmnet_vs_fmrilss_suite <- function(
       delta_cor_mean = mean(dcor, na.rm = TRUE),
       delta_cor_ci_lo = ci_cor[1],
       delta_cor_ci_hi = ci_cor[2],
+      p_wilcox_cor = p_cor,
       delta_rmse_mean = mean(drmse, na.rm = TRUE),
       delta_rmse_ci_lo = ci_rmse[1],
       delta_rmse_ci_hi = ci_rmse[2],
+      p_wilcox_rmse = p_rmse,
       delta_sign_acc_mean = mean(dsign, na.rm = TRUE),
       delta_sign_acc_ci_lo = ci_sign[1],
       delta_sign_acc_ci_hi = ci_sign[2],
@@ -2424,23 +2883,248 @@ benchmark_stglmnet_vs_fmrilss_suite <- function(
     )
   }))
 
-  top_by_cor <- do.call(rbind, lapply(split(scenario_method_summary, scenario_method_summary$scenario), function(d) {
+  top_by_cor <- .bmk_bind_rows(lapply(split(scenario_method_summary, scenario_method_summary$scenario), function(d) {
     d <- d[order(d$mean_cor, decreasing = TRUE), , drop = FALSE]
     d[1L, c("scenario", "method", "mean_cor", "mean_rmse", "success_rate"), drop = FALSE]
   }))
   rownames(top_by_cor) <- NULL
 
+  metrics_long <- .bmk_attach_scenario_metadata(metrics_long, scenario_design)
+  scenario_method_summary <- .bmk_attach_scenario_metadata(scenario_method_summary, scenario_design)
+  pairwise_summary <- .bmk_attach_scenario_metadata(pairwise_summary, scenario_design)
+  top_by_cor <- .bmk_attach_scenario_metadata(top_by_cor, scenario_design)
+  recommendations <- .bmk_recommend_methods(scenario_method_summary)
+  recommendations <- .bmk_attach_scenario_metadata(recommendations, scenario_design)
+  recommendation_summary <- .bmk_recommendation_summary(recommendations)
+
   out <- list(
     scenarios = vapply(results, function(x) x$scenario, character(1)),
     scenario_args = lapply(results, function(x) x$scenario_args),
+    scenario_design = scenario_design,
     results = results,
     metrics_long = metrics_long,
     sbhm_diag_long = sbhm_diag_long,
     true_hrf_diag_long = true_hrf_diag_long,
     scenario_method_summary = scenario_method_summary,
     pairwise_summary = pairwise_summary,
-    top_by_cor = top_by_cor
+    top_by_cor = top_by_cor,
+    recommendations = recommendations,
+    recommendation_summary = recommendation_summary
   )
-  class(out) <- "stglmnet_benchmark_suite"
+  class(out) <- "lss_benchmark_suite"
   out
+}
+
+# Build a consistent benchmark plotting theme.
+bmk_plot_theme <- function(base_size = 11) {
+  ggplot2::theme_minimal(base_size = base_size) +
+    ggplot2::theme(
+      panel.grid = ggplot2::element_blank(),
+      strip.text = ggplot2::element_text(face = "bold"),
+      legend.position = "bottom",
+      axis.text.x = ggplot2::element_text(angle = 25, hjust = 1)
+    )
+}
+
+# Utility: apply optional row/column facets to a ggplot object.
+.bmk_apply_facets <- function(p, facet_rows = NULL, facet_cols = NULL) {
+  if (is.null(facet_rows) && is.null(facet_cols)) return(p)
+  row_term <- .bmk_or(facet_rows, ".")
+  col_term <- .bmk_or(facet_cols, ".")
+  p + ggplot2::facet_grid(stats::as.formula(paste(row_term, "~", col_term)))
+}
+
+# Plot a benchmark heatmap over parameter space.
+bmk_plot_surface_heatmap <- function(
+  data,
+  x,
+  y,
+  metric = "mean_cor",
+  facet_rows = "method",
+  facet_cols = NULL,
+  title = NULL,
+  subtitle = NULL,
+  x_lab = NULL,
+  y_lab = NULL,
+  fill_lab = NULL,
+  low = "#f7fbff",
+  high = "#08306b",
+  midpoint = NULL,
+  base_size = 11
+) {
+  x_sym <- rlang::sym(x)
+  y_sym <- rlang::sym(y)
+  metric_sym <- rlang::sym(metric)
+  p <- ggplot2::ggplot(
+    data,
+    ggplot2::aes(
+      x = !!x_sym,
+      y = !!y_sym,
+      fill = !!metric_sym
+    )
+  ) +
+    ggplot2::geom_tile(color = "white", linewidth = 0.25)
+  p <- .bmk_apply_facets(p, facet_rows = facet_rows, facet_cols = facet_cols)
+  p <- if (is.null(midpoint)) {
+    p + ggplot2::scale_fill_gradient(low = low, high = high)
+  } else {
+    p + ggplot2::scale_fill_gradient2(low = low, mid = "white", high = high, midpoint = midpoint)
+  }
+  p +
+    ggplot2::labs(
+      title = title,
+      subtitle = subtitle,
+      x = .bmk_or(x_lab, x),
+      y = .bmk_or(y_lab, y),
+      fill = .bmk_or(fill_lab, metric)
+    ) +
+    bmk_plot_theme(base_size = base_size)
+}
+
+# Plot benchmark curves across a one-dimensional parameter sweep.
+bmk_plot_method_curves <- function(
+  data,
+  x,
+  y = "mean_cor",
+  color = "method",
+  group = "method",
+  facet_rows = NULL,
+  facet_cols = NULL,
+  ymin = NULL,
+  ymax = NULL,
+  title = NULL,
+  subtitle = NULL,
+  x_lab = NULL,
+  y_lab = NULL,
+  base_size = 11
+) {
+  x_sym <- rlang::sym(x)
+  y_sym <- rlang::sym(y)
+  color_sym <- rlang::sym(color)
+  group_sym <- rlang::sym(group)
+  p <- ggplot2::ggplot(
+    data,
+    ggplot2::aes(
+      x = !!x_sym,
+      y = !!y_sym,
+      color = !!color_sym,
+      group = !!group_sym
+    )
+  ) +
+    ggplot2::geom_line(linewidth = 0.9, alpha = 0.9) +
+    ggplot2::geom_point(size = 2.2)
+  if (!is.null(ymin) && !is.null(ymax)) {
+    ymin_sym <- rlang::sym(ymin)
+    ymax_sym <- rlang::sym(ymax)
+    p <- p + ggplot2::geom_errorbar(
+      ggplot2::aes(ymin = !!ymin_sym, ymax = !!ymax_sym),
+      width = 0.08,
+      alpha = 0.45
+    )
+  }
+  p <- .bmk_apply_facets(p, facet_rows = facet_rows, facet_cols = facet_cols)
+  p +
+    ggplot2::labs(
+      title = title,
+      subtitle = subtitle,
+      x = .bmk_or(x_lab, x),
+      y = .bmk_or(y_lab, y),
+      color = color
+    ) +
+    bmk_plot_theme(base_size = base_size)
+}
+
+# Plot pairwise deltas with empirical confidence intervals.
+bmk_plot_pairwise_delta <- function(
+  data,
+  x = "delta_cor_mean",
+  y = "scenario",
+  color = "primary_st",
+  facet_rows = NULL,
+  facet_cols = NULL,
+  xmin = "delta_cor_ci_lo",
+  xmax = "delta_cor_ci_hi",
+  title = NULL,
+  subtitle = NULL,
+  x_lab = NULL,
+  y_lab = NULL,
+  base_size = 11
+) {
+  x_sym <- rlang::sym(x)
+  y_sym <- rlang::sym(y)
+  color_sym <- rlang::sym(color)
+  xmin_sym <- rlang::sym(xmin)
+  xmax_sym <- rlang::sym(xmax)
+  p <- ggplot2::ggplot(
+    data,
+    ggplot2::aes(
+      x = !!x_sym,
+      y = !!y_sym,
+      color = !!color_sym
+    )
+  ) +
+    ggplot2::geom_vline(xintercept = 0, linetype = 2, color = "gray45") +
+    ggplot2::geom_segment(
+      ggplot2::aes(
+        x = !!xmin_sym,
+        xend = !!xmax_sym,
+        y = !!y_sym,
+        yend = !!y_sym
+      ),
+      alpha = 0.75
+    ) +
+    ggplot2::geom_point(size = 2.1)
+  p <- .bmk_apply_facets(p, facet_rows = facet_rows, facet_cols = facet_cols)
+  p +
+    ggplot2::labs(
+      title = title,
+      subtitle = subtitle,
+      x = .bmk_or(x_lab, x),
+      y = .bmk_or(y_lab, y),
+      color = color
+    ) +
+    bmk_plot_theme(base_size = base_size)
+}
+
+# Plot recommended methods over parameter space.
+bmk_plot_recommendation_tiles <- function(
+  data,
+  x,
+  y,
+  fill = "recommended_method",
+  label = "recommended_method",
+  facet_rows = NULL,
+  facet_cols = NULL,
+  title = NULL,
+  subtitle = NULL,
+  x_lab = NULL,
+  y_lab = NULL,
+  base_size = 11
+) {
+  x_sym <- rlang::sym(x)
+  y_sym <- rlang::sym(y)
+  fill_sym <- rlang::sym(fill)
+  label_sym <- rlang::sym(label)
+  p <- ggplot2::ggplot(
+    data,
+    ggplot2::aes(
+      x = !!x_sym,
+      y = !!y_sym,
+      fill = !!fill_sym,
+      label = !!label_sym
+    )
+  ) +
+    ggplot2::geom_tile(color = "white", linewidth = 0.25) +
+    ggplot2::geom_text(size = 3.0, lineheight = 0.9)
+  p <- .bmk_apply_facets(p, facet_rows = facet_rows, facet_cols = facet_cols)
+  p +
+    ggplot2::labs(
+      title = title,
+      subtitle = subtitle,
+      x = .bmk_or(x_lab, x),
+      y = .bmk_or(y_lab, y),
+      fill = fill
+    ) +
+    bmk_plot_theme(base_size = base_size) +
+    ggplot2::theme(legend.position = "none")
 }
