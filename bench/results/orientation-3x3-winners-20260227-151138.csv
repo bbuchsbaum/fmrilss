@@ -1,0 +1,10 @@
+"scenario","method","mean_cor","mean_rmse","success_rate"
+"r1_c1__ar_iid__isi_dense__amp_none","st_default",0.374669767531496,0.939300962026328,1
+"r1_c2__ar_iid__isi_mid__amp_mod","fmrilss_oasis[fractional|x=0.02|b=0.02]",0.408441145777072,2.24159949463951,1
+"r1_c3__ar_iid__isi_sparse__amp_high","st_default",0.517027979043785,1.06533719088172,1
+"r2_c1__ar_mod__isi_dense__amp_mod","st_default",0.348690026682428,1.03566788460941,1
+"r2_c2__ar_mod__isi_mid__amp_high","fmrilss_oasis[fractional|x=0.02|b=0.02]",0.31984030900859,3.18959565621768,1
+"r2_c3__ar_mod__isi_sparse__amp_none","fmrilss_lss",0.377407281028511,2.36377243655913,1
+"r3_c1__ar_high__isi_dense__amp_high","st_default",0.340177686119999,1.27844323207008,1
+"r3_c2__ar_high__isi_mid__amp_none","fmrilss_lss",0.317551200588441,3.45894800489309,1
+"r3_c3__ar_high__isi_sparse__amp_mod","st_default",0.36763950226271,1.05869658581103,1

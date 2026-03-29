@@ -1,0 +1,14 @@
+"method","mean_cor"
+"hrfals_fastlss[cpp]",0.385827289287886
+"hrfals_fastlss[r]",0.385827289287886
+"fmrilss_oasis_best",0.382726310796238
+"fmrilss_lss",0.38212613015446
+"fmrilss_sbhm",0.366590618661449
+"st_pool_joint_mult",0.236853064848143
+"st_pool_mean",0.235518744565166
+"st_pool_compcv_wB",0.157424878232399
+"hrfals_fit[cf_als]",0.151673935510181
+"hrfals_fit[ls_svd_1als]",0.151673935510181
+"st_pool_compcv_wnever",0.139065608241345
+"st_pool_compcv",0.102217242937881
+"hrfals_fit[ls_svd_only]",0.089552287298658

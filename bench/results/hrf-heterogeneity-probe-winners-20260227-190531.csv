@@ -1,0 +1,13 @@
+"scenario","regime","global_hrf","hetero","method","mean_cor","success_rate"
+"hard__mismatch__high","hard","mismatch","high","fmrilss_lss",0.249688564095756,1
+"hard__mismatch__moderate","hard","mismatch","moderate","fmrilss_lss",0.253787771046072,1
+"hard__mismatch__none","hard","mismatch","none","fmrilss_lss",0.243318214138331,1
+"hard__nominal__high","hard","nominal","high","st_default",0.304582702290705,1
+"hard__nominal__moderate","hard","nominal","moderate","fmrilss_lss",0.298255633917097,1
+"hard__nominal__none","hard","nominal","none","st_default",0.324816666344378,1
+"medium__mismatch__high","medium","mismatch","high","fmrilss_lss",0.255809294101224,1
+"medium__mismatch__moderate","medium","mismatch","moderate","st_default",0.324511738434566,1
+"medium__mismatch__none","medium","mismatch","none","fmrilss_lss",0.270688517210455,1
+"medium__nominal__high","medium","nominal","high","st_default",0.344245963227985,1
+"medium__nominal__moderate","medium","nominal","moderate","st_default",0.362687836844608,1
+"medium__nominal__none","medium","nominal","none","st_default",0.342535152113731,1

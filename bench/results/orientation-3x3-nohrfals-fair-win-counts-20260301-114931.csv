@@ -1,0 +1,8 @@
+"method","n_scenarios_won"
+"fmrilss_sbhm",9
+"fmrilss_oasis[fractional|x=0.05|b=0.05]",3
+"st_pool_joint_mult",2
+"fmrilss_oasis[fractional|x=0.01|b=0.05]",1
+"st_pool_compcv",1
+"st_pool_compcv_wnever",1
+"st_pool_mean",1

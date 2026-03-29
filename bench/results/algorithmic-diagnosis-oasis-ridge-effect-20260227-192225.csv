@@ -1,0 +1,5 @@
+"method","mean_cor","mean_rmse","success_rate"
+"fmrilss_lss",0.362149644596124,2.82183514734056,1
+"fmrilss_oasis[absolute|x=0|b=0]",0.362149644596124,2.82183514734056,1
+"fmrilss_oasis[fractional|x=0.05|b=0.05]",0.362488111658526,2.65697171954343,1
+"fmrilss_oasis[fractional|x=0|b=0]",0.362149644596124,2.82183514734056,1

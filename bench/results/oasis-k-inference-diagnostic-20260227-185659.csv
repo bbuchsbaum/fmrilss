@@ -1,0 +1,3 @@
+"comparison","correlation","rmse"
+"lss_vs_oasis_inferK_true",0.285061782755695,9.38797867264217
+"lss_vs_oasis_inferK_false",1,1.13732804930864e-15

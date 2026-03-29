@@ -1,0 +1,5 @@
+"density","n_atoms","n_lags","n_widths","sbhm_rank","n","success_rate","mean_cor","mean_rmse","mean_margin","margin_cor_pearson","margin_cor_spearman","margin_lm_slope"
+"coarse",6,3,2,6,30,1,0.274911784541105,4.08755919434078,0.147582508761359,NA,NA,NA
+"dense",42,7,6,8,30,1,0.23356107884817,3.98917022764953,0.0633897301482269,NA,NA,NA
+"moderate",15,5,3,8,30,1,0.242807752412228,4.12537203771389,0.0674030217606242,NA,NA,NA
+"very_dense",130,13,10,8,30,1,0.223419748145023,3.93331638983563,0.0376241226207239,NA,NA,NA

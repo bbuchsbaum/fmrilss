@@ -1,0 +1,10 @@
+"method","mean_cor"
+"st_default",0.329943618638637
+"hrfals_fastlss[cpp]",0.324444738408704
+"hrfals_fastlss[r]",0.324444738408704
+"fmrilss_oasis_best",0.322383454389395
+"fmrilss_lss",0.321550147491939
+"fmrilss_sbhm",0.26430436766934
+"hrfals_fit[cf_als]",0.120408686320074
+"hrfals_fit[ls_svd_1als]",0.120408686320074
+"hrfals_fit[ls_svd_only]",0.0612292421356899
