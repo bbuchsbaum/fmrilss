@@ -19,7 +19,8 @@ Imports:
     fmrihrf (>= 0.1.0),
     fmriAR (>= 0.0.0.9000),
     bigmemory,
-    ggplot2
+    ggplot2,
+    glmnet
 LinkingTo:
     Rcpp,
     RcppArmadillo,

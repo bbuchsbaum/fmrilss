@@ -5,6 +5,77 @@
 #' @name fmrilss_options
 NULL
 
+#' Construct stglmnet backend options
+#'
+#' Convenience constructor for the `stglmnet=` list accepted by
+#' `lss(method = "stglmnet")`.
+#' Unknown fields are allowed via `...` for forward compatibility.
+#'
+#' @param mode `"cv"` (default) selects lambda by internal cross-validation,
+#'   while `"fixed"` uses the supplied lambda sequence or the smallest fitted
+#'   lambda when no scalar is provided.
+#' @param alpha Elastic-net mixing parameter passed to `glmnet`.
+#' @param lambda Optional lambda sequence (or scalar in fixed mode).
+#' @param overlap_strategy Trial-overlap penalty mapping. One of `"none"`,
+#'   `"multiplicative"`, `"additive"`, `"hybrid"`, or `"threshold"`.
+#' @param pool_to_mean Logical; reparameterize trial effects into a pooled mean
+#'   plus orthogonal contrasts.
+#' @param pool_strength Penalty multiplier applied to pooled contrasts.
+#' @param pool_mean_penalty Penalty applied to the pooled mean coefficient.
+#' @param whiten One of `"inherit"` (default), `"auto"`, `"never"`, or
+#'   `"always"`. `"inherit"` uses the top-level `prewhiten=` argument only.
+#' @param cv_folds Number of folds used when `mode = "cv"`.
+#' @param cv_type.measure Cross-validation objective.
+#' @param cv_select Lambda selection rule in CV mode. `"optimal"` uses the
+#'   best-scoring lambda, `"1se"` applies the one-standard-error rule.
+#' @param return_fit Logical; when `TRUE`, `lss(method="stglmnet")` returns a
+#'   list containing `beta`, fit metadata, and the selected lambda.
+#' @param ... Additional backend options.
+#'
+#' @return A list with class `"fmrilss_stglmnet_options"`.
+#' @export
+stglmnet_options <- function(
+  mode = c("cv", "fixed"),
+  alpha = 0.2,
+  lambda = NULL,
+  overlap_strategy = c("none", "multiplicative", "additive", "hybrid", "threshold"),
+  pool_to_mean = FALSE,
+  pool_strength = 1,
+  pool_mean_penalty = 0,
+  whiten = c("inherit", "auto", "never", "always"),
+  cv_folds = 5L,
+  cv_type.measure = c("auto", "mse", "correlation", "reliability", "composite"),
+  cv_select = c("optimal", "1se"),
+  return_fit = FALSE,
+  ...
+) {
+  mode <- match.arg(mode)
+  overlap_strategy <- match.arg(overlap_strategy)
+  whiten <- match.arg(whiten)
+  cv_type.measure <- match.arg(cv_type.measure)
+  cv_select <- match.arg(cv_select)
+
+  opts <- list(
+    mode = mode,
+    alpha = as.numeric(alpha),
+    lambda = lambda,
+    overlap_strategy = overlap_strategy,
+    pool_to_mean = isTRUE(pool_to_mean),
+    pool_strength = as.numeric(pool_strength),
+    pool_mean_penalty = as.numeric(pool_mean_penalty),
+    whiten = whiten,
+    cv_folds = as.integer(cv_folds),
+    cv_type.measure = cv_type.measure,
+    cv_select = cv_select,
+    return_fit = isTRUE(return_fit)
+  )
+
+  extra <- list(...)
+  if (length(extra)) opts <- utils::modifyList(opts, extra)
+  class(opts) <- c("fmrilss_stglmnet_options", "list")
+  opts
+}
+
 #' Construct OASIS options
 #'
 #' Convenience constructor for the `oasis=` list accepted by `lss(method="oasis")`.

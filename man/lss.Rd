@@ -9,9 +9,11 @@ lss(
   X,
   Z = NULL,
   Nuisance = NULL,
-  method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive", "oasis"),
+  method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive", "oasis",
+    "stglmnet"),
   block_size = 96,
   oasis = list(),
+  stglmnet = list(),
   prewhiten = NULL
 )
 }
@@ -40,6 +42,7 @@ Options are:
   \item "cpp" - Standard C++ implementation
   \item "naive" - Simple loop-based R implementation (for testing)
   \item "oasis" - OASIS method with HRF support and ridge regularization
+  \item "stglmnet" - overlap-aware elastic-net backend using `glmnet`
 }}
 
 \item{block_size}{An integer specifying the voxel block size for parallel
@@ -50,6 +53,9 @@ construction, etc.).
 See Details and \code{\link{oasis_options}} for the full list.
 \strong{Note:} \code{oasis$whiten} is deprecated and ignored.
 Use the \code{prewhiten} parameter instead for all temporal whitening.}
+
+\item{stglmnet}{A list of options for the `method = "stglmnet"` backend.
+See Details and \code{\link{stglmnet_options}} for the common fields.}
 
 \item{prewhiten}{A list of prewhitening options using the \pkg{fmriAR}
 package, or \code{NULL} (no whitening, the default).
@@ -85,12 +91,14 @@ When using method="oasis", the following options are available in the oasis list
     to be modeled as nuisances). When provided, X can be NULL and will be constructed automatically.
   \item \code{K}: Explicit basis dimension for multi-basis HRF models (e.g., 3 for SPMG3).
     If not provided, it's auto-detected from X dimensions or defaults to 1 for single-basis HRFs.
-  \item \code{ridge_mode}: Either "absolute" (default) or "fractional". In absolute mode,
+  \item \code{ridge_mode}: Either "fractional" (default) or "absolute". In absolute mode,
     ridge_x and ridge_b are used directly as regularization parameters. In fractional mode,
     they represent fractions of the mean design energy for adaptive regularization.
-  \item \code{ridge_x}: Ridge parameter for trial-specific regressors (default 0). Controls
+  \item \code{ridge_x}: Ridge parameter for trial-specific regressors (default 0.05).
+    Controls
     regularization strength for individual trial estimates.
-  \item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0). Controls
+  \item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0.05).
+    Controls
     regularization strength for the sum of all other trials.
   \item \code{return_se}: Logical, whether to return standard errors (default FALSE). When TRUE,
     returns a list with \code{beta} (trial estimates) and \code{se} (standard errors) components.
@@ -110,6 +118,15 @@ Use the top-level \code{prewhiten} parameter for all temporal whitening.
 This replaces the old \code{oasis$whiten = "ar1"} syntax, which is now
 deprecated and ignored.  Do \emph{not} put AR options inside the
 \code{oasis} list; they belong in \code{prewhiten}.
+
+When using \code{method = "stglmnet"}, the backend accepts an additional
+nested \code{stglmnet=} list for lambda selection, overlap-adaptive
+penalties, and optional pooled trial parameterizations. The common pattern is
+\code{stglmnet = stglmnet_options(mode = "cv")} to select lambda by
+cross-validation, or \code{stglmnet = stglmnet_options(mode = "fixed",
+lambda = 0.01)} for a fixed elastic-net fit. The backend reuses fmrilss
+prewhitening and nuisance-projection utilities rather than maintaining a
+separate whitening path.
 
 The \code{prewhiten} list accepts the following fields
 (see also \code{\link{prewhiten_options}} for a validated constructor):

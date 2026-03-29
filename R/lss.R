@@ -24,6 +24,7 @@
 #'     \item "cpp" - Standard C++ implementation
 #'     \item "naive" - Simple loop-based R implementation (for testing)
 #'     \item "oasis" - OASIS method with HRF support and ridge regularization
+#'     \item "stglmnet" - overlap-aware elastic-net backend using `glmnet`
 #'   }
 #' @param block_size An integer specifying the voxel block size for parallel
 #'   processing, only applicable when `method = "cpp_optimized"`. Defaults to 96.
@@ -32,6 +33,8 @@
 #'   See Details and \code{\link{oasis_options}} for the full list.
 #'   \strong{Note:} \code{oasis$whiten} is deprecated and ignored.
 #'   Use the \code{prewhiten} parameter instead for all temporal whitening.
+#' @param stglmnet A list of options for the `method = "stglmnet"` backend.
+#'   See Details and \code{\link{stglmnet_options}} for the common fields.
 #' @param prewhiten A list of prewhitening options using the \pkg{fmriAR}
 #'   package, or \code{NULL} (no whitening, the default).
 #'   See Details and \code{\link{prewhiten_options}} for the full list.
@@ -87,6 +90,15 @@
 #' This replaces the old \code{oasis$whiten = "ar1"} syntax, which is now
 #' deprecated and ignored.  Do \emph{not} put AR options inside the
 #' \code{oasis} list; they belong in \code{prewhiten}.
+#'
+#' When using \code{method = "stglmnet"}, the backend accepts an additional
+#' nested \code{stglmnet=} list for lambda selection, overlap-adaptive
+#' penalties, and optional pooled trial parameterizations. The common pattern is
+#' \code{stglmnet = stglmnet_options(mode = "cv")} to select lambda by
+#' cross-validation, or \code{stglmnet = stglmnet_options(mode = "fixed",
+#' lambda = 0.01)} for a fixed elastic-net fit. The backend reuses fmrilss
+#' prewhitening and nuisance-projection utilities rather than maintaining a
+#' separate whitening path.
 #'
 #' The \code{prewhiten} list accepts the following fields
 #' (see also \code{\link{prewhiten_options}} for a validated constructor):
@@ -240,8 +252,8 @@
 #'
 #' @export
 lss <- function(Y, X, Z = NULL, Nuisance = NULL,
-                method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive", "oasis"),
-                block_size = 96, oasis = list(), prewhiten = NULL) {
+                method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive", "oasis", "stglmnet"),
+                block_size = 96, oasis = list(), stglmnet = list(), prewhiten = NULL) {
   
   method <- match.arg(method)
   
@@ -256,6 +268,10 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
       stop("For method='oasis', either X or oasis$design_spec must be provided")
     }
     return(.lss_oasis(Y, X, Z, Nuisance, oasis, prewhiten))
+  }
+
+  if (method == "stglmnet") {
+    return(.lss_stglmnet(Y, X, Z, Nuisance, stglmnet = stglmnet, prewhiten = prewhiten))
   }
   
   # Coerce S4 Matrix/data.frame to base matrices for non-OASIS methods
