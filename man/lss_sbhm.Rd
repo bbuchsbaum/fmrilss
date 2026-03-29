@@ -11,12 +11,14 @@ lss_sbhm(
   Nuisance = NULL,
   prewhiten = NULL,
   prepass = list(),
-  match = list(shrink = list(tau = 0, ref = NULL, snr = NULL), topK = 1, whiten = TRUE,
-    orient_ref = TRUE),
+  match = list(shrink = list(tau = 0, ref = NULL, snr = NULL), topK = 3, soft_blend =
+    TRUE, blend_margin = 0.08, whiten = FALSE, sv_floor_rel = 0.05, whiten_power = 0.5,
+    min_margin = NULL, min_beta_norm = NULL, fallback_ref = NULL, orient_ref = TRUE,
+    alpha_source = "prepass", rank1_min = 0),
   oasis = list(),
-  amplitude = list(method = "global_ls", ridge = list(mode = "fractional", lambda =
-    0.02), ridge_frac = list(x = 0.02, b = 0.02), cond_gate = NULL, adaptive =
-    list(enable = FALSE, base = 0.02, k0 = 1000, max = 0.08), return_se = FALSE),
+  amplitude = list(method = "lss1", ridge = list(mode = "fractional", lambda = 0.02),
+    ridge_frac = list(x = 0.02, b = 0.02), cond_gate = NULL, adaptive = list(enable =
+    FALSE, base = 0.02, k0 = 1000, max = 0.08), return_se = FALSE),
   return = c("amplitude", "coefficients", "both")
 )
 }
@@ -37,18 +39,32 @@ The HRF in `cond$hrf` is ignored and replaced with the SBHM basis HRF.}
 
 \item{match}{Optional list forwarded to `sbhm_match()` (e.g., shrink, topK, whiten, orient_ref).
 Additional fields handled here:
-- `soft_blend` logical (default FALSE): when `topK > 1`, blend the top-K
+- `alpha_source`: one of `"prepass"` (default), `"trial_projection"`,
+  or `"oasis_rank1"`.
+  `"trial_projection"` estimates voxel shape from per-trial projection
+  coefficients in the shared basis.
+- `rank1_min`: optional minimum rank-1 variance fraction in `[0,1]` when
+  `alpha_source="oasis_rank1"`. Voxels below threshold fall back to prepass.
+- `soft_blend` logical (default TRUE): when `topK > 1`, blend the top-K
   library coordinates per voxel using softmax weights returned by `sbhm_match()`.
   If `blend_margin` is provided, blending is only applied to voxels with
   `margin < blend_margin`; others use the hard top-1 assignment.
 - `blend_margin` optional numeric threshold on the matching margin for
-  conditional blending.}
+  conditional blending.
+- `whiten_power` numeric in `[0,1]` for partial singular-value whitening
+  (`1`=full, `0.5`=partial).
+- `min_margin` optional minimum matching margin. Voxels below threshold
+  fall back to `fallback_ref`.
+- `min_beta_norm` optional minimum norm of the shape summary used for
+  matching. Voxels below threshold fall back to `fallback_ref`.
+- `fallback_ref` optional r-vector fallback coordinate (default
+  `sbhm$ref$alpha_ref`).}
 
 \item{oasis}{Optional list forwarded to `lss(..., method="oasis")`. `K` is set to
 `ncol(sbhm$B)` if not provided, and `design_spec` is injected automatically.}
 
 \item{amplitude}{List controlling the scalar amplitude stage. Fields:
-- `method`: one of "global_ls" (default), "lss1", "oasis_voxel".
+- `method`: one of "lss1" (default), "global_ls", "oasis_voxel".
 - `ridge`: for `global_ls`, either numeric (absolute) or list(mode, lambda).
 - `ridge_frac`: for `lss1`/`oasis_voxel`, list(x, b) fractional ridge.
 - `cond_gate`: optional auto-fallback rule, e.g., list(metric="rho", thr=0.999, fallback="lss1").}

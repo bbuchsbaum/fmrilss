@@ -11,6 +11,8 @@ sbhm_match(
   shrink = list(tau = 0, ref = NULL, snr = NULL),
   topK = 1,
   whiten = TRUE,
+  sv_floor_rel = 1e-06,
+  whiten_power = 1,
   orient_ref = TRUE
 )
 }
@@ -32,6 +34,13 @@ GLM in the SBHM basis. Columns correspond to voxels.}
 \item{topK}{Integer, return top-K scores/weights if >1 (default 1).}
 
 \item{whiten}{Logical, divide coefficients by S before normalization (default TRUE).}
+
+\item{sv_floor_rel}{Relative singular-value floor used when `whiten=TRUE`
+(default `1e-6`).}
+
+\item{whiten_power}{Numeric in `[0, 1]` controlling whitening strength when
+`whiten=TRUE`. Uses division by `S^whiten_power` (`1` = full whitening,
+`0.5` = partial whitening, `0` = no whitening). Default `1`.}
 
 \item{orient_ref}{Logical, flip beta_bar columns when their dot with `ref` is
 negative before matching (default TRUE).}

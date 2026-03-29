@@ -20,7 +20,8 @@ Numeric matrix ntrials x V of scalar amplitudes.
 \description{
 Given trial-wise coefficients in the shared basis (rxntrialsxV) and the
 voxel-specific matched library coordinates `alpha_hat` (rxV), compute scalar
-amplitudes per trial and voxel via inner products.
+amplitudes per trial and voxel via least-squares projection:
+`a = (alpha' beta) / (alpha' alpha)`.
 }
 \examples{
 \dontrun{

@@ -24,9 +24,12 @@
 
 \item{oasis}{list of options:
 - design_spec: list describing events/HRF to build X via fmrihrf
-- K: explicit basis dimension (auto-detected if not provided)
-- ridge_mode: "absolute" (default) or "fractional"
-- ridge_x, ridge_b: nonnegative ridge on the [a_j, b_j] Gram (default 0 -> exact LSS)
+- K: explicit basis dimension (recommended when X is supplied directly)
+- infer_K_from_X: logical; if TRUE and K is missing, infer basis
+  dimension heuristically from X (default FALSE for safety)
+- ridge_mode: "fractional" (default) or "absolute"
+- ridge_x, ridge_b: nonnegative ridge on the [a_j, b_j] Gram
+  (default 0.05 in fractional mode)
 - block_cols: voxel block size (default 4096)
 - return_se: logical (default FALSE)
 - return_diag: logical (default FALSE)}

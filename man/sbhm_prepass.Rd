@@ -32,7 +32,7 @@ Y and design are prewhitened together.}
 \item{ridge}{Optional list for targeted ridge shrinkage in the prepass solve:
 - `mode`: "fractional" (default) or "absolute". Fractional scales by mean(diag(G)).
 - `lambda`: nonnegative scalar (default 0.01 in fractional mode).
-- `alpha_ref`: r-vector to shrink towards (default `sbhm$ref$alpha_ref`).}
+- `alpha_ref`: r-vector to shrink towards (default zero vector).}
 
 \item{data_fac}{Optional list for external factorization: `scores` (T×q),
 `loadings` (q×V). If provided, computes X'Y via (X'Scores) × Loadings. In this

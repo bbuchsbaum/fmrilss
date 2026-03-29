@@ -11,12 +11,14 @@ lss_sbhm_design(
   baseline_model = NULL,
   prewhiten = NULL,
   prepass = list(),
-  match = list(shrink = list(tau = 0, ref = NULL, snr = NULL), topK = 1, whiten = TRUE,
-    orient_ref = TRUE),
+  match = list(shrink = list(tau = 0, ref = NULL, snr = NULL), topK = 3, soft_blend =
+    TRUE, blend_margin = 0.08, whiten = FALSE, sv_floor_rel = 0.05, whiten_power = 0.5,
+    min_margin = NULL, min_beta_norm = NULL, fallback_ref = NULL, orient_ref = TRUE,
+    alpha_source = "prepass", rank1_min = 0),
   oasis = list(),
-  amplitude = list(method = "global_ls", ridge = list(mode = "fractional", lambda =
-    0.02), ridge_frac = list(x = 0.02, b = 0.02), cond_gate = NULL, adaptive =
-    list(enable = FALSE, base = 0.02, k0 = 1000, max = 0.08), return_se = FALSE),
+  amplitude = list(method = "lss1", ridge = list(mode = "fractional", lambda = 0.02),
+    ridge_frac = list(x = 0.02, b = 0.02), cond_gate = NULL, adaptive = list(enable =
+    FALSE, base = 0.02, k0 = 1000, max = 0.08), return_se = FALSE),
   return = c("amplitude", "coefficients", "both"),
   validate = TRUE,
   ...

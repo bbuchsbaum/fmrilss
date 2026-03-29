@@ -7,9 +7,9 @@
 oasis_options(
   design_spec = NULL,
   K = NULL,
-  ridge_mode = c("absolute", "fractional"),
-  ridge_x = 0,
-  ridge_b = 0,
+  ridge_mode = c("fractional", "absolute"),
+  ridge_x = 0.05,
+  ridge_b = 0.05,
   block_cols = 4096L,
   return_se = FALSE,
   return_diag = FALSE,
@@ -23,9 +23,9 @@ oasis_options(
 
 \item{K}{Optional basis dimension override.}
 
-\item{ridge_mode}{`"absolute"` (default) or `"fractional"`.}
+\item{ridge_mode}{`"fractional"` (default) or `"absolute"`.}
 
-\item{ridge_x, ridge_b}{Non-negative ridge penalties.}
+\item{ridge_x, ridge_b}{Non-negative ridge penalties (defaults 0.05 each).}
 
 \item{block_cols}{Voxel block size for blocked products.}
 

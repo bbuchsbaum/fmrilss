@@ -346,20 +346,58 @@ confident voxels keep their hard assignment. For manual control over the
 blending weights, use `sbhm_prepass()`, `sbhm_match(topK = K)`, and
 `sbhm_project()` directly. See `?sbhm_match` for details.
 
+## Shape Estimation Strategies
+
+By default, SBHM estimates each voxel's HRF shape from an aggregate prepass
+fit (`alpha_source = "prepass"`). Two alternative strategies are available when
+the prepass is unreliable:
+
+- `"trial_projection"` estimates shape from per-trial projection coefficients in
+  the shared basis, using the leading singular vector across trials.
+- `"oasis_rank1"` extracts shape from the rank-1 approximation of the
+  trial-wise OASIS betas. Set `rank1_min` to gate voxels with low rank-1
+  variance fraction back to prepass.
+
+```{r alpha-source, eval=FALSE}
+res_proj <- lss_sbhm(
+  Y, sbhm, design_spec,
+  match = list(alpha_source = "trial_projection")
+)
+```
+
+### Low-Confidence Gating
+
+For voxels where matching is uncertain (low margin or weak signal), you can gate
+them to a fallback shape using `min_margin` and `min_beta_norm`. Gated voxels
+use the reference coordinate instead of the matched one.
+
+```{r gating-example, eval=FALSE}
+res_gated <- lss_sbhm(
+  Y, sbhm, design_spec,
+  match = list(min_margin = 0.05, min_beta_norm = 1e-3)
+)
+cat("Voxels gated to fallback:", res_gated$diag$fallback_low_conf_n, "\n")
+```
+
 ## Amplitude Policy
 
 The final amplitude stage estimates per-trial scalars from the matched HRF. The
 `amplitude$method` argument selects the estimator:
-`"global_ls"` (default, fast, ridge-regularized GLM),
-`"lss1"` (per-trial 2x2 LSS, better under strong overlap), or
+`"lss1"` (default, per-trial 2x2 LSS---robust under overlap),
+`"global_ls"` (fast ridge-regularized GLM across all trials), or
 `"oasis_voxel"` (full OASIS per voxel, heaviest but returns SEs).
+
+The default `"lss1"` provides the best balance of robustness and accuracy for
+typical rapid event-related designs.  For slow designs with well-separated
+trials, `"global_ls"` can be faster.  Use `cond_gate` to fall back
+automatically when the design is too collinear for a given method.
 
 ```{r amplitude-policy, eval=FALSE}
 out <- lss_sbhm(
   Y, sbhm, design_spec,
-  amplitude = list(method = "global_ls",
-                   ridge = list(mode = "fractional", lambda = 0.02),
-                   cond_gate = list(metric = "rho", thr = 0.999, fallback = "lss1"))
+  amplitude = list(method = "lss1",
+                   ridge_frac = list(x = 0.02, b = 0.02),
+                   cond_gate = list(metric = "rho", thr = 0.999, fallback = "global_ls"))
 )
 ```
 
@@ -381,12 +419,16 @@ cat("Coefficients:", dim(res_c$coeffs_r), " [r x trials x voxels]\n")
 | Parameter | Default | Recommended | Notes |
 |-----------|---------|-------------|-------|
 | `r` (rank) | -- | 6--12 | Aim for 90--95% variance explained |
-| `topK` | 1 | 1--5 | Use 3--5 with `soft_blend = TRUE` for ambiguous cases |
+| `topK` | 3 | 1--5 | Use 3--5 with `soft_blend = TRUE` for ambiguous cases |
+| `soft_blend` | TRUE | TRUE | Blend top-K candidates for uncertain voxels |
+| `blend_margin` | 0.08 | 0.05--0.15 | Only blend voxels with margin below this |
+| `alpha_source` | `"prepass"` | `"prepass"` | Also `"trial_projection"` or `"oasis_rank1"` |
 | `prepass$ridge` | NULL | `list(mode = "fractional", lambda = 0.01)` | Stabilizes noisy/collinear designs |
 | `match$shrink$tau` | 0 | 0--0.2 | Increase for low SNR |
-| `match$whiten` | TRUE | TRUE | Equalizes all basis dimensions in matching |
+| `match$whiten` | FALSE | FALSE | Set TRUE with `whiten_power = 0.5` for partial whitening |
+| `match$min_margin` | NULL | 0.05--0.1 | Gate low-confidence voxels to fallback shape |
 | `prewhiten` | NULL | `list(method = "ar", p = 1L)` | Use for TR < 2s |
-| `amplitude$method` | `"global_ls"` | varies by ISI | See `?lss_sbhm` |
+| `amplitude$method` | `"lss1"` | varies by ISI | `"global_ls"` for slow ER, `"lss1"` otherwise |
 
 For full details on every parameter, see `?sbhm_build`, `?sbhm_match`, and
 `?lss_sbhm`.
