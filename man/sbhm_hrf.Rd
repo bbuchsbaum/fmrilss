@@ -10,15 +10,15 @@ sbhm_hrf(B, tgrid, span)
 \item{B}{A numeric matrix (T×r) with orthonormal columns (shared basis).}
 
 \item{tgrid}{Numeric vector of length T giving the global times (seconds)
-corresponding to the rows of `B`.}
+corresponding to the rows of \code{B}.}
 
-\item{span}{Numeric HRF span passed to `fmrihrf::HRF()` metadata.}
+\item{span}{Numeric HRF span passed to \code{fmrihrf::HRF()} metadata.}
 }
 \value{
-An `fmrihrf::HRF` object with `nbasis = ncol(B)`.
+An \code{fmrihrf::HRF} object with \code{nbasis = ncol(B)}.
 }
 \description{
-Convert a shared time basis matrix `B` (T×r) into an `fmrihrf::HRF` object
+Convert a shared time basis matrix \code{B} (T×r) into an \code{fmrihrf::HRF} object
 so it can be used directly in OASIS design construction. The HRF returns the
 r basis columns evaluated at arbitrary times by piecewise-linear
 interpolation on the provided time grid.

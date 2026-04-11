@@ -35,7 +35,7 @@ if NULL, an intercept (column of 1s) is used.}
 
 \item{verbose}{logical; print progress every 1000 voxels}
 
-\item{method}{character: "r" (default, pure R), "cpp" (C++ backend), 
+\item{method}{character: "r" (default, pure R), "cpp" (C++ backend),
 "cpp_arma" (Armadillo backend), or "cpp_omp" (OpenMP parallel backend).
 Falls back automatically: cpp_omp -> cpp_arma -> cpp -> r.}
 }
@@ -47,13 +47,15 @@ Compute LSS trial-wise betas when each voxel has its own HRF formed
 as a linear combination of K basis kernels sampled on the TR grid.
 }
 \details{
-**Design & nuisance handling match `lss()`**:
-  - The trial-of-interest (Xi) and the sum of all other trials (Xother) are
-    included in each per-trial GLM.
-  - If `Nuisance` is supplied, it is projected out of **Y** and the trial
-    regressors before LSS (standard residualization). Experimental regressors
-    `Z` are *not* residualized, matching `lss()` documentation.
-  - If `Z` is `NULL`, an intercept-only design is used.
+\strong{Design & nuisance handling match \code{lss()}}:
+\itemize{
+\item The trial-of-interest (Xi) and the sum of all other trials (Xother) are
+included in each per-trial GLM.
+\item If \code{Nuisance} is supplied, it is projected out of \strong{Y} and the trial
+regressors before LSS (standard residualization). Experimental regressors
+\code{Z} are \emph{not} residualized, matching \code{lss()} documentation.
+\item If \code{Z} is \code{NULL}, an intercept-only design is used.
+}
 }
 \examples{
 \dontrun{

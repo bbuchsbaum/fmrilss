@@ -26,7 +26,7 @@ created with \code{trialwise()} to generate one regressor per trial.}
 \item{baseline_model}{Optional baseline_model object from
 \code{fmridesign::baseline_model()}. Defines drift correction, block intercepts,
 and nuisance regressors. If NULL, basic baseline intercepts are
-auto-injected: per-run intercepts derived from `blockids` (or the
+auto-injected: per-run intercepts derived from \code{blockids} (or the
 sampling frame) are used to ensure proper baseline modeling.}
 
 \item{method}{LSS method to use. Currently only "oasis" is supported for
@@ -58,7 +58,7 @@ design compatibility, collinearity, and temporal alignment.}
 }
 \value{
 Matrix of trial-wise beta estimates (trials × voxels), or
-  (trials × basis_functions) × voxels for multi-basis HRFs.
+(trials × basis_functions) × voxels for multi-basis HRFs.
 }
 \description{
 Perform Least Squares Separate (LSS) analysis using event_model and
@@ -89,8 +89,8 @@ For factorial designs (e.g., estimating condition-level betas separately):
 
 If provided, baseline_model components are mapped as follows:
 \itemize{
-  \item \code{drift} and \code{block} terms → Z parameter (fixed effects)
-  \item \code{nuisance} term → Nuisance parameter (confounds)
+\item \code{drift} and \code{block} terms → Z parameter (fixed effects)
+\item \code{nuisance} term → Nuisance parameter (confounds)
 }
 
 \strong{Multi-Run Handling:}
@@ -112,10 +112,10 @@ See \code{\link{lss}} and \code{\link{prewhiten_options}} for full details.
 
 When \code{validate = TRUE}, the function checks:
 \itemize{
-  \item Temporal alignment: nrow(Y) matches total scans in sampling_frame
-  \item Collinearity: Design matrix condition number < 30 (suppressed when
-    ridge is already configured via \code{oasis$ridge_x} or \code{oasis$ridge_b})
-  \item Compatibility: event_model and baseline_model use same sampling_frame
+\item Temporal alignment: nrow(Y) matches total scans in sampling_frame
+\item Collinearity: Design matrix condition number < 30 (suppressed when
+ridge is already configured via \code{oasis$ridge_x} or \code{oasis$ridge_b})
+\item Compatibility: event_model and baseline_model use same sampling_frame
 }
 }
 \examples{

@@ -25,10 +25,10 @@
 #'   \item OpenMP support for multi-core processing
 #' }
 #'
-#' @docType package
 #' @name fmrilss-package
 #' @aliases fmrilss
 #' @useDynLib fmrilss, .registration=TRUE
 #' @importFrom Rcpp sourceCpp
 #' @importFrom stats complete.cases cor lm.fit median sd var
-NULL
+#' @keywords internal
+"_PACKAGE"

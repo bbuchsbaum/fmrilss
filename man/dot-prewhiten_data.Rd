@@ -17,27 +17,27 @@
 
 \item{prewhiten}{List of prewhitening options:
 \describe{
-  \item{method}{Character: "ar" (default), "arma", or "none"}
-  \item{p}{Integer or "auto": AR order (default "auto")}
-  \item{q}{Integer: MA order for ARMA (default 0)}
-  \item{p_max}{Integer: Maximum AR order when p="auto" (default 6)}
-  \item{pooling}{Character: "global" (default), "voxel", "run", or "parcel"}
-  \item{runs}{Integer vector: Run identifiers for run-aware estimation}
-  \item{parcels}{Integer vector: Parcel memberships for parcel-based pooling}
-  \item{exact_first}{Character: "ar1" or "none" for exact AR(1) scaling}
-  \item{compute_residuals}{Logical: Whether to compute residuals first (default TRUE)}
+\item{method}{Character: "ar" (default), "arma", or "none"}
+\item{p}{Integer or "auto": AR order (default "auto")}
+\item{q}{Integer: MA order for ARMA (default 0)}
+\item{p_max}{Integer: Maximum AR order when p="auto" (default 6)}
+\item{pooling}{Character: "global" (default), "voxel", "run", or "parcel"}
+\item{runs}{Integer vector: Run identifiers for run-aware estimation}
+\item{parcels}{Integer vector: Parcel memberships for parcel-based pooling}
+\item{exact_first}{Character: "ar1" or "none" for exact AR(1) scaling}
+\item{compute_residuals}{Logical: Whether to compute residuals first (default TRUE)}
 }}
 }
 \value{
 List containing:
-  \describe{
-    \item{Y_whitened}{Whitened data matrix}
-    \item{X_whitened}{Whitened trial design matrix (if provided)}
-    \item{Z_whitened}{Whitened experimental design (if provided)}
-    \item{Nuisance_whitened}{Whitened nuisance regressors (if provided)}
-    \item{whiten_plan}{fmriAR plan object for diagnostics}
-    \item{applied}{Logical: Whether whitening was applied}
-  }
+\describe{
+\item{Y_whitened}{Whitened data matrix}
+\item{X_whitened}{Whitened trial design matrix (if provided)}
+\item{Z_whitened}{Whitened experimental design (if provided)}
+\item{Nuisance_whitened}{Whitened nuisance regressors (if provided)}
+\item{whiten_plan}{fmriAR plan object for diagnostics}
+\item{applied}{Logical: Whether whitening was applied}
+}
 }
 \description{
 Internal function providing a unified interface for prewhitening fMRI data

@@ -11,17 +11,17 @@ sbhm_project(beta_rt, alpha_hat)
 coefficients in the SBHM basis (as returned by OASIS with K=r, reshaped).}
 
 \item{alpha_hat}{Numeric matrix rxV of matched library coordinates per voxel
-(e.g., `sbhm_match()$alpha_hat`). These should be in the same coordinate
-system as `beta_rt` (unwhitened, not L2-normalized) for interpretable amplitudes.}
+(e.g., \code{sbhm_match()$alpha_hat}). These should be in the same coordinate
+system as \code{beta_rt} (unwhitened, not L2-normalized) for interpretable amplitudes.}
 }
 \value{
 Numeric matrix ntrials x V of scalar amplitudes.
 }
 \description{
 Given trial-wise coefficients in the shared basis (rxntrialsxV) and the
-voxel-specific matched library coordinates `alpha_hat` (rxV), compute scalar
+voxel-specific matched library coordinates \code{alpha_hat} (rxV), compute scalar
 amplitudes per trial and voxel via least-squares projection:
-`a = (alpha' beta) / (alpha' alpha)`.
+\verb{a = (alpha' beta) / (alpha' alpha)}.
 }
 \examples{
 \dontrun{

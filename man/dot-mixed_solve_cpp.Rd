@@ -37,6 +37,6 @@ A list with mixed model results.
 }
 \description{
 C++ implementation of the mixed model solver. This function is typically
-called through the main `mixed_solve` function rather than directly.
+called through the main \code{mixed_solve} function rather than directly.
 }
 \keyword{internal}

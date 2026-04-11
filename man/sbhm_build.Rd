@@ -18,25 +18,27 @@ sbhm_build(
 )
 }
 \arguments{
-\item{library_spec}{Either NULL (when `library_H` is provided) or a list with:
-- `fun`: a function compatible with `fmrihrf::hrf_library(fun, pgrid, ...)`
-         that returns an `fmrihrf` HRF object when called with parameters.
-- `pgrid`: a data.frame of parameter combinations (see examples).
-- `span`: numeric, HRF span in seconds (default `span`).
-- `precision`: numeric, evaluation precision (default 0.1 sec).
-- `method`: evaluation method for `fmrihrf::evaluate()` (default "conv").
-- `extras`: optional list of additional arguments passed to `hrf_library`.}
+\item{library_spec}{Either NULL (when \code{library_H} is provided) or a list with:
+\itemize{
+\item \code{fun}: a function compatible with \code{fmrihrf::hrf_library(fun, pgrid, ...)}
+that returns an \code{fmrihrf} HRF object when called with parameters.
+\item \code{pgrid}: a data.frame of parameter combinations (see examples).
+\item \code{span}: numeric, HRF span in seconds (default \code{span}).
+\item \code{precision}: numeric, evaluation precision (default 0.1 sec).
+\item \code{method}: evaluation method for \code{fmrihrf::evaluate()} (default "conv").
+\item \code{extras}: optional list of additional arguments passed to \code{hrf_library}.
+}}
 
 \item{library_H}{Optional precomputed TxK matrix of candidate HRFs, already
-aligned to the TR grid `tgrid` (or `sframe`). Mutually exclusive with `library_spec`.}
+aligned to the TR grid \code{tgrid} (or \code{sframe}). Mutually exclusive with \code{library_spec}.}
 
-\item{r}{Target rank for the shared basis (default 6). Clipped to `min(T, K)`.}
+\item{r}{Target rank for the shared basis (default 6). Clipped to \code{min(T, K)}.}
 
-\item{sframe}{Optional `fmrihrf::sampling_frame`, used to derive the global time
-grid when `tgrid` is not provided.}
+\item{sframe}{Optional \code{fmrihrf::sampling_frame}, used to derive the global time
+grid when \code{tgrid} is not provided.}
 
 \item{tgrid}{Optional numeric vector of global times (in seconds). If provided,
-takes precedence over `sframe`.}
+takes precedence over \code{sframe}.}
 
 \item{span}{HRF span in seconds (default 32). Used for reference HRF when needed.}
 
@@ -47,28 +49,30 @@ used for baseline removal (column-wise mean subtraction within this window).
 Set to NULL to skip.}
 
 \item{shifts}{Optional numeric vector of time shifts (in seconds). When provided,
-shifted copies of the library are added by linear interpolation on `tgrid`.}
+shifted copies of the library are added by linear interpolation on \code{tgrid}.}
 
 \item{ref}{Reference for coefficient-space shrinkage and orientation.
-One of `"mean"` (default) or `"spmg1"`. If `"spmg1"`, the SPMG1 HRF is
-projected onto the learned basis to form `alpha_ref`.}
+One of \code{"mean"} (default) or \code{"spmg1"}. If \code{"spmg1"}, the SPMG1 HRF is
+projected onto the learned basis to form \code{alpha_ref}.}
 }
 \value{
 A list with components:
-  - `B` (Txr): shared orthonormal time basis
-  - `S` (length r): singular values
-  - `A` (rxK): coordinates of library HRFs in the shared basis
-  - `tgrid`: the global time grid used (seconds)
-  - `span`: span used for reference HRF
-  - `ref`: list with `alpha_ref` (length r) and `name`
-  - `meta`: list with `r`, `K`, `normalize`, `baseline`
+\itemize{
+\item \code{B} (Txr): shared orthonormal time basis
+\item \code{S} (length r): singular values
+\item \code{A} (rxK): coordinates of library HRFs in the shared basis
+\item \code{tgrid}: the global time grid used (seconds)
+\item \code{span}: span used for reference HRF
+\item \code{ref}: list with \code{alpha_ref} (length r) and \code{name}
+\item \code{meta}: list with \code{r}, \code{K}, \code{normalize}, \code{baseline}
+}
 }
 \description{
 Learn a low-rank shared time basis from a parameterized HRF library using
-`fmrihrf::hrf_library()`. The library is evaluated on the TR grid, optionally
+\code{fmrihrf::hrf_library()}. The library is evaluated on the TR grid, optionally
 baseline-removed and L2-normalized, and decomposed via SVD into
-`B = U_r` (shared basis), singular values `S`, and library coordinates
-`A = diag(S) %*% t(V_r)`.
+\code{B = U_r} (shared basis), singular values \code{S}, and library coordinates
+\code{A = diag(S) \%*\% t(V_r)}.
 }
 \examples{
 \dontrun{

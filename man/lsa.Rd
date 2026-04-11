@@ -7,10 +7,10 @@
 lsa(Y, X, Z = NULL, Nuisance = NULL, method = c("r", "cpp"))
 }
 \arguments{
-\item{Y}{A numeric matrix where rows are timepoints and columns are 
+\item{Y}{A numeric matrix where rows are timepoints and columns are
 voxels/features. This is the dependent variable data.}
 
-\item{X}{A numeric matrix where rows are timepoints and columns are 
+\item{X}{A numeric matrix where rows are timepoints and columns are
 trial-specific regressors. Each column represents a single trial or event.}
 
 \item{Z}{A numeric matrix of nuisance regressors (e.g., motion parameters,
@@ -21,21 +21,21 @@ If both Z and Nuisance are provided, Z takes precedence.}
 
 \item{method}{Character string specifying the computational method:
 \itemize{
-  \item "r" - Pure R implementation using lm.fit
-  \item "cpp" - C++ implementation for better performance
+\item "r" - Pure R implementation using lm.fit
+\item "cpp" - C++ implementation for better performance
 }}
 }
 \value{
 A numeric matrix of size T × V containing the beta estimates for
-  each trial regressor (rows) and each voxel (columns).
+each trial regressor (rows) and each voxel (columns).
 }
 \description{
 Performs a standard multiple regression analysis where all trial regressors
-are fitted simultaneously. This provides a reference comparison to the 
+are fitted simultaneously. This provides a reference comparison to the
 Least Squares Separate (LSS) approach.
 }
 \details{
-LSA fits the model: Y = X*beta + Z*gamma + error, where all trial regressors
+LSA fits the model: Y = X\emph{beta + Z}gamma + error, where all trial regressors
 in X are estimated simultaneously. This is in contrast to LSS, which fits
 each trial separately while treating other trials as nuisance regressors.
 }

@@ -27,45 +27,45 @@ lss_sbhm_design(
 \arguments{
 \item{Y}{Numeric matrix T×V of fMRI time series (timepoints × voxels).}
 
-\item{sbhm}{SBHM object as returned by `sbhm_build()`.}
+\item{sbhm}{SBHM object as returned by \code{sbhm_build()}.}
 
-\item{event_model}{An `event_model` from `fmridesign::event_model()` defining
-the trial structure (typically created with `trialwise()`).}
+\item{event_model}{An \code{event_model} from \code{fmridesign::event_model()} defining
+the trial structure (typically created with \code{trialwise()}).}
 
-\item{baseline_model}{Optional `baseline_model` from
-`fmridesign::baseline_model()`. Its drift, block, and nuisance terms are
+\item{baseline_model}{Optional \code{baseline_model} from
+\code{fmridesign::baseline_model()}. Its drift, block, and nuisance terms are
 projected out as confounds.}
 
-\item{prewhiten}{Optional prewhitening options (see `?lss`).}
+\item{prewhiten}{Optional prewhitening options (see \code{?lss}).}
 
-\item{prepass}{Optional list forwarded to `sbhm_prepass()`.}
+\item{prepass}{Optional list forwarded to \code{sbhm_prepass()}.}
 
-\item{match}{Optional list forwarded to `sbhm_match()`.}
+\item{match}{Optional list forwarded to \code{sbhm_match()}.}
 
-\item{oasis}{Optional list forwarded to `lss(..., method = "oasis")`. `K`
-defaults to `ncol(sbhm$B)`.}
+\item{oasis}{Optional list forwarded to \code{lss(..., method = "oasis")}. \code{K}
+defaults to \code{ncol(sbhm$B)}.}
 
-\item{amplitude}{Amplitude options (see `?lss_sbhm`).}
+\item{amplitude}{Amplitude options (see \code{?lss_sbhm}).}
 
-\item{return}{One of `"amplitude"`, `"coefficients"`, or `"both"`.}
+\item{return}{One of \code{"amplitude"}, \code{"coefficients"}, or \code{"both"}.}
 
 \item{validate}{Logical; when TRUE, performs basic checks (sampling frame
-compatibility, temporal alignment) analogous to `lss_design()`.}
+compatibility, temporal alignment) analogous to \code{lss_design()}.}
 
 \item{...}{Reserved for future use.}
 }
 \value{
-Same return contract as `lss_sbhm()`.
+Same return contract as \code{lss_sbhm()}.
 }
 \description{
-Run the SBHM end-to-end pipeline using fmridesign's `event_model` and
-optional `baseline_model`, mirroring the convenience of `lss_design()` but
+Run the SBHM end-to-end pipeline using fmridesign's \code{event_model} and
+optional \code{baseline_model}, mirroring the convenience of \code{lss_design()} but
 producing SBHM coefficients and (optionally) scalar amplitudes.
 }
 \details{
-This function wraps `lss_sbhm()` by converting the `event_model` into an
-OASIS `design_spec` that uses the SBHM basis HRF, and by mapping
-`baseline_model` terms to nuisance regressors for projection.
+This function wraps \code{lss_sbhm()} by converting the \code{event_model} into an
+OASIS \code{design_spec} that uses the SBHM basis HRF, and by mapping
+\code{baseline_model} terms to nuisance regressors for projection.
 }
 \examples{
 \dontrun{

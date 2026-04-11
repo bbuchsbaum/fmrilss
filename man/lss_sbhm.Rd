@@ -25,60 +25,66 @@ lss_sbhm(
 \arguments{
 \item{Y}{Numeric matrix T×V of fMRI time series.}
 
-\item{sbhm}{SBHM object from `sbhm_build()`.}
+\item{sbhm}{SBHM object from \code{sbhm_build()}.}
 
-\item{design_spec}{List for design construction (same as `oasis$design_spec`):
-`list(sframe=..., cond=list(onsets=..., duration=0, span=...), others=list(...))`.
-The HRF in `cond$hrf` is ignored and replaced with the SBHM basis HRF.}
+\item{design_spec}{List for design construction (same as \code{oasis$design_spec}):
+\code{list(sframe=..., cond=list(onsets=..., duration=0, span=...), others=list(...))}.
+The HRF in \code{cond$hrf} is ignored and replaced with the SBHM basis HRF.}
 
 \item{Nuisance}{Optional T×P nuisance regressors.}
 
-\item{prewhiten}{Optional prewhitening options (see `?lss`).}
+\item{prewhiten}{Optional prewhitening options (see \code{?lss}).}
 
-\item{prepass}{Optional list forwarded to `sbhm_prepass()` (e.g., ridge, data_fac).}
+\item{prepass}{Optional list forwarded to \code{sbhm_prepass()} (e.g., ridge, data_fac).}
 
-\item{match}{Optional list forwarded to `sbhm_match()` (e.g., shrink, topK, whiten, orient_ref).
+\item{match}{Optional list forwarded to \code{sbhm_match()} (e.g., shrink, topK, whiten, orient_ref).
 Additional fields handled here:
-- `alpha_source`: one of `"prepass"` (default), `"trial_projection"`,
-  or `"oasis_rank1"`.
-  `"trial_projection"` estimates voxel shape from per-trial projection
-  coefficients in the shared basis.
-- `rank1_min`: optional minimum rank-1 variance fraction in `[0,1]` when
-  `alpha_source="oasis_rank1"`. Voxels below threshold fall back to prepass.
-- `soft_blend` logical (default TRUE): when `topK > 1`, blend the top-K
-  library coordinates per voxel using softmax weights returned by `sbhm_match()`.
-  If `blend_margin` is provided, blending is only applied to voxels with
-  `margin < blend_margin`; others use the hard top-1 assignment.
-- `blend_margin` optional numeric threshold on the matching margin for
-  conditional blending.
-- `whiten_power` numeric in `[0,1]` for partial singular-value whitening
-  (`1`=full, `0.5`=partial).
-- `min_margin` optional minimum matching margin. Voxels below threshold
-  fall back to `fallback_ref`.
-- `min_beta_norm` optional minimum norm of the shape summary used for
-  matching. Voxels below threshold fall back to `fallback_ref`.
-- `fallback_ref` optional r-vector fallback coordinate (default
-  `sbhm$ref$alpha_ref`).}
+\itemize{
+\item \code{alpha_source}: one of \code{"prepass"} (default), \code{"trial_projection"},
+or \code{"oasis_rank1"}.
+\code{"trial_projection"} estimates voxel shape from per-trial projection
+coefficients in the shared basis.
+\item \code{rank1_min}: optional minimum rank-1 variance fraction in \verb{[0,1]} when
+\code{alpha_source="oasis_rank1"}. Voxels below threshold fall back to prepass.
+\item \code{soft_blend} logical (default TRUE): when \code{topK > 1}, blend the top-K
+library coordinates per voxel using softmax weights returned by \code{sbhm_match()}.
+If \code{blend_margin} is provided, blending is only applied to voxels with
+\code{margin < blend_margin}; others use the hard top-1 assignment.
+\item \code{blend_margin} optional numeric threshold on the matching margin for
+conditional blending.
+\item \code{whiten_power} numeric in \verb{[0,1]} for partial singular-value whitening
+(\code{1}=full, \code{0.5}=partial).
+\item \code{min_margin} optional minimum matching margin. Voxels below threshold
+fall back to \code{fallback_ref}.
+\item \code{min_beta_norm} optional minimum norm of the shape summary used for
+matching. Voxels below threshold fall back to \code{fallback_ref}.
+\item \code{fallback_ref} optional r-vector fallback coordinate (default
+\code{sbhm$ref$alpha_ref}).
+}}
 
-\item{oasis}{Optional list forwarded to `lss(..., method="oasis")`. `K` is set to
-`ncol(sbhm$B)` if not provided, and `design_spec` is injected automatically.}
+\item{oasis}{Optional list forwarded to \code{lss(..., method="oasis")}. \code{K} is set to
+\code{ncol(sbhm$B)} if not provided, and \code{design_spec} is injected automatically.}
 
 \item{amplitude}{List controlling the scalar amplitude stage. Fields:
-- `method`: one of "lss1" (default), "global_ls", "oasis_voxel".
-- `ridge`: for `global_ls`, either numeric (absolute) or list(mode, lambda).
-- `ridge_frac`: for `lss1`/`oasis_voxel`, list(x, b) fractional ridge.
-- `cond_gate`: optional auto-fallback rule, e.g., list(metric="rho", thr=0.999, fallback="lss1").}
+\itemize{
+\item \code{method}: one of "lss1" (default), "global_ls", "oasis_voxel".
+\item \code{ridge}: for \code{global_ls}, either numeric (absolute) or list(mode, lambda).
+\item \code{ridge_frac}: for \code{lss1}/\code{oasis_voxel}, list(x, b) fractional ridge.
+\item \code{cond_gate}: optional auto-fallback rule, e.g., list(metric="rho", thr=0.999, fallback="lss1").
+}}
 
-\item{return}{One of `"amplitude"`, `"coefficients"`, or `"both"` (default `"amplitude"`).}
+\item{return}{One of \code{"amplitude"}, \code{"coefficients"}, or \code{"both"} (default \code{"amplitude"}).}
 }
 \value{
 A list with components:
-  - `amplitude` ntrials×V matrix (when requested)
-  - `coeffs_r` r×ntrials×V array of trial-wise coefficients (when requested)
-  - `matched_idx` length-V integer indices into the library
-  - `margin` length-V confidence margins (top1 - top2 cosine)
-  - `alpha_coords` r×V matched coordinates per voxel
-  - `diag` list with `r`, `ntrials`, and `times`
+\itemize{
+\item \code{amplitude} ntrials×V matrix (when requested)
+\item \code{coeffs_r} r×ntrials×V array of trial-wise coefficients (when requested)
+\item \code{matched_idx} length-V integer indices into the library
+\item \code{margin} length-V confidence margins (top1 - top2 cosine)
+\item \code{alpha_coords} r×V matched coordinates per voxel
+\item \code{diag} list with \code{r}, \code{ntrials}, and \code{times}
+}
 }
 \description{
 Orchestrates the SBHM pipeline: (1) prepass aggregate fit in the learned
@@ -88,12 +94,12 @@ trial-wise r-dimensional coefficients, and (4) projection of those
 coefficients onto the matched coordinates to produce scalar amplitudes.
 }
 \details{
-Most users should treat the `prepass`, `match`, `oasis`, and `amplitude` inputs
-as optional *override lists*: you can provide only the fields you want to
+Most users should treat the \code{prepass}, \code{match}, \code{oasis}, and \code{amplitude} inputs
+as optional \emph{override lists}: you can provide only the fields you want to
 change, and rely on defaults for everything else.
 
-If you already use `fmridesign`, prefer [lss_sbhm_design()] to avoid manually
-assembling an OASIS `design_spec`.
+If you already use \code{fmridesign}, prefer \code{\link[=lss_sbhm_design]{lss_sbhm_design()}} to avoid manually
+assembling an OASIS \code{design_spec}.
 }
 \examples{
 \dontrun{
@@ -121,5 +127,5 @@ assembling an OASIS `design_spec`.
 
 }
 \seealso{
-[lss_sbhm_design()], [sbhm_prepass()], [sbhm_match()]
+\code{\link[=lss_sbhm_design]{lss_sbhm_design()}}, \code{\link[=sbhm_prepass]{sbhm_prepass()}}, \code{\link[=sbhm_match]{sbhm_match()}}
 }

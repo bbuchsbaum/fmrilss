@@ -25,39 +25,43 @@ GLM in the SBHM basis. Columns correspond to voxels.}
 \item{A}{Numeric matrix (r×K): coordinates of library HRFs in SBHM basis.}
 
 \item{shrink}{List with optional shrinkage options:
-- `tau` numeric >=0: global strength (default 0, i.e., no shrinkage).
-- `ref` numeric length-r vector (alpha_ref) or NULL. If NULL, uses
-  the mean of A columns. Shrinkage is: beta_bar <- (1-lambda) beta_bar + lambda ref.
-- `snr` optional numeric length-V estimates; if provided, per-voxel
-  lambda_v = tau/(snr_v + tau). Otherwise lambda = tau.}
+\itemize{
+\item \code{tau} numeric >=0: global strength (default 0, i.e., no shrinkage).
+\item \code{ref} numeric length-r vector (alpha_ref) or NULL. If NULL, uses
+the mean of A columns. Shrinkage is: beta_bar <- (1-lambda) beta_bar + lambda ref.
+\item \code{snr} optional numeric length-V estimates; if provided, per-voxel
+lambda_v = tau/(snr_v + tau). Otherwise lambda = tau.
+}}
 
 \item{topK}{Integer, return top-K scores/weights if >1 (default 1).}
 
 \item{whiten}{Logical, divide coefficients by S before normalization (default TRUE).}
 
-\item{sv_floor_rel}{Relative singular-value floor used when `whiten=TRUE`
-(default `1e-6`).}
+\item{sv_floor_rel}{Relative singular-value floor used when \code{whiten=TRUE}
+(default \code{1e-6}).}
 
-\item{whiten_power}{Numeric in `[0, 1]` controlling whitening strength when
-`whiten=TRUE`. Uses division by `S^whiten_power` (`1` = full whitening,
-`0.5` = partial whitening, `0` = no whitening). Default `1`.}
+\item{whiten_power}{Numeric in \verb{[0, 1]} controlling whitening strength when
+\code{whiten=TRUE}. Uses division by \code{S^whiten_power} (\code{1} = full whitening,
+\code{0.5} = partial whitening, \code{0} = no whitening). Default \code{1}.}
 
-\item{orient_ref}{Logical, flip beta_bar columns when their dot with `ref` is
+\item{orient_ref}{Logical, flip beta_bar columns when their dot with \code{ref} is
 negative before matching (default TRUE).}
 }
 \value{
 A list with:
-  - `idx` length-V integer indices of best-matching library HRF (1..K)
-  - `margin` length-V numeric: score(top1) - score(top2)
-  - `alpha_hat` r×V matrix: the selected library coordinates (unwhitened, unnormalized)
-  - `scores` optional K×V cosine score matrix (returned when topK > 1)
-  - `weights` optional top-K weights per voxel (when topK > 1)
+\itemize{
+\item \code{idx} length-V integer indices of best-matching library HRF (1..K)
+\item \code{margin} length-V numeric: score(top1) - score(top2)
+\item \code{alpha_hat} r×V matrix: the selected library coordinates (unwhitened, unnormalized)
+\item \code{scores} optional K×V cosine score matrix (returned when topK > 1)
+\item \code{weights} optional top-K weights per voxel (when topK > 1)
+}
 }
 \description{
-Given per-voxel aggregate coefficients `beta_bar` in the shared basis `B`,
-and library coordinates `A`, perform shape-only matching in a whitened,
+Given per-voxel aggregate coefficients \code{beta_bar} in the shared basis \code{B},
+and library coordinates \code{A}, perform shape-only matching in a whitened,
 L2-normalized coefficient space (cosine similarity). Optionally apply a
-simple shrinkage of `beta_bar` towards a reference coordinate before
+simple shrinkage of \code{beta_bar} towards a reference coordinate before
 matching, and an orientation fix.
 }
 \examples{
