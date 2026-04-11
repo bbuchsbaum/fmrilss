@@ -70,7 +70,7 @@
 
     
     
-<div class="section level2">
+<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><div class="section level2">
 <h2 id="why-hrf-variability-matters">Why HRF Variability Matters<a class="anchor" aria-label="anchor" href="#why-hrf-variability-matters"></a>
 </h2>
 <p>Vascular properties, neurovascular coupling, and acquisition
@@ -102,7 +102,9 @@ method that is usually faster and more stable, see
 <p>You need a sampling frame, jittered onsets, and a small set of voxels
 whose HRFs differ.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">n_time</span> <span class="op">&lt;-</span> <span class="fl">200</span>; <span class="va">n_vox</span> <span class="op">&lt;-</span> <span class="fl">5</span>; <span class="va">TR</span> <span class="op">&lt;-</span> <span class="fl">1.0</span></span>
+<code class="sourceCode R"><span><span class="va">n_time</span> <span class="op">&lt;-</span> <span class="fl">200</span></span>
+<span><span class="va">n_vox</span>  <span class="op">&lt;-</span> <span class="fl">5</span></span>
+<span><span class="va">TR</span>     <span class="op">&lt;-</span> <span class="fl">1.0</span></span>
 <span><span class="va">sframe</span> <span class="op">&lt;-</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="va">n_time</span>, TR <span class="op">=</span> <span class="va">TR</span><span class="op">)</span></span>
 <span><span class="va">grid</span>   <span class="op">&lt;-</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/samples.html" class="external-link">samples</a></span><span class="op">(</span><span class="va">sframe</span>, global <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
@@ -277,8 +279,7 @@ standard-error computation.</p>
 <span><span class="co">#&gt;          Correlation  RMSE</span></span>
 <span><span class="co">#&gt; Standard       0.733 0.279</span></span>
 <span><span class="co">#&gt; VoxelHRF       0.802 0.214</span></span>
-<span><span class="co">#&gt; OASIS          0.697 0.322</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="va">cors</span><span class="op">)</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="va">rmses</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span><span class="co">#&gt; OASIS          0.697 0.322</span></span></code></pre></div>
 <p>These metrics give you a direct accuracy check on the simulated data
 rather than relying on a visual impression alone.</p>
 </div>
@@ -330,49 +331,6 @@ efficient voxel-specific HRFs</li>
 <code><a href="../reference/estimate_voxel_hrf.html">?estimate_voxel_hrf</a></code> and <code><a href="../reference/lss_with_hrf.html">?lss_with_hrf</a></code> –
 production-ready voxel-wise HRF workflow</li>
 </ul>
-<pre><code><span><span class="co">#&gt; R version 4.5.3 (2026-03-11)</span></span>
-<span><span class="co">#&gt; Platform: x86_64-pc-linux-gnu</span></span>
-<span><span class="co">#&gt; Running under: Ubuntu 24.04.4 LTS</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Matrix products: default</span></span>
-<span><span class="co">#&gt; BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3 </span></span>
-<span><span class="co">#&gt; LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.26.so;  LAPACK version 3.12.0</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; locale:</span></span>
-<span><span class="co">#&gt;  [1] LC_CTYPE=C.UTF-8       LC_NUMERIC=C           LC_TIME=C.UTF-8       </span></span>
-<span><span class="co">#&gt;  [4] LC_COLLATE=C.UTF-8     LC_MONETARY=C.UTF-8    LC_MESSAGES=C.UTF-8   </span></span>
-<span><span class="co">#&gt;  [7] LC_PAPER=C.UTF-8       LC_NAME=C              LC_ADDRESS=C          </span></span>
-<span><span class="co">#&gt; [10] LC_TELEPHONE=C         LC_MEASUREMENT=C.UTF-8 LC_IDENTIFICATION=C   </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; time zone: UTC</span></span>
-<span><span class="co">#&gt; tzcode source: system (glibc)</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; attached base packages:</span></span>
-<span><span class="co">#&gt; [1] stats     graphics  grDevices utils     datasets  methods   base     </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; other attached packages:</span></span>
-<span><span class="co">#&gt; [1] fmrihrf_0.3.0 fmrilss_0.1.0</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; loaded via a namespace (and not attached):</span></span>
-<span><span class="co">#&gt;  [1] Matrix_1.7-4        gtable_0.3.6        jsonlite_2.0.0     </span></span>
-<span><span class="co">#&gt;  [4] dplyr_1.2.1         compiler_4.5.3      Rcpp_1.1.1         </span></span>
-<span><span class="co">#&gt;  [7] tidyselect_1.2.1    assertthat_0.2.1    jquerylib_0.1.4    </span></span>
-<span><span class="co">#&gt; [10] splines_4.5.3       systemfonts_1.3.2   scales_1.4.0       </span></span>
-<span><span class="co">#&gt; [13] textshaping_1.0.5   uuid_1.2-2          yaml_2.3.12        </span></span>
-<span><span class="co">#&gt; [16] fastmap_1.2.0       lattice_0.22-9      ggplot2_4.0.2      </span></span>
-<span><span class="co">#&gt; [19] R6_2.6.1            generics_0.1.4      knitr_1.51         </span></span>
-<span><span class="co">#&gt; [22] htmlwidgets_1.6.4   tibble_3.3.1        desc_1.4.3         </span></span>
-<span><span class="co">#&gt; [25] bslib_0.10.0        pillar_1.11.1       RColorBrewer_1.1-3 </span></span>
-<span><span class="co">#&gt; [28] rlang_1.2.0         cachem_1.1.0        xfun_0.57          </span></span>
-<span><span class="co">#&gt; [31] fs_2.0.1            sass_0.4.10         S7_0.2.1           </span></span>
-<span><span class="co">#&gt; [34] otel_0.2.0          memoise_2.0.1       cli_3.6.6          </span></span>
-<span><span class="co">#&gt; [37] pkgdown_2.2.0       magrittr_2.0.5      digest_0.6.39      </span></span>
-<span><span class="co">#&gt; [40] grid_4.5.3          bigmemory.sri_0.1.8 bigmemory_4.6.4    </span></span>
-<span><span class="co">#&gt; [43] lifecycle_1.0.5     vctrs_0.7.2         evaluate_1.0.5     </span></span>
-<span><span class="co">#&gt; [46] glue_1.8.0          numDeriv_2016.8-1.1 fmriAR_0.3.1       </span></span>
-<span><span class="co">#&gt; [49] farver_2.1.2        ragg_1.5.2          purrr_1.2.2        </span></span>
-<span><span class="co">#&gt; [52] rmarkdown_2.31      albersdown_1.0.0    tools_4.5.3        </span></span>
-<span><span class="co">#&gt; [55] pkgconfig_2.0.3     htmltools_0.5.9</span></span></code></pre>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

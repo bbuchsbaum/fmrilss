@@ -152,6 +152,8 @@ onsets <- seq(20, safe_end, length.out = n_trials)
 ```
 
 Assign each voxel a random library HRF and build per-trial regressors.
+The fresh [`set.seed()`](https://rdrr.io/r/base/Random.html) here keeps
+the HRF assignment reproducible independently of earlier random draws.
 
 ``` r
 set.seed(456)
@@ -288,7 +290,6 @@ recovery_summary <- data.frame(
 recovery_summary
 #>   HRFMatchingAccuracy AmplitudeCorrelation MedianMargin
 #> 1                0.75            0.6245209  0.005994378
-stopifnot(all(is.finite(as.matrix(recovery_summary))))
 ```
 
 ### Recovered HRF Shapes

@@ -70,7 +70,7 @@
 
     
     
-<div class="section level2">
+<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><div class="section level2">
 <h2 id="the-problem">The Problem<a class="anchor" aria-label="anchor" href="#the-problem"></a>
 </h2>
 <p>Real fMRI data shows substantial HRF variability across brain
@@ -203,7 +203,8 @@ HRF from the library. First, set up the experimental design.</p>
 <span><span class="va">safe_end</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">tgrid</span><span class="op">)</span> <span class="op">-</span> <span class="fl">30</span></span>
 <span><span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">20</span>, <span class="va">safe_end</span>, length.out <span class="op">=</span> <span class="va">n_trials</span><span class="op">)</span></span></code></pre></div>
 <p>Assign each voxel a random library HRF and build per-trial
-regressors.</p>
+regressors. The fresh <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code> here keeps the HRF
+assignment reproducible independently of earlier random draws.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">456</span><span class="op">)</span></span>
 <span><span class="va">true_hrf_idx</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sample.html" class="external-link">sample</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">A</span><span class="op">)</span>, <span class="va">n_voxels</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
@@ -314,8 +315,7 @@ where soft blending (see below) can help.</p>
 <span><span class="op">)</span></span>
 <span><span class="va">recovery_summary</span></span>
 <span><span class="co">#&gt;   HRFMatchingAccuracy AmplitudeCorrelation MedianMargin</span></span>
-<span><span class="co">#&gt; 1                0.75            0.6245209  0.005994378</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">recovery_summary</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span><span class="co">#&gt; 1                0.75            0.6245209  0.005994378</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="recovered-hrf-shapes">Recovered HRF Shapes<a class="anchor" aria-label="anchor" href="#recovered-hrf-shapes"></a>

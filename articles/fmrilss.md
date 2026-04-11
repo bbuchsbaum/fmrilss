@@ -67,13 +67,6 @@ Y <- X %*% true_betas +
      matrix(rnorm(n_time * n_vox), n_time, n_vox)
 ```
 
-``` r
-stopifnot(
-  all(dim(Y) == c(n_time, n_vox)),
-  all(is.finite(Y))
-)
-```
-
 ### Run LSS
 
 At its simplest,
@@ -90,10 +83,6 @@ Include `Z` and `Nuisance` for a more complete model:
 
 ``` r
 beta_full <- lss(Y, X, Z = Z, Nuisance = Nuisance)
-stopifnot(
-  all(dim(beta_full) == c(n_trials, n_vox)),
-  all(is.finite(beta_full))
-)
 ```
 
 That’s it — `beta_full` is a 12 x 25 matrix of trial-by-voxel estimates.
@@ -123,7 +112,6 @@ comparison_summary
 #>   Method CorrelationToTruth MeanTrialVariance
 #> 1    LSS          0.9602123          1.675530
 #> 2    LSA          0.8996540          2.163055
-stopifnot(all(is.finite(as.matrix(comparison_summary[, -1]))))
 ```
 
 In this simulation, LSS is both less variable and closer to the known
@@ -230,48 +218,3 @@ without re-projecting nuisance regressors each time.
 Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
 Deconvolving BOLD activation in event-related designs for multivoxel
 pattern classification analyses. *NeuroImage*, 59(3), 2636–2643.
-
-    #> R version 4.5.3 (2026-03-11)
-    #> Platform: x86_64-pc-linux-gnu
-    #> Running under: Ubuntu 24.04.4 LTS
-    #> 
-    #> Matrix products: default
-    #> BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3 
-    #> LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.26.so;  LAPACK version 3.12.0
-    #> 
-    #> locale:
-    #>  [1] LC_CTYPE=C.UTF-8       LC_NUMERIC=C           LC_TIME=C.UTF-8       
-    #>  [4] LC_COLLATE=C.UTF-8     LC_MONETARY=C.UTF-8    LC_MESSAGES=C.UTF-8   
-    #>  [7] LC_PAPER=C.UTF-8       LC_NAME=C              LC_ADDRESS=C          
-    #> [10] LC_TELEPHONE=C         LC_MEASUREMENT=C.UTF-8 LC_IDENTIFICATION=C   
-    #> 
-    #> time zone: UTC
-    #> tzcode source: system (glibc)
-    #> 
-    #> attached base packages:
-    #> [1] stats     graphics  grDevices utils     datasets  methods   base     
-    #> 
-    #> other attached packages:
-    #> [1] fmrilss_0.1.0          fmrihrf_0.3.0          RcppArmadillo_15.2.4-1
-    #> [4] Rcpp_1.1.1            
-    #> 
-    #> loaded via a namespace (and not attached):
-    #>  [1] Matrix_1.7-4        gtable_0.3.6        jsonlite_2.0.0     
-    #>  [4] dplyr_1.2.1         compiler_4.5.3      tidyselect_1.2.1   
-    #>  [7] assertthat_0.2.1    jquerylib_0.1.4     splines_4.5.3      
-    #> [10] systemfonts_1.3.2   scales_1.4.0        textshaping_1.0.5  
-    #> [13] uuid_1.2-2          yaml_2.3.12         fastmap_1.2.0      
-    #> [16] lattice_0.22-9      ggplot2_4.0.2       R6_2.6.1           
-    #> [19] generics_0.1.4      knitr_1.51          htmlwidgets_1.6.4  
-    #> [22] tibble_3.3.1        desc_1.4.3          bslib_0.10.0       
-    #> [25] pillar_1.11.1       RColorBrewer_1.1-3  rlang_1.2.0        
-    #> [28] cachem_1.1.0        xfun_0.57           fs_2.0.1           
-    #> [31] sass_0.4.10         S7_0.2.1            otel_0.2.0         
-    #> [34] memoise_2.0.1       cli_3.6.6           pkgdown_2.2.0      
-    #> [37] magrittr_2.0.5      digest_0.6.39       grid_4.5.3         
-    #> [40] bigmemory.sri_0.1.8 bigmemory_4.6.4     lifecycle_1.0.5    
-    #> [43] vctrs_0.7.2         evaluate_1.0.5      glue_1.8.0         
-    #> [46] fmriAR_0.3.1        numDeriv_2016.8-1.1 farver_2.1.2       
-    #> [49] ragg_1.5.2          purrr_1.2.2         rmarkdown_2.31     
-    #> [52] albersdown_1.0.0    tools_4.5.3         pkgconfig_2.0.3    
-    #> [55] htmltools_0.5.9

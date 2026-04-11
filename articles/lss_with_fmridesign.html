@@ -70,10 +70,9 @@
 
     
     
-<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrilss/">fmrilss</a></span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/bbuchsbaum/fmridesign" class="external-link">fmridesign</a></span><span class="op">)</span></span>
+<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrilss/">fmrilss</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/bbuchsbaum/fmridesign" class="external-link">fmridesign</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/" class="external-link">fmrihrf</a></span><span class="op">)</span></span></code></pre></div>
 <div class="section level2">
 <h2 id="introduction">Introduction<a class="anchor" aria-label="anchor" href="#introduction"></a>
@@ -118,64 +117,51 @@ constructed</li>
 <div class="section level2">
 <h2 id="simulated-data-setup">Simulated Data Setup<a class="anchor" aria-label="anchor" href="#simulated-data-setup"></a>
 </h2>
-<p>To demonstrate the workflow, we’ll create simulated fMRI data with
-realistic trial effects.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<p>We’ll build a small two-run experiment from scratch so every piece of
+the workflow is visible. Start with the run-level parameters:</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Two runs, 150 scans each, TR = 2s</span></span>
 <span><span class="va">n_scans_per_run</span> <span class="op">&lt;-</span> <span class="fl">150</span></span>
-<span><span class="va">n_runs</span> <span class="op">&lt;-</span> <span class="fl">2</span></span>
-<span><span class="va">n_voxels</span> <span class="op">&lt;-</span> <span class="fl">500</span></span>
-<span><span class="va">TR</span> <span class="op">&lt;-</span> <span class="fl">2</span></span>
-<span></span>
-<span><span class="co"># True trial effects (betas) for 6 trials per run</span></span>
-<span><span class="va">true_betas</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">12</span> <span class="op">*</span> <span class="va">n_voxels</span>, mean <span class="op">=</span> <span class="fl">1.5</span>, sd <span class="op">=</span> <span class="fl">0.8</span><span class="op">)</span>,</span>
-<span>                     nrow <span class="op">=</span> <span class="fl">12</span>, ncol <span class="op">=</span> <span class="va">n_voxels</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Trial data with run-relative onsets</span></span>
-<span><span class="va">trials</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span><span class="va">n_runs</span>          <span class="op">&lt;-</span> <span class="fl">2</span></span>
+<span><span class="va">n_voxels</span>        <span class="op">&lt;-</span> <span class="fl">500</span></span>
+<span><span class="va">TR</span>              <span class="op">&lt;-</span> <span class="fl">2</span></span></code></pre></div>
+<p>Next, a trial table with run-relative onsets — six trials per run —
+and the matching sampling frame:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">trials</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  onset <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">30</span>, <span class="fl">50</span>, <span class="fl">70</span>, <span class="fl">90</span>, <span class="fl">110</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">2</span><span class="op">)</span>,</span>
-<span>  run <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, each <span class="op">=</span> <span class="fl">6</span><span class="op">)</span></span>
+<span>  run   <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, each <span class="op">=</span> <span class="fl">6</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Sampling frame</span></span>
-<span><span class="va">sframe</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="va">n_scans_per_run</span>, <span class="va">n_runs</span><span class="op">)</span>, TR <span class="op">=</span> <span class="va">TR</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Create design matrix to generate Y</span></span>
-<span><span class="va">emod_sim</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/event_model.html" class="external-link">event_model</a></span><span class="op">(</span></span>
+<span><span class="va">sframe</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="va">n_scans_per_run</span>, <span class="va">n_runs</span><span class="op">)</span>, TR <span class="op">=</span> <span class="va">TR</span><span class="op">)</span></span></code></pre></div>
+<p>Build a trial-wise event model, then extract the design matrix used
+to generate the signal:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">emod_sim</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/event_model.html" class="external-link">event_model</a></span><span class="op">(</span></span>
 <span>  <span class="va">onset</span> <span class="op">~</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/trialwise.html" class="external-link">trialwise</a></span><span class="op">(</span>basis <span class="op">=</span> <span class="st">"spmg1"</span><span class="op">)</span>,</span>
-<span>  data <span class="op">=</span> <span class="va">trials</span>,</span>
-<span>  block <span class="op">=</span> <span class="op">~</span><span class="va">run</span>,</span>
-<span>  sampling_frame <span class="op">=</span> <span class="va">sframe</span></span>
+<span>  data <span class="op">=</span> <span class="va">trials</span>, block <span class="op">=</span> <span class="op">~</span><span class="va">run</span>, sampling_frame <span class="op">=</span> <span class="va">sframe</span></span>
 <span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Extract trial design matrix and convert to matrix</span></span>
-<span><span class="va">X_trial</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/design_matrix.html" class="external-link">design_matrix</a></span><span class="op">(</span><span class="va">emod_sim</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Baseline: intercept + linear drift per run</span></span>
-<span><span class="va">bmodel_sim</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/baseline_model.html" class="external-link">baseline_model</a></span><span class="op">(</span></span>
-<span>  basis <span class="op">=</span> <span class="st">"poly"</span>,</span>
-<span>  degree <span class="op">=</span> <span class="fl">1</span>,</span>
-<span>  sframe <span class="op">=</span> <span class="va">sframe</span>,</span>
-<span>  intercept <span class="op">=</span> <span class="st">"runwise"</span></span>
+<span><span class="va">X_trial</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/design_matrix.html" class="external-link">design_matrix</a></span><span class="op">(</span><span class="va">emod_sim</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p>A per-run intercept + linear drift serves as the baseline:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">bmodel_sim</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/baseline_model.html" class="external-link">baseline_model</a></span><span class="op">(</span></span>
+<span>  basis <span class="op">=</span> <span class="st">"poly"</span>, degree <span class="op">=</span> <span class="fl">1</span>, sframe <span class="op">=</span> <span class="va">sframe</span>, intercept <span class="op">=</span> <span class="st">"runwise"</span></span>
 <span><span class="op">)</span></span>
-<span><span class="va">Z_baseline</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/design_matrix.html" class="external-link">design_matrix</a></span><span class="op">(</span><span class="va">bmodel_sim</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Generate Y with signal + noise</span></span>
-<span><span class="va">signal</span> <span class="op">&lt;-</span> <span class="va">X_trial</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">true_betas</span></span>
-<span><span class="va">baseline_signal</span> <span class="op">&lt;-</span> <span class="va">Z_baseline</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">Z_baseline</span><span class="op">)</span> <span class="op">*</span> <span class="va">n_voxels</span>, sd <span class="op">=</span> <span class="fl">2</span><span class="op">)</span>,</span>
-<span>                                         ncol <span class="op">=</span> <span class="va">n_voxels</span><span class="op">)</span></span>
-<span><span class="va">noise</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">X_trial</span><span class="op">)</span> <span class="op">*</span> <span class="va">n_voxels</span>, sd <span class="op">=</span> <span class="fl">3</span><span class="op">)</span>,</span>
-<span>                nrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">X_trial</span><span class="op">)</span>, ncol <span class="op">=</span> <span class="va">n_voxels</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">Y</span> <span class="op">&lt;-</span> <span class="va">signal</span> <span class="op">+</span> <span class="va">baseline_signal</span> <span class="op">+</span> <span class="va">noise</span></span></code></pre></div>
+<span><span class="va">Z_baseline</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/design_matrix.html" class="external-link">design_matrix</a></span><span class="op">(</span><span class="va">bmodel_sim</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p>Finally, combine true trial effects, baseline drift, and noise to
+produce <code>Y</code>:</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">true_betas</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">12</span> <span class="op">*</span> <span class="va">n_voxels</span>, mean <span class="op">=</span> <span class="fl">1.5</span>, sd <span class="op">=</span> <span class="fl">0.8</span><span class="op">)</span>, <span class="fl">12</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
+<span><span class="va">Y</span> <span class="op">&lt;-</span> <span class="va">X_trial</span>  <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">true_betas</span> <span class="op">+</span></span>
+<span>     <span class="va">Z_baseline</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">Z_baseline</span><span class="op">)</span> <span class="op">*</span> <span class="va">n_voxels</span>, sd <span class="op">=</span> <span class="fl">2</span><span class="op">)</span>, ncol <span class="op">=</span> <span class="va">n_voxels</span><span class="op">)</span> <span class="op">+</span></span>
+<span>     <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">X_trial</span><span class="op">)</span> <span class="op">*</span> <span class="va">n_voxels</span>, sd <span class="op">=</span> <span class="fl">3</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">X_trial</span><span class="op">)</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 300 500</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="quick-start">Quick Start<a class="anchor" aria-label="anchor" href="#quick-start"></a>
 </h2>
 <p>Here’s a minimal example using <code><a href="../reference/lss_design.html">lss_design()</a></code>:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Use the first run only for quick start</span></span>
 <span><span class="va">trials_run1</span> <span class="op">&lt;-</span> <span class="va">trials</span><span class="op">[</span><span class="va">trials</span><span class="op">$</span><span class="va">run</span> <span class="op">==</span> <span class="fl">1</span>, <span class="op">]</span></span>
 <span><span class="va">sframe_run1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="va">n_scans_per_run</span>, TR <span class="op">=</span> <span class="va">TR</span><span class="op">)</span></span>
@@ -194,8 +180,7 @@ realistic trial effects.</p>
 <span></span>
 <span><span class="co"># Result: 6 trials × 500 voxels</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1]   6 500</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta</span><span class="op">)</span> <span class="op">==</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">6</span>, <span class="va">n_voxels</span><span class="op">)</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="va">beta</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span><span class="co">#&gt; [1]   6 500</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="multi-run-experiments">Multi-Run Experiments<a class="anchor" aria-label="anchor" href="#multi-run-experiments"></a>
@@ -209,7 +194,7 @@ handling of multi-run experiments with proper onset timing.</p>
 onsets should be <strong>run-relative</strong> (resetting to 0 at the
 start of each run). This is the standard convention for multi-run fMRI
 experiments.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Trial data with run-relative onsets (already defined above)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">trials</span><span class="op">)</span></span>
 <span><span class="co">#&gt;    onset run</span></span>
@@ -266,7 +251,7 @@ specifications</li>
 <p>The <code>baseline_model</code> allows you to specify drift
 correction, block intercepts, and nuisance regressors in a structured
 way.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create baseline model with B-spline drift correction</span></span>
 <span><span class="va">bmodel</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/baseline_model.html" class="external-link">baseline_model</a></span><span class="op">(</span></span>
 <span>  basis <span class="op">=</span> <span class="st">"bs"</span>,</span>
@@ -284,7 +269,7 @@ way.</p>
 <h3 id="adding-motion-parameters">Adding Motion Parameters<a class="anchor" aria-label="anchor" href="#adding-motion-parameters"></a>
 </h3>
 <p>For demonstration, we’ll create synthetic motion regressors.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Simulate motion parameters (6 motion parameters per run)</span></span>
 <span><span class="va">motion_run1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_scans_per_run</span> <span class="op">*</span> <span class="fl">6</span>, sd <span class="op">=</span> <span class="fl">0.5</span><span class="op">)</span>,</span>
 <span>                      nrow <span class="op">=</span> <span class="va">n_scans_per_run</span>, ncol <span class="op">=</span> <span class="fl">6</span><span class="op">)</span></span>
@@ -303,7 +288,7 @@ way.</p>
 <span><span class="va">beta_motion</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_design.html">lss_design</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">emod_multi</span>, <span class="va">bmodel_motion</span>, method <span class="op">=</span> <span class="st">"oasis"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_motion</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1]  12 500</span></span></code></pre></div>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># In real analysis, load motion from files:</span></span>
 <span><span class="va">motion_run1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.table</a></span><span class="op">(</span><span class="st">"motion_run1.txt"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">motion_run2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.table</a></span><span class="op">(</span><span class="st">"motion_run2.txt"</span><span class="op">)</span><span class="op">)</span></span>
@@ -322,7 +307,7 @@ way.</p>
 </h2>
 <p>For multi-basis HRF models (e.g., canonical + temporal + dispersion
 derivatives), use <code>nbasis</code>:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create event model with SPMG3 (3 basis functions)</span></span>
 <span><span class="va">emod_3basis</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/event_model.html" class="external-link">event_model</a></span><span class="op">(</span></span>
 <span>  <span class="va">onset</span> <span class="op">~</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/trialwise.html" class="external-link">trialwise</a></span><span class="op">(</span>basis <span class="op">=</span> <span class="st">"spmg3"</span>, nbasis <span class="op">=</span> <span class="fl">3</span><span class="op">)</span>,</span>
@@ -348,7 +333,7 @@ derivatives), use <code>nbasis</code>:</p>
 </h2>
 <p>For designs with potential collinearity, use ridge
 regularization:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">beta_ridge</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_design.html">lss_design</a></span><span class="op">(</span></span>
 <span>  <span class="va">Y</span>, <span class="va">emod_multi</span>, <span class="va">bmodel</span>,</span>
 <span>  method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
@@ -368,7 +353,7 @@ regularization:</p>
 <div class="section level3">
 <h3 id="using-design_spec-old-approach">Using design_spec (old approach)<a class="anchor" aria-label="anchor" href="#using-design_spec-old-approach"></a>
 </h3>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Manual design_spec construction requires global/absolute onsets</span></span>
 <span><span class="co"># For run-relative onsets (10, 30, 50, 70, 90, 110) in each of 2 runs,</span></span>
 <span><span class="co"># global onsets would be: 10, 30, 50, 70, 90, 110, 310, 330, 350, 370, 390, 410</span></span>
@@ -396,7 +381,7 @@ validation</p>
 <div class="section level3">
 <h3 id="using-lss_design-new-approach">Using lss_design() (new approach)<a class="anchor" aria-label="anchor" href="#using-lss_design-new-approach"></a>
 </h3>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Formula-based design with run-relative onsets</span></span>
 <span><span class="va">emod_new</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/event_model.html" class="external-link">event_model</a></span><span class="op">(</span></span>
 <span>  <span class="va">onset</span> <span class="op">~</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/trialwise.html" class="external-link">trialwise</a></span><span class="op">(</span>basis <span class="op">=</span> <span class="st">"spmg1"</span><span class="op">)</span>,</span>
@@ -419,7 +404,7 @@ metadata</strong> - <strong>Formula-based DSL</strong></p>
 </h2>
 <p>Let’s visualize how well LSS recovers the true trial effects from our
 simulated data.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Compare estimated betas (with baseline correction) to true betas</span></span>
 <span><span class="co"># Flatten matrices for plotting</span></span>
 <span><span class="va">est_vec</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">beta_baseline</span><span class="op">)</span></span>
@@ -432,7 +417,6 @@ simulated data.</p>
 <span><span class="va">recovery_summary</span></span>
 <span><span class="co">#&gt;   Correlation     RMSE</span></span>
 <span><span class="co">#&gt; 1   0.5201957 1.251591</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">recovery_summary</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Plot</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">true_vec</span>, <span class="va">est_vec</span>,</span>
@@ -453,7 +437,7 @@ visually.</p>
 <p><code>event_model</code> supports parametric modulators for
 trial-by-trial amplitude modulation. This example demonstrates the
 syntax but requires special setup.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Trial data with reaction times</span></span>
 <span><span class="va">trials_rt</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  onset <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">30</span>, <span class="fl">50</span>, <span class="fl">70</span>, <span class="fl">90</span>, <span class="fl">110</span><span class="op">)</span>,</span>
@@ -485,7 +469,7 @@ syntax but requires special setup.</p>
 sampling_frame specification.</p>
 <p><strong>Solution:</strong> Check that <code>sum(blocklens)</code>
 matches <code>nrow(Y)</code>:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sframe_check</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">150</span>, <span class="fl">150</span><span class="op">)</span>, TR <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/blocklens.html" class="external-link">blocklens</a></span><span class="op">(</span><span class="va">sframe_check</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 300</span></span>
@@ -500,7 +484,7 @@ sampling_frames”<a class="anchor" aria-label="anchor" href="#error-event_model
 <code>sampling_frame</code> objects.</p>
 <p><strong>Solution:</strong> Use the same <code>sframe</code> object
 for both:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sframe</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">150</span>, <span class="fl">150</span><span class="op">)</span>, TR <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">emod</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmridesign/reference/event_model.html" class="external-link">event_model</a></span><span class="op">(</span><span class="va">...</span>, sampling_frame <span class="op">=</span> <span class="va">sframe</span><span class="op">)</span></span>
@@ -512,7 +496,7 @@ for both:</p>
 <p><strong>Cause:</strong> Events are too close together or design is
 ill-conditioned.</p>
 <p><strong>Solution:</strong> Use ridge regularization:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">beta</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_design.html">lss_design</a></span><span class="op">(</span></span>
 <span>  <span class="va">Y</span>, <span class="va">emod</span>, <span class="va">bmodel</span>,</span>
 <span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>ridge_mode <span class="op">=</span> <span class="st">"fractional"</span>, ridge_x <span class="op">=</span> <span class="fl">0.02</span><span class="op">)</span></span>
@@ -553,52 +537,6 @@ Event model tutorial</li>
 <code><a href="https://bbuchsbaum.github.io/fmridesign/articles/a_03_baseline_model.html" class="external-link">vignette("a_03_baseline_model", package = "fmridesign")</a></code>
 - Baseline model tutorial</li>
 </ul>
-<pre><code><span><span class="co">#&gt; R version 4.5.3 (2026-03-11)</span></span>
-<span><span class="co">#&gt; Platform: x86_64-pc-linux-gnu</span></span>
-<span><span class="co">#&gt; Running under: Ubuntu 24.04.4 LTS</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Matrix products: default</span></span>
-<span><span class="co">#&gt; BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3 </span></span>
-<span><span class="co">#&gt; LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.26.so;  LAPACK version 3.12.0</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; locale:</span></span>
-<span><span class="co">#&gt;  [1] LC_CTYPE=C.UTF-8       LC_NUMERIC=C           LC_TIME=C.UTF-8       </span></span>
-<span><span class="co">#&gt;  [4] LC_COLLATE=C.UTF-8     LC_MONETARY=C.UTF-8    LC_MESSAGES=C.UTF-8   </span></span>
-<span><span class="co">#&gt;  [7] LC_PAPER=C.UTF-8       LC_NAME=C              LC_ADDRESS=C          </span></span>
-<span><span class="co">#&gt; [10] LC_TELEPHONE=C         LC_MEASUREMENT=C.UTF-8 LC_IDENTIFICATION=C   </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; time zone: UTC</span></span>
-<span><span class="co">#&gt; tzcode source: system (glibc)</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; attached base packages:</span></span>
-<span><span class="co">#&gt; [1] stats     graphics  grDevices utils     datasets  methods   base     </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; other attached packages:</span></span>
-<span><span class="co">#&gt; [1] fmrihrf_0.3.0    fmridesign_0.5.0 fmrilss_0.1.0   </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; loaded via a namespace (and not attached):</span></span>
-<span><span class="co">#&gt;  [1] plotly_4.12.0       sass_0.4.10         generics_0.1.4     </span></span>
-<span><span class="co">#&gt;  [4] tidyr_1.3.2         stringi_1.8.7       lattice_0.22-9     </span></span>
-<span><span class="co">#&gt;  [7] bigmemory_4.6.4     digest_0.6.39       magrittr_2.0.5     </span></span>
-<span><span class="co">#&gt; [10] evaluate_1.0.5      grid_4.5.3          RColorBrewer_1.1-3 </span></span>
-<span><span class="co">#&gt; [13] fastmap_1.2.0       jsonlite_2.0.0      Matrix_1.7-4       </span></span>
-<span><span class="co">#&gt; [16] httr_1.4.8          bigmemory.sri_0.1.8 purrr_1.2.2        </span></span>
-<span><span class="co">#&gt; [19] viridisLite_0.4.3   scales_1.4.0        albersdown_1.0.0   </span></span>
-<span><span class="co">#&gt; [22] numDeriv_2016.8-1.1 lazyeval_0.2.3      textshaping_1.0.5  </span></span>
-<span><span class="co">#&gt; [25] jquerylib_0.1.4     cli_3.6.6           rlang_1.2.0        </span></span>
-<span><span class="co">#&gt; [28] fmriAR_0.3.1        splines_4.5.3       cachem_1.1.0       </span></span>
-<span><span class="co">#&gt; [31] yaml_2.3.12         otel_0.2.0          tools_4.5.3        </span></span>
-<span><span class="co">#&gt; [34] uuid_1.2-2          memoise_2.0.1       dplyr_1.2.1        </span></span>
-<span><span class="co">#&gt; [37] ggplot2_4.0.2       assertthat_0.2.1    vctrs_0.7.2        </span></span>
-<span><span class="co">#&gt; [40] R6_2.6.1            lifecycle_1.0.5     stringr_1.6.0      </span></span>
-<span><span class="co">#&gt; [43] fs_2.0.1            htmlwidgets_1.6.4   ragg_1.5.2         </span></span>
-<span><span class="co">#&gt; [46] pkgconfig_2.0.3     desc_1.4.3          pkgdown_2.2.0      </span></span>
-<span><span class="co">#&gt; [49] pillar_1.11.1       bslib_0.10.0        gtable_0.3.6       </span></span>
-<span><span class="co">#&gt; [52] glue_1.8.0          data.table_1.18.2.1 Rcpp_1.1.1         </span></span>
-<span><span class="co">#&gt; [55] systemfonts_1.3.2   xfun_0.57           tibble_3.3.1       </span></span>
-<span><span class="co">#&gt; [58] tidyselect_1.2.1    knitr_1.51          farver_2.1.2       </span></span>
-<span><span class="co">#&gt; [61] htmltools_0.5.9     rmarkdown_2.31      compiler_4.5.3     </span></span>
-<span><span class="co">#&gt; [64] S7_0.2.1</span></span></code></pre>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

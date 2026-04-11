@@ -2,9 +2,6 @@
 
 ``` r
 library(fmrilss)
-```
-
-``` r
 library(fmridesign)
 library(fmrihrf)
 ```
@@ -43,59 +40,58 @@ interface when:
 
 ## Simulated Data Setup
 
-To demonstrate the workflow, we’ll create simulated fMRI data with
-realistic trial effects.
+We’ll build a small two-run experiment from scratch so every piece of
+the workflow is visible. Start with the run-level parameters:
 
 ``` r
 set.seed(123)
-
-# Two runs, 150 scans each, TR = 2s
 n_scans_per_run <- 150
-n_runs <- 2
-n_voxels <- 500
-TR <- 2
+n_runs          <- 2
+n_voxels        <- 500
+TR              <- 2
+```
 
-# True trial effects (betas) for 6 trials per run
-true_betas <- matrix(rnorm(12 * n_voxels, mean = 1.5, sd = 0.8),
-                     nrow = 12, ncol = n_voxels)
+Next, a trial table with run-relative onsets — six trials per run — and
+the matching sampling frame:
 
-# Trial data with run-relative onsets
+``` r
 trials <- data.frame(
   onset = rep(c(10, 30, 50, 70, 90, 110), times = 2),
-  run = rep(1:2, each = 6)
+  run   = rep(1:2, each = 6)
 )
-
-# Sampling frame
 sframe <- sampling_frame(blocklens = rep(n_scans_per_run, n_runs), TR = TR)
+```
 
-# Create design matrix to generate Y
+Build a trial-wise event model, then extract the design matrix used to
+generate the signal:
+
+``` r
 emod_sim <- event_model(
   onset ~ trialwise(basis = "spmg1"),
-  data = trials,
-  block = ~run,
-  sampling_frame = sframe
+  data = trials, block = ~run, sampling_frame = sframe
 )
-
-# Extract trial design matrix and convert to matrix
 X_trial <- as.matrix(design_matrix(emod_sim))
+```
 
-# Baseline: intercept + linear drift per run
+A per-run intercept + linear drift serves as the baseline:
+
+``` r
 bmodel_sim <- baseline_model(
-  basis = "poly",
-  degree = 1,
-  sframe = sframe,
-  intercept = "runwise"
+  basis = "poly", degree = 1, sframe = sframe, intercept = "runwise"
 )
 Z_baseline <- as.matrix(design_matrix(bmodel_sim))
+```
 
-# Generate Y with signal + noise
-signal <- X_trial %*% true_betas
-baseline_signal <- Z_baseline %*% matrix(rnorm(ncol(Z_baseline) * n_voxels, sd = 2),
-                                         ncol = n_voxels)
-noise <- matrix(rnorm(nrow(X_trial) * n_voxels, sd = 3),
-                nrow = nrow(X_trial), ncol = n_voxels)
+Finally, combine true trial effects, baseline drift, and noise to
+produce `Y`:
 
-Y <- signal + baseline_signal + noise
+``` r
+true_betas <- matrix(rnorm(12 * n_voxels, mean = 1.5, sd = 0.8), 12, n_voxels)
+Y <- X_trial  %*% true_betas +
+     Z_baseline %*% matrix(rnorm(ncol(Z_baseline) * n_voxels, sd = 2), ncol = n_voxels) +
+     matrix(rnorm(nrow(X_trial) * n_voxels, sd = 3), nrow(X_trial), n_voxels)
+dim(Y)
+#> [1] 300 500
 ```
 
 ## Quick Start
@@ -123,7 +119,6 @@ beta <- lss_design(Y_run1, emod, method = "oasis")
 # Result: 6 trials × 500 voxels
 dim(beta)
 #> [1]   6 500
-stopifnot(all(dim(beta) == c(6, n_voxels)), all(is.finite(beta)))
 ```
 
 ## Multi-Run Experiments
@@ -354,7 +349,6 @@ recovery_summary <- data.frame(
 recovery_summary
 #>   Correlation     RMSE
 #> 1   0.5201957 1.251591
-stopifnot(all(is.finite(as.matrix(recovery_summary))))
 
 # Plot
 plot(true_vec, est_vec,
@@ -474,52 +468,3 @@ interface remains fully supported and unchanged.
   Event model tutorial
 - [`vignette("a_03_baseline_model", package = "fmridesign")`](https://bbuchsbaum.github.io/fmridesign/articles/a_03_baseline_model.html) -
   Baseline model tutorial
-
-&nbsp;
-
-    #> R version 4.5.3 (2026-03-11)
-    #> Platform: x86_64-pc-linux-gnu
-    #> Running under: Ubuntu 24.04.4 LTS
-    #> 
-    #> Matrix products: default
-    #> BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3 
-    #> LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.26.so;  LAPACK version 3.12.0
-    #> 
-    #> locale:
-    #>  [1] LC_CTYPE=C.UTF-8       LC_NUMERIC=C           LC_TIME=C.UTF-8       
-    #>  [4] LC_COLLATE=C.UTF-8     LC_MONETARY=C.UTF-8    LC_MESSAGES=C.UTF-8   
-    #>  [7] LC_PAPER=C.UTF-8       LC_NAME=C              LC_ADDRESS=C          
-    #> [10] LC_TELEPHONE=C         LC_MEASUREMENT=C.UTF-8 LC_IDENTIFICATION=C   
-    #> 
-    #> time zone: UTC
-    #> tzcode source: system (glibc)
-    #> 
-    #> attached base packages:
-    #> [1] stats     graphics  grDevices utils     datasets  methods   base     
-    #> 
-    #> other attached packages:
-    #> [1] fmrihrf_0.3.0    fmridesign_0.5.0 fmrilss_0.1.0   
-    #> 
-    #> loaded via a namespace (and not attached):
-    #>  [1] plotly_4.12.0       sass_0.4.10         generics_0.1.4     
-    #>  [4] tidyr_1.3.2         stringi_1.8.7       lattice_0.22-9     
-    #>  [7] bigmemory_4.6.4     digest_0.6.39       magrittr_2.0.5     
-    #> [10] evaluate_1.0.5      grid_4.5.3          RColorBrewer_1.1-3 
-    #> [13] fastmap_1.2.0       jsonlite_2.0.0      Matrix_1.7-4       
-    #> [16] httr_1.4.8          bigmemory.sri_0.1.8 purrr_1.2.2        
-    #> [19] viridisLite_0.4.3   scales_1.4.0        albersdown_1.0.0   
-    #> [22] numDeriv_2016.8-1.1 lazyeval_0.2.3      textshaping_1.0.5  
-    #> [25] jquerylib_0.1.4     cli_3.6.6           rlang_1.2.0        
-    #> [28] fmriAR_0.3.1        splines_4.5.3       cachem_1.1.0       
-    #> [31] yaml_2.3.12         otel_0.2.0          tools_4.5.3        
-    #> [34] uuid_1.2-2          memoise_2.0.1       dplyr_1.2.1        
-    #> [37] ggplot2_4.0.2       assertthat_0.2.1    vctrs_0.7.2        
-    #> [40] R6_2.6.1            lifecycle_1.0.5     stringr_1.6.0      
-    #> [43] fs_2.0.1            htmlwidgets_1.6.4   ragg_1.5.2         
-    #> [46] pkgconfig_2.0.3     desc_1.4.3          pkgdown_2.2.0      
-    #> [49] pillar_1.11.1       bslib_0.10.0        gtable_0.3.6       
-    #> [52] glue_1.8.0          data.table_1.18.2.1 Rcpp_1.1.1         
-    #> [55] systemfonts_1.3.2   xfun_0.57           tibble_3.3.1       
-    #> [58] tidyselect_1.2.1    knitr_1.51          farver_2.1.2       
-    #> [61] htmltools_0.5.9     rmarkdown_2.31      compiler_4.5.3     
-    #> [64] S7_0.2.1

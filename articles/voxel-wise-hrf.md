@@ -32,7 +32,9 @@ You need a sampling frame, jittered onsets, and a small set of voxels
 whose HRFs differ.
 
 ``` r
-n_time <- 200; n_vox <- 5; TR <- 1.0
+n_time <- 200
+n_vox  <- 5
+TR     <- 1.0
 sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
 grid   <- fmrihrf::samples(sframe, global = TRUE)
 ```
@@ -230,7 +232,6 @@ comparison_summary
 #> Standard       0.733 0.279
 #> VoxelHRF       0.802 0.214
 #> OASIS          0.697 0.322
-stopifnot(all(is.finite(cors)), all(is.finite(rmses)))
 ```
 
 These metrics give you a direct accuracy check on the simulated data
@@ -288,49 +289,3 @@ control.
   and
   [`?lss_with_hrf`](https://bbuchsbaum.github.io/fmrilss/reference/lss_with_hrf.md)
   – production-ready voxel-wise HRF workflow
-
-&nbsp;
-
-    #> R version 4.5.3 (2026-03-11)
-    #> Platform: x86_64-pc-linux-gnu
-    #> Running under: Ubuntu 24.04.4 LTS
-    #> 
-    #> Matrix products: default
-    #> BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3 
-    #> LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.26.so;  LAPACK version 3.12.0
-    #> 
-    #> locale:
-    #>  [1] LC_CTYPE=C.UTF-8       LC_NUMERIC=C           LC_TIME=C.UTF-8       
-    #>  [4] LC_COLLATE=C.UTF-8     LC_MONETARY=C.UTF-8    LC_MESSAGES=C.UTF-8   
-    #>  [7] LC_PAPER=C.UTF-8       LC_NAME=C              LC_ADDRESS=C          
-    #> [10] LC_TELEPHONE=C         LC_MEASUREMENT=C.UTF-8 LC_IDENTIFICATION=C   
-    #> 
-    #> time zone: UTC
-    #> tzcode source: system (glibc)
-    #> 
-    #> attached base packages:
-    #> [1] stats     graphics  grDevices utils     datasets  methods   base     
-    #> 
-    #> other attached packages:
-    #> [1] fmrihrf_0.3.0 fmrilss_0.1.0
-    #> 
-    #> loaded via a namespace (and not attached):
-    #>  [1] Matrix_1.7-4        gtable_0.3.6        jsonlite_2.0.0     
-    #>  [4] dplyr_1.2.1         compiler_4.5.3      Rcpp_1.1.1         
-    #>  [7] tidyselect_1.2.1    assertthat_0.2.1    jquerylib_0.1.4    
-    #> [10] splines_4.5.3       systemfonts_1.3.2   scales_1.4.0       
-    #> [13] textshaping_1.0.5   uuid_1.2-2          yaml_2.3.12        
-    #> [16] fastmap_1.2.0       lattice_0.22-9      ggplot2_4.0.2      
-    #> [19] R6_2.6.1            generics_0.1.4      knitr_1.51         
-    #> [22] htmlwidgets_1.6.4   tibble_3.3.1        desc_1.4.3         
-    #> [25] bslib_0.10.0        pillar_1.11.1       RColorBrewer_1.1-3 
-    #> [28] rlang_1.2.0         cachem_1.1.0        xfun_0.57          
-    #> [31] fs_2.0.1            sass_0.4.10         S7_0.2.1           
-    #> [34] otel_0.2.0          memoise_2.0.1       cli_3.6.6          
-    #> [37] pkgdown_2.2.0       magrittr_2.0.5      digest_0.6.39      
-    #> [40] grid_4.5.3          bigmemory.sri_0.1.8 bigmemory_4.6.4    
-    #> [43] lifecycle_1.0.5     vctrs_0.7.2         evaluate_1.0.5     
-    #> [46] glue_1.8.0          numDeriv_2016.8-1.1 fmriAR_0.3.1       
-    #> [49] farver_2.1.2        ragg_1.5.2          purrr_1.2.2        
-    #> [52] rmarkdown_2.31      albersdown_1.0.0    tools_4.5.3        
-    #> [55] pkgconfig_2.0.3     htmltools_0.5.9
