@@ -88,7 +88,7 @@ created with <code><a href="https://bbuchsbaum.github.io/fmridesign/reference/tr
 <dd><p>Optional baseline_model object from
 <code><a href="https://bbuchsbaum.github.io/fmridesign/reference/baseline_model.html" class="external-link">fmridesign::baseline_model()</a></code>. Defines drift correction, block intercepts,
 and nuisance regressors. If NULL, basic baseline intercepts are
-auto-injected: per-run intercepts derived from `blockids` (or the
+auto-injected: per-run intercepts derived from <code>blockids</code> (or the
 sampling frame) are used to ensure proper baseline modeling.</p></dd>
 
 
@@ -134,7 +134,7 @@ design compatibility, collinearity, and temporal alignment.</p></dd>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>Matrix of trial-wise beta estimates (trials × voxels), or
-  (trials × basis_functions) × voxels for multi-basis HRFs.</p>
+(trials × basis_functions) × voxels for multi-basis HRFs.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
@@ -168,7 +168,7 @@ See <code><a href="lss.html">lss</a></code> and <code><a href="prewhiten_options
 <p><strong>Validation:</strong></p>
 <p>When <code>validate = TRUE</code>, the function checks:</p><ul><li><p>Temporal alignment: nrow(Y) matches total scans in sampling_frame</p></li>
 <li><p>Collinearity: Design matrix condition number &lt; 30 (suppressed when
-    ridge is already configured via <code>oasis$ridge_x</code> or <code>oasis$ridge_b</code>)</p></li>
+ridge is already configured via <code>oasis$ridge_x</code> or <code>oasis$ridge_b</code>)</p></li>
 <li><p>Compatibility: event_model and baseline_model use same sampling_frame</p></li>
 </ul></div>
     <div class="section level2">

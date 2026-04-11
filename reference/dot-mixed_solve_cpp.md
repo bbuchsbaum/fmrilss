@@ -1,7 +1,7 @@
 # Mixed Model Solver using C++
 
 C++ implementation of the mixed model solver. This function is typically
-called through the main \`mixed_solve\` function rather than directly.
+called through the main `mixed_solve` function rather than directly.
 
 ## Usage
 

@@ -171,10 +171,6 @@ on CRAN and GitHub Pages. The palette family is provided via
 - [`fit_oasis_grid()`](https://bbuchsbaum.github.io/fmrilss/reference/fit_oasis_grid.md)
   : Fit OASIS with HRF Grid Search
 
-- [`fmrilss-package`](https://bbuchsbaum.github.io/fmrilss/reference/fmrilss-package.md)
-  [`fmrilss`](https://bbuchsbaum.github.io/fmrilss/reference/fmrilss-package.md)
-  : fmrilss: Least Squares Separate (LSS) Analysis for fMRI Data
-
 - [`fmrilss_options`](https://bbuchsbaum.github.io/fmrilss/reference/fmrilss_options.md)
   : Option constructors for nested interfaces
 

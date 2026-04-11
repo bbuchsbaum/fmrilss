@@ -48,7 +48,7 @@ trial regressor (rows) and each voxel (columns).
 
 ## Details
 
-LSA fits the model: Y = X\*beta + Z\*gamma + error, where all trial
+LSA fits the model: Y = X*beta + Z*gamma + error, where all trial
 regressors in X are estimated simultaneously. This is in contrast to
 LSS, which fits each trial separately while treating other trials as
 nuisance regressors.

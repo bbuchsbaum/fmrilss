@@ -41,6 +41,16 @@ designs.
 
 - OpenMP support for multi-core processing
 
+## See also
+
+Useful links:
+
+- <https://bbuchsbaum.github.io/fmrilss/>
+
+- <https://github.com/bbuchsbaum/fmrilss>
+
+- Report bugs at <https://github.com/bbuchsbaum/fmrilss/issues>
+
 ## Author
 
-Your Name \<your.email@example.com\>
+**Maintainer**: Brad Buchsbaum <brad.buchsbaum@gmail.com>

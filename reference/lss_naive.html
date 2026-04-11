@@ -42,7 +42,7 @@ than the optimized lss function."></head><body>
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Naive Least Squares Separate (LSS) Analysis</h1>
-
+      <small class="dont-index">Source: <a href="https://github.com/bbuchsbaum/fmrilss/blob/main/R/lss_naive.R" class="external-link"><code>R/lss_naive.R</code></a></small>
       <div class="d-none name"><code>lss_naive.Rd</code></div>
     </div>
 
@@ -86,13 +86,14 @@ the LSS beta estimates for each trial and voxel.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>This function implements the naive LSS approach where for each trial, a separate
-GLM is fitted that includes:</p><ul><li><p>All base regressors (intercept, drift, etc.)</p></li>
-<li><p>All fixed effects regressors (if any)</p></li>
-<li><p>Only the current trial's regressor from the trial design matrix</p></li>
+    <p>This function implements the LSS approach by fitting a separate GLM for each
+trial. Following the method described by Mumford et al. (2012), the model
+for each trial includes:</p><ul><li><p>The regressor for the trial of interest.</p></li>
+<li><p>A single regressor representing all other trials (the sum of their individual regressors).</p></li>
+<li><p>All base regressors (e.g., intercept, drift terms).</p></li>
+<li><p>All fixed effects regressors (if any).</p></li>
 </ul><p>While less efficient than the optimized <code><a href="lss.html">lss</a></code> function, this
-implementation is conceptually simpler and can serve as a reference or for
-validation purposes.</p>
+implementation is conceptually clear and serves as a reference for validation.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -101,14 +102,16 @@ validation purposes.</p>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="co"># Using same setup as lss() examples</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
 <span class="r-in"><span><span class="va">beta_estimates_naive</span> <span class="op">&lt;-</span> <span class="fu">lss_naive</span><span class="op">(</span>Y <span class="op">=</span> <span class="va">Y</span>, bdes <span class="op">=</span> <span class="va">bdes</span><span class="op">)</span></span></span>
+<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error:</span> object 'Y' not found</span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Compare with optimized version</span></span></span>
 <span class="r-in"><span><span class="va">beta_estimates_fast</span> <span class="op">&lt;-</span> <span class="fu"><a href="lss.html">lss</a></span><span class="op">(</span>Y <span class="op">=</span> <span class="va">Y</span>, bdes <span class="op">=</span> <span class="va">bdes</span><span class="op">)</span></span></span>
+<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error in lss(Y = Y, bdes = bdes):</span> unused argument (bdes = bdes)</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">beta_estimates_naive</span> <span class="op">-</span> <span class="va">beta_estimates_fast</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error:</span> object 'beta_estimates_naive' not found</span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
+<span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

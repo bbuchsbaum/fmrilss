@@ -119,9 +119,9 @@ A list containing:
 
 ## Details
 
-This function fits the mixed model: Y = X\*beta + Z\*u + error, where u
-~ N(0, Vu\*K) and error ~ N(0, Ve\*I). The variance components Vu and Ve
-are estimated using REML or ML.
+This function fits the mixed model: Y = X*beta + Z*u + error, where u ~
+N(0, Vu*K) and error ~ N(0, Ve*I). The variance components Vu and Ve are
+estimated using REML or ML.
 
 ## Examples
 

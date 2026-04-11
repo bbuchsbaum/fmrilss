@@ -1,6 +1,7 @@
 # Wrap a Learned Basis as an HRF (SBHM HRF)
 
-Convert a shared time basis matrix \`B\` (T×r) into an \`fmrihrf::HRF\`
+Convert a shared time basis matrix `B` (T×r) into an
+[`fmrihrf::HRF`](https://bbuchsbaum.github.io/fmrihrf/reference/HRF-class.html)
 object so it can be used directly in OASIS design construction. The HRF
 returns the r basis columns evaluated at arbitrary times by
 piecewise-linear interpolation on the provided time grid.
@@ -20,15 +21,19 @@ sbhm_hrf(B, tgrid, span)
 - tgrid:
 
   Numeric vector of length T giving the global times (seconds)
-  corresponding to the rows of \`B\`.
+  corresponding to the rows of `B`.
 
 - span:
 
-  Numeric HRF span passed to \`fmrihrf::HRF()\` metadata.
+  Numeric HRF span passed to
+  [`fmrihrf::HRF()`](https://bbuchsbaum.github.io/fmrihrf/reference/HRF-class.html)
+  metadata.
 
 ## Value
 
-An \`fmrihrf::HRF\` object with \`nbasis = ncol(B)\`.
+An
+[`fmrihrf::HRF`](https://bbuchsbaum.github.io/fmrihrf/reference/HRF-class.html)
+object with `nbasis = ncol(B)`.
 
 ## Examples
 

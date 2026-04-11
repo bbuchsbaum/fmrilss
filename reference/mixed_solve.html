@@ -131,32 +131,32 @@ Defaults to FALSE.</p></dd>
 <dl><dt>Vu</dt>
 <dd><p>Estimated variance component for random effects.</p></dd>
 
-  <dt>Ve</dt>
+<dt>Ve</dt>
 <dd><p>Estimated variance component for residuals.</p></dd>
 
-  <dt>beta</dt>
+<dt>beta</dt>
 <dd><p>Estimated fixed effects coefficients.</p></dd>
 
-  <dt>u</dt>
+<dt>u</dt>
 <dd><p>Estimated random effects coefficients.</p></dd>
 
-  <dt>LL</dt>
+<dt>LL</dt>
 <dd><p>Log-likelihood of the model.</p></dd>
 
-  <dt>beta.SE</dt>
+<dt>beta.SE</dt>
 <dd><p>Standard errors of fixed effects coefficients (if SE = TRUE).</p></dd>
 
-  <dt>u.SE</dt>
+<dt>u.SE</dt>
 <dd><p>Standard errors of random effects coefficients (if SE = TRUE).</p></dd>
 
-  <dt>Hinv</dt>
+<dt>Hinv</dt>
 <dd><p>Inverse of H matrix (if return_Hinv = TRUE).</p></dd>
 
 </dl></div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>This function fits the mixed model: Y = X*beta + Z*u + error, where
-u ~ N(0, Vu*K) and error ~ N(0, Ve*I). The variance components Vu and Ve
+    <p>This function fits the mixed model: Y = X<em>beta + Z</em>u + error, where
+u ~ N(0, Vu<em>K) and error ~ N(0, Ve</em>I). The variance components Vu and Ve
 are estimated using REML or ML.</p>
     </div>
 

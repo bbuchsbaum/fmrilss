@@ -114,14 +114,13 @@ Falls back automatically: cpp_omp -&gt; cpp_arma -&gt; cpp -&gt; r.</p></dd>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>**Design &amp; nuisance handling match `lss()`**:
-  - The trial-of-interest (Xi) and the sum of all other trials (Xother) are
-    included in each per-trial GLM.
-  - If `Nuisance` is supplied, it is projected out of **Y** and the trial
-    regressors before LSS (standard residualization). Experimental regressors
-    `Z` are *not* residualized, matching `lss()` documentation.
-  - If `Z` is `NULL`, an intercept-only design is used.</p>
-    </div>
+    <p><strong>Design &amp; nuisance handling match <code><a href="lss.html">lss()</a></code></strong>:</p><ul><li><p>The trial-of-interest (Xi) and the sum of all other trials (Xother) are
+included in each per-trial GLM.</p></li>
+<li><p>If <code>Nuisance</code> is supplied, it is projected out of <strong>Y</strong> and the trial
+regressors before LSS (standard residualization). Experimental regressors
+<code>Z</code> are <em>not</em> residualized, matching <code><a href="lss.html">lss()</a></code> documentation.</p></li>
+<li><p>If <code>Z</code> is <code>NULL</code>, an intercept-only design is used.</p></li>
+</ul></div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>

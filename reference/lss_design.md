@@ -42,8 +42,8 @@ lss_design(
   [`fmridesign::baseline_model()`](https://bbuchsbaum.github.io/fmridesign/reference/baseline_model.html).
   Defines drift correction, block intercepts, and nuisance regressors.
   If NULL, basic baseline intercepts are auto-injected: per-run
-  intercepts derived from \`blockids\` (or the sampling frame) are used
-  to ensure proper baseline modeling.
+  intercepts derived from `blockids` (or the sampling frame) are used to
+  ensure proper baseline modeling.
 
 - method:
 

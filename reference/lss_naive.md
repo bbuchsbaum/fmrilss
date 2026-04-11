@@ -43,19 +43,23 @@ LSS beta estimates for each trial and voxel.
 
 ## Details
 
-This function implements the naive LSS approach where for each trial, a
-separate GLM is fitted that includes:
+This function implements the LSS approach by fitting a separate GLM for
+each trial. Following the method described by Mumford et al. (2012), the
+model for each trial includes:
 
-- All base regressors (intercept, drift, etc.)
+- The regressor for the trial of interest.
 
-- All fixed effects regressors (if any)
+- A single regressor representing all other trials (the sum of their
+  individual regressors).
 
-- Only the current trial's regressor from the trial design matrix
+- All base regressors (e.g., intercept, drift terms).
+
+- All fixed effects regressors (if any).
 
 While less efficient than the optimized
 [`lss`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md) function,
-this implementation is conceptually simpler and can serve as a reference
-or for validation purposes.
+this implementation is conceptually clear and serves as a reference for
+validation.
 
 ## See also
 
@@ -65,12 +69,13 @@ optimized implementation
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
-# Using same setup as lss() examples
+# \donttest{
 beta_estimates_naive <- lss_naive(Y = Y, bdes = bdes)
+#> Error: object 'Y' not found
 
-# Compare with optimized version
 beta_estimates_fast <- lss(Y = Y, bdes = bdes)
+#> Error in lss(Y = Y, bdes = bdes): unused argument (bdes = bdes)
 max(abs(beta_estimates_naive - beta_estimates_fast))
-} # }
+#> Error: object 'beta_estimates_naive' not found
+# }
 ```

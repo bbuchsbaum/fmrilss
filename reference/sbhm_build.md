@@ -1,10 +1,11 @@
 # Build a Shared-Basis HRF Library (SBHM)
 
 Learn a low-rank shared time basis from a parameterized HRF library
-using \`fmrihrf::hrf_library()\`. The library is evaluated on the TR
-grid, optionally baseline-removed and L2-normalized, and decomposed via
-SVD into \`B = U_r\` (shared basis), singular values \`S\`, and library
-coordinates \`A = diag(S)
+using
+[`fmrihrf::hrf_library()`](https://bbuchsbaum.github.io/fmrihrf/reference/hrf_library.html).
+The library is evaluated on the TR grid, optionally baseline-removed and
+L2-normalized, and decomposed via SVD into `B = U_r` (shared basis),
+singular values `S`, and library coordinates `A = diag(S) %*% t(V_r)`.
 
 ## Usage
 
@@ -27,36 +28,45 @@ sbhm_build(
 
 - library_spec:
 
-  Either NULL (when \`library_H\` is provided) or a list with: -
-  \`fun\`: a function compatible with \`fmrihrf::hrf_library(fun, pgrid,
-  ...)\` that returns an \`fmrihrf\` HRF object when called with
-  parameters. - \`pgrid\`: a data.frame of parameter combinations (see
-  examples). - \`span\`: numeric, HRF span in seconds (default
-  \`span\`). - \`precision\`: numeric, evaluation precision (default 0.1
-  sec). - \`method\`: evaluation method for \`fmrihrf::evaluate()\`
-  (default "conv"). - \`extras\`: optional list of additional arguments
-  passed to \`hrf_library\`.
+  Either NULL (when `library_H` is provided) or a list with:
+
+  - `fun`: a function compatible with
+    `fmrihrf::hrf_library(fun, pgrid, ...)` that returns an `fmrihrf`
+    HRF object when called with parameters.
+
+  - `pgrid`: a data.frame of parameter combinations (see examples).
+
+  - `span`: numeric, HRF span in seconds (default `span`).
+
+  - `precision`: numeric, evaluation precision (default 0.1 sec).
+
+  - `method`: evaluation method for
+    [`fmrihrf::evaluate()`](https://bbuchsbaum.github.io/fmrihrf/reference/evaluate.html)
+    (default "conv").
+
+  - `extras`: optional list of additional arguments passed to
+    `hrf_library`.
 
 - library_H:
 
   Optional precomputed TxK matrix of candidate HRFs, already aligned to
-  the TR grid \`tgrid\` (or \`sframe\`). Mutually exclusive with
-  \`library_spec\`.
+  the TR grid `tgrid` (or `sframe`). Mutually exclusive with
+  `library_spec`.
 
 - r:
 
-  Target rank for the shared basis (default 6). Clipped to \`min(T,
-  K)\`.
+  Target rank for the shared basis (default 6). Clipped to `min(T, K)`.
 
 - sframe:
 
-  Optional \`fmrihrf::sampling_frame\`, used to derive the global time
-  grid when \`tgrid\` is not provided.
+  Optional
+  [`fmrihrf::sampling_frame`](https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html),
+  used to derive the global time grid when `tgrid` is not provided.
 
 - tgrid:
 
   Optional numeric vector of global times (in seconds). If provided,
-  takes precedence over \`sframe\`.
+  takes precedence over `sframe`.
 
 - span:
 
@@ -76,22 +86,31 @@ sbhm_build(
 
   Optional numeric vector of time shifts (in seconds). When provided,
   shifted copies of the library are added by linear interpolation on
-  \`tgrid\`.
+  `tgrid`.
 
 - ref:
 
   Reference for coefficient-space shrinkage and orientation. One of
-  \`"mean"\` (default) or \`"spmg1"\`. If \`"spmg1"\`, the SPMG1 HRF is
-  projected onto the learned basis to form \`alpha_ref\`.
+  `"mean"` (default) or `"spmg1"`. If `"spmg1"`, the SPMG1 HRF is
+  projected onto the learned basis to form `alpha_ref`.
 
 ## Value
 
-A list with components: - \`B\` (Txr): shared orthonormal time basis -
-\`S\` (length r): singular values - \`A\` (rxK): coordinates of library
-HRFs in the shared basis - \`tgrid\`: the global time grid used
-(seconds) - \`span\`: span used for reference HRF - \`ref\`: list with
-\`alpha_ref\` (length r) and \`name\` - \`meta\`: list with \`r\`,
-\`K\`, \`normalize\`, \`baseline\`
+A list with components:
+
+- `B` (Txr): shared orthonormal time basis
+
+- `S` (length r): singular values
+
+- `A` (rxK): coordinates of library HRFs in the shared basis
+
+- `tgrid`: the global time grid used (seconds)
+
+- `span`: span used for reference HRF
+
+- `ref`: list with `alpha_ref` (length r) and `name`
+
+- `meta`: list with `r`, `K`, `normalize`, `baseline`
 
 ## Examples
 

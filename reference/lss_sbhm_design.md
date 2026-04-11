@@ -1,9 +1,9 @@
 # SBHM Pipeline with fmridesign Models
 
-Run the SBHM end-to-end pipeline using fmridesign's \`event_model\` and
-optional \`baseline_model\`, mirroring the convenience of
-\`lss_design()\` but producing SBHM coefficients and (optionally) scalar
-amplitudes.
+Run the SBHM end-to-end pipeline using fmridesign's `event_model` and
+optional `baseline_model`, mirroring the convenience of
+[`lss_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_design.md)
+but producing SBHM coefficients and (optionally) scalar amplitudes.
 
 ## Usage
 
@@ -37,47 +37,56 @@ lss_sbhm_design(
 
 - sbhm:
 
-  SBHM object as returned by \`sbhm_build()\`.
+  SBHM object as returned by
+  [`sbhm_build()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_build.md).
 
 - event_model:
 
-  An \`event_model\` from \`fmridesign::event_model()\` defining the
-  trial structure (typically created with \`trialwise()\`).
+  An `event_model` from
+  [`fmridesign::event_model()`](https://bbuchsbaum.github.io/fmridesign/reference/event_model.html)
+  defining the trial structure (typically created with
+  [`trialwise()`](https://bbuchsbaum.github.io/fmridesign/reference/trialwise.html)).
 
 - baseline_model:
 
-  Optional \`baseline_model\` from \`fmridesign::baseline_model()\`. Its
-  drift, block, and nuisance terms are projected out as confounds.
+  Optional `baseline_model` from
+  [`fmridesign::baseline_model()`](https://bbuchsbaum.github.io/fmridesign/reference/baseline_model.html).
+  Its drift, block, and nuisance terms are projected out as confounds.
 
 - prewhiten:
 
-  Optional prewhitening options (see \`?lss\`).
+  Optional prewhitening options (see
+  [`?lss`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md)).
 
 - prepass:
 
-  Optional list forwarded to \`sbhm_prepass()\`.
+  Optional list forwarded to
+  [`sbhm_prepass()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_prepass.md).
 
 - match:
 
-  Optional list forwarded to \`sbhm_match()\`.
+  Optional list forwarded to
+  [`sbhm_match()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_match.md).
 
 - oasis:
 
-  Optional list forwarded to \`lss(..., method = "oasis")\`. \`K\`
-  defaults to \`ncol(sbhm\$B)\`.
+  Optional list forwarded to `lss(..., method = "oasis")`. `K` defaults
+  to `ncol(sbhm$B)`.
 
 - amplitude:
 
-  Amplitude options (see \`?lss_sbhm\`).
+  Amplitude options (see
+  [`?lss_sbhm`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm.md)).
 
 - return:
 
-  One of \`"amplitude"\`, \`"coefficients"\`, or \`"both"\`.
+  One of `"amplitude"`, `"coefficients"`, or `"both"`.
 
 - validate:
 
   Logical; when TRUE, performs basic checks (sampling frame
-  compatibility, temporal alignment) analogous to \`lss_design()\`.
+  compatibility, temporal alignment) analogous to
+  [`lss_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_design.md).
 
 - ...:
 
@@ -85,13 +94,16 @@ lss_sbhm_design(
 
 ## Value
 
-Same return contract as \`lss_sbhm()\`.
+Same return contract as
+[`lss_sbhm()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm.md).
 
 ## Details
 
-This function wraps \`lss_sbhm()\` by converting the \`event_model\`
-into an OASIS \`design_spec\` that uses the SBHM basis HRF, and by
-mapping \`baseline_model\` terms to nuisance regressors for projection.
+This function wraps
+[`lss_sbhm()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm.md)
+by converting the `event_model` into an OASIS `design_spec` that uses
+the SBHM basis HRF, and by mapping `baseline_model` terms to nuisance
+regressors for projection.
 
 ## Examples
 

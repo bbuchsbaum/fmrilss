@@ -1,9 +1,9 @@
 # Project Trial-wise SBHM Coefficients to Scalar Amplitudes
 
 Given trial-wise coefficients in the shared basis (rxntrialsxV) and the
-voxel-specific matched library coordinates \`alpha_hat\` (rxV), compute
-scalar amplitudes per trial and voxel via least-squares projection: \`a
-= (alpha' beta) / (alpha' alpha)\`.
+voxel-specific matched library coordinates `alpha_hat` (rxV), compute
+scalar amplitudes per trial and voxel via least-squares projection:
+`a = (alpha' beta) / (alpha' alpha)`.
 
 ## Usage
 
@@ -21,9 +21,9 @@ sbhm_project(beta_rt, alpha_hat)
 - alpha_hat:
 
   Numeric matrix rxV of matched library coordinates per voxel (e.g.,
-  \`sbhm_match()\$alpha_hat\`). These should be in the same coordinate
-  system as \`beta_rt\` (unwhitened, not L2-normalized) for
-  interpretable amplitudes.
+  `sbhm_match()$alpha_hat`). These should be in the same coordinate
+  system as `beta_rt` (unwhitened, not L2-normalized) for interpretable
+  amplitudes.
 
 ## Value
 

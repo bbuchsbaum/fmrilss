@@ -81,28 +81,28 @@ parameter estimation strategies.</p>
 <dd><p>List of prewhitening options:</p><dl><dt>method</dt>
 <dd><p>Character: "ar" (default), "arma", or "none"</p></dd>
 
-  <dt>p</dt>
+<dt>p</dt>
 <dd><p>Integer or "auto": AR order (default "auto")</p></dd>
 
-  <dt>q</dt>
+<dt>q</dt>
 <dd><p>Integer: MA order for ARMA (default 0)</p></dd>
 
-  <dt>p_max</dt>
+<dt>p_max</dt>
 <dd><p>Integer: Maximum AR order when p="auto" (default 6)</p></dd>
 
-  <dt>pooling</dt>
+<dt>pooling</dt>
 <dd><p>Character: "global" (default), "voxel", "run", or "parcel"</p></dd>
 
-  <dt>runs</dt>
+<dt>runs</dt>
 <dd><p>Integer vector: Run identifiers for run-aware estimation</p></dd>
 
-  <dt>parcels</dt>
+<dt>parcels</dt>
 <dd><p>Integer vector: Parcel memberships for parcel-based pooling</p></dd>
 
-  <dt>exact_first</dt>
+<dt>exact_first</dt>
 <dd><p>Character: "ar1" or "none" for exact AR(1) scaling</p></dd>
 
-  <dt>compute_residuals</dt>
+<dt>compute_residuals</dt>
 <dd><p>Logical: Whether to compute residuals first (default TRUE)</p></dd>
 
 
@@ -114,19 +114,19 @@ parameter estimation strategies.</p>
     <p>List containing:</p><dl><dt>Y_whitened</dt>
 <dd><p>Whitened data matrix</p></dd>
 
-    <dt>X_whitened</dt>
+<dt>X_whitened</dt>
 <dd><p>Whitened trial design matrix (if provided)</p></dd>
 
-    <dt>Z_whitened</dt>
+<dt>Z_whitened</dt>
 <dd><p>Whitened experimental design (if provided)</p></dd>
 
-    <dt>Nuisance_whitened</dt>
+<dt>Nuisance_whitened</dt>
 <dd><p>Whitened nuisance regressors (if provided)</p></dd>
 
-    <dt>whiten_plan</dt>
+<dt>whiten_plan</dt>
 <dd><p>fmriAR plan object for diagnostics</p></dd>
 
-    <dt>applied</dt>
+<dt>applied</dt>
 <dd><p>Logical: Whether whitening was applied</p></dd>
 
 

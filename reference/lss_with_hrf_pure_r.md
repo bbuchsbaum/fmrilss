@@ -67,13 +67,19 @@ numeric matrix (n_trials x n_vox) of trial-wise beta estimates
 
 ## Details
 
-\*\*Design & nuisance handling match \`lss()\`\*\*: - The
-trial-of-interest (Xi) and the sum of all other trials (Xother) are
-included in each per-trial GLM. - If \`Nuisance\` is supplied, it is
-projected out of \*\*Y\*\* and the trial regressors before LSS (standard
-residualization). Experimental regressors \`Z\` are \*not\*
-residualized, matching \`lss()\` documentation. - If \`Z\` is \`NULL\`,
-an intercept-only design is used.
+**Design & nuisance handling match
+[`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md)**:
+
+- The trial-of-interest (Xi) and the sum of all other trials (Xother)
+  are included in each per-trial GLM.
+
+- If `Nuisance` is supplied, it is projected out of **Y** and the trial
+  regressors before LSS (standard residualization). Experimental
+  regressors `Z` are *not* residualized, matching
+  [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md)
+  documentation.
+
+- If `Z` is `NULL`, an intercept-only design is used.
 
 ## Examples
 

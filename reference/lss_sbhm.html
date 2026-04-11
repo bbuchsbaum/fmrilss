@@ -88,13 +88,13 @@ coefficients onto the matched coordinates to produce scalar amplitudes.</p>
 
 
 <dt id="arg-sbhm">sbhm<a class="anchor" aria-label="anchor" href="#arg-sbhm"></a></dt>
-<dd><p>SBHM object from `sbhm_build()`.</p></dd>
+<dd><p>SBHM object from <code><a href="sbhm_build.html">sbhm_build()</a></code>.</p></dd>
 
 
 <dt id="arg-design-spec">design_spec<a class="anchor" aria-label="anchor" href="#arg-design-spec"></a></dt>
-<dd><p>List for design construction (same as `oasis$design_spec`):
-`list(sframe=..., cond=list(onsets=..., duration=0, span=...), others=list(...))`.
-The HRF in `cond$hrf` is ignored and replaced with the SBHM basis HRF.</p></dd>
+<dd><p>List for design construction (same as <code>oasis$design_spec</code>):
+<code>list(sframe=..., cond=list(onsets=..., duration=0, span=...), others=list(...))</code>.
+The HRF in <code>cond$hrf</code> is ignored and replaced with the SBHM basis HRF.</p></dd>
 
 
 <dt id="arg-nuisance">Nuisance<a class="anchor" aria-label="anchor" href="#arg-nuisance"></a></dt>
@@ -102,76 +102,75 @@ The HRF in `cond$hrf` is ignored and replaced with the SBHM basis HRF.</p></dd>
 
 
 <dt id="arg-prewhiten">prewhiten<a class="anchor" aria-label="anchor" href="#arg-prewhiten"></a></dt>
-<dd><p>Optional prewhitening options (see `?lss`).</p></dd>
+<dd><p>Optional prewhitening options (see <code><a href="lss.html">?lss</a></code>).</p></dd>
 
 
 <dt id="arg-prepass">prepass<a class="anchor" aria-label="anchor" href="#arg-prepass"></a></dt>
-<dd><p>Optional list forwarded to `sbhm_prepass()` (e.g., ridge, data_fac).</p></dd>
+<dd><p>Optional list forwarded to <code><a href="sbhm_prepass.html">sbhm_prepass()</a></code> (e.g., ridge, data_fac).</p></dd>
 
 
 <dt id="arg-match">match<a class="anchor" aria-label="anchor" href="#arg-match"></a></dt>
-<dd><p>Optional list forwarded to `sbhm_match()` (e.g., shrink, topK, whiten, orient_ref).
-Additional fields handled here:
-- `alpha_source`: one of `"prepass"` (default), `"trial_projection"`,
-  or `"oasis_rank1"`.
-  `"trial_projection"` estimates voxel shape from per-trial projection
-  coefficients in the shared basis.
-- `rank1_min`: optional minimum rank-1 variance fraction in `[0,1]` when
-  `alpha_source="oasis_rank1"`. Voxels below threshold fall back to prepass.
-- `soft_blend` logical (default TRUE): when `topK &gt; 1`, blend the top-K
-  library coordinates per voxel using softmax weights returned by `sbhm_match()`.
-  If `blend_margin` is provided, blending is only applied to voxels with
-  `margin &lt; blend_margin`; others use the hard top-1 assignment.
-- `blend_margin` optional numeric threshold on the matching margin for
-  conditional blending.
-- `whiten_power` numeric in `[0,1]` for partial singular-value whitening
-  (`1`=full, `0.5`=partial).
-- `min_margin` optional minimum matching margin. Voxels below threshold
-  fall back to `fallback_ref`.
-- `min_beta_norm` optional minimum norm of the shape summary used for
-  matching. Voxels below threshold fall back to `fallback_ref`.
-- `fallback_ref` optional r-vector fallback coordinate (default
-  `sbhm$ref$alpha_ref`).</p></dd>
+<dd><p>Optional list forwarded to <code><a href="sbhm_match.html">sbhm_match()</a></code> (e.g., shrink, topK, whiten, orient_ref).
+Additional fields handled here:</p><ul><li><p><code>alpha_source</code>: one of <code>"prepass"</code> (default), <code>"trial_projection"</code>,
+or <code>"oasis_rank1"</code>.
+<code>"trial_projection"</code> estimates voxel shape from per-trial projection
+coefficients in the shared basis.</p></li>
+<li><p><code>rank1_min</code>: optional minimum rank-1 variance fraction in <code>[0,1]</code> when
+<code>alpha_source="oasis_rank1"</code>. Voxels below threshold fall back to prepass.</p></li>
+<li><p><code>soft_blend</code> logical (default TRUE): when <code>topK &gt; 1</code>, blend the top-K
+library coordinates per voxel using softmax weights returned by <code><a href="sbhm_match.html">sbhm_match()</a></code>.
+If <code>blend_margin</code> is provided, blending is only applied to voxels with
+<code>margin &lt; blend_margin</code>; others use the hard top-1 assignment.</p></li>
+<li><p><code>blend_margin</code> optional numeric threshold on the matching margin for
+conditional blending.</p></li>
+<li><p><code>whiten_power</code> numeric in <code>[0,1]</code> for partial singular-value whitening
+(<code>1</code>=full, <code>0.5</code>=partial).</p></li>
+<li><p><code>min_margin</code> optional minimum matching margin. Voxels below threshold
+fall back to <code>fallback_ref</code>.</p></li>
+<li><p><code>min_beta_norm</code> optional minimum norm of the shape summary used for
+matching. Voxels below threshold fall back to <code>fallback_ref</code>.</p></li>
+<li><p><code>fallback_ref</code> optional r-vector fallback coordinate (default
+<code>sbhm$ref$alpha_ref</code>).</p></li>
+</ul></dd>
 
 
 <dt id="arg-oasis">oasis<a class="anchor" aria-label="anchor" href="#arg-oasis"></a></dt>
-<dd><p>Optional list forwarded to `lss(..., method="oasis")`. `K` is set to
-`ncol(sbhm$B)` if not provided, and `design_spec` is injected automatically.</p></dd>
+<dd><p>Optional list forwarded to <code>lss(..., method="oasis")</code>. <code>K</code> is set to
+<code>ncol(sbhm$B)</code> if not provided, and <code>design_spec</code> is injected automatically.</p></dd>
 
 
 <dt id="arg-amplitude">amplitude<a class="anchor" aria-label="anchor" href="#arg-amplitude"></a></dt>
-<dd><p>List controlling the scalar amplitude stage. Fields:
-- `method`: one of "lss1" (default), "global_ls", "oasis_voxel".
-- `ridge`: for `global_ls`, either numeric (absolute) or list(mode, lambda).
-- `ridge_frac`: for `lss1`/`oasis_voxel`, list(x, b) fractional ridge.
-- `cond_gate`: optional auto-fallback rule, e.g., list(metric="rho", thr=0.999, fallback="lss1").</p></dd>
+<dd><p>List controlling the scalar amplitude stage. Fields:</p><ul><li><p><code>method</code>: one of "lss1" (default), "global_ls", "oasis_voxel".</p></li>
+<li><p><code>ridge</code>: for <code>global_ls</code>, either numeric (absolute) or list(mode, lambda).</p></li>
+<li><p><code>ridge_frac</code>: for <code>lss1</code>/<code>oasis_voxel</code>, list(x, b) fractional ridge.</p></li>
+<li><p><code>cond_gate</code>: optional auto-fallback rule, e.g., list(metric="rho", thr=0.999, fallback="lss1").</p></li>
+</ul></dd>
 
 
 <dt id="arg-return">return<a class="anchor" aria-label="anchor" href="#arg-return"></a></dt>
-<dd><p>One of `"amplitude"`, `"coefficients"`, or `"both"` (default `"amplitude"`).</p></dd>
+<dd><p>One of <code>"amplitude"</code>, <code>"coefficients"</code>, or <code>"both"</code> (default <code>"amplitude"</code>).</p></dd>
 
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A list with components:
-  - `amplitude` ntrials×V matrix (when requested)
-  - `coeffs_r` r×ntrials×V array of trial-wise coefficients (when requested)
-  - `matched_idx` length-V integer indices into the library
-  - `margin` length-V confidence margins (top1 - top2 cosine)
-  - `alpha_coords` r×V matched coordinates per voxel
-  - `diag` list with `r`, `ntrials`, and `times`</p>
-    </div>
+    <p>A list with components:</p><ul><li><p><code>amplitude</code> ntrials×V matrix (when requested)</p></li>
+<li><p><code>coeffs_r</code> r×ntrials×V array of trial-wise coefficients (when requested)</p></li>
+<li><p><code>matched_idx</code> length-V integer indices into the library</p></li>
+<li><p><code>margin</code> length-V confidence margins (top1 - top2 cosine)</p></li>
+<li><p><code>alpha_coords</code> r×V matched coordinates per voxel</p></li>
+<li><p><code>diag</code> list with <code>r</code>, <code>ntrials</code>, and <code>times</code></p></li>
+</ul></div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>Most users should treat the `prepass`, `match`, `oasis`, and `amplitude` inputs
-as optional *override lists*: you can provide only the fields you want to
+    <p>Most users should treat the <code>prepass</code>, <code>match</code>, <code>oasis</code>, and <code>amplitude</code> inputs
+as optional <em>override lists</em>: you can provide only the fields you want to
 change, and rely on defaults for everything else.</p>
-<p>If you already use `fmridesign`, prefer [lss_sbhm_design()] to avoid manually
-assembling an OASIS `design_spec`.</p>
+<p>If you already use <code>fmridesign</code>, prefer <code><a href="lss_sbhm_design.html">lss_sbhm_design()</a></code> to avoid manually
+assembling an OASIS <code>design_spec</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
-    <div class="dont-index"><p>[lss_sbhm_design()], [sbhm_prepass()], [sbhm_match()]</p></div>
+    <div class="dont-index"><p><code><a href="lss_sbhm_design.html">lss_sbhm_design()</a></code>, <code><a href="sbhm_prepass.html">sbhm_prepass()</a></code>, <code><a href="sbhm_match.html">sbhm_match()</a></code></p></div>
     </div>
 
     <div class="section level2">

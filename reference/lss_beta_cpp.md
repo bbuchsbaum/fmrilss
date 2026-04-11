@@ -38,7 +38,6 @@ optimized BLAS (like OpenBLAS or Intel MKL).
 
 ``` r
 if (FALSE) { # \dontrun{
-# After projecting out confounds
 result <- project_confounds_cpp(X_confounds, Y_data, C_trials)
 betas <- lss_beta_cpp(result$Q_dmat_ran, result$residual_data)
 } # }
