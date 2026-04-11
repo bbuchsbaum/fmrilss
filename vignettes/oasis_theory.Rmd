@@ -3,22 +3,27 @@ title: 'OASIS Theory: Algebra and Implementation Details'
 output:
   rmarkdown::html_vignette:
     mathjax: default
+    toc: yes
+    toc_depth: 2.0
+    css: albers.css
+    includes:
+      in_header:
+      - |-
+        <script src="albers.js"></script>
+        <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+      - albers-header.html
+params:
+  family: red
+  preset: homage
+resource_files:
+- albers.css
+- albers.js
+- albers-header.html
+
 vignette: |
   %\VignetteIndexEntry{OASIS Theory: Algebra and Implementation Details}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
-params:
-  family: red
-  preset: homage
-css: albers.css
-resource_files:
-- albers.css
-- albers.js
-includes:
-  in_header: |-
-    <script src="albers.js"></script>
-    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
-
 ---
 
 ```{r setup-opts, include = FALSE}
@@ -33,6 +38,19 @@ knitr::opts_chunk$set(
   warning = FALSE,
   message = FALSE
 )
+```
+
+```{r albers-classes, echo=FALSE, results='asis'}
+cat(sprintf(
+  paste0(
+    '<script>document.addEventListener("DOMContentLoaded",function(){',
+    'document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-study","preset-structural","preset-adobe","preset-midnight");',
+    'document.body.classList.add("palette-%s","preset-%s");',
+    '});</script>'
+  ),
+  params$family,
+  params$preset
+))
 ```
 
 ## Motivation
@@ -101,6 +119,9 @@ complexity_summary <- data.frame(
   SpeedupRatio = classical_ops / oasis_ops
 )
 complexity_summary
+```
+
+```{r complexity-check, include = FALSE}
 stopifnot(all(complexity_summary$SpeedupRatio > 1))
 ```
 
@@ -266,7 +287,3 @@ Compared to classical LSS (\(N\) separate regressions), OASIS shaves off repeate
 
 - Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012). Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses. *NeuroImage*, 59(3), 2636–2643.
 - fmrilss source files `R/oasis_glue.R` and `src/oasis_core.cpp` (for implementation alignment).
-
-```{r session-info, echo=FALSE}
-sessionInfo()
-```

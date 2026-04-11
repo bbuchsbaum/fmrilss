@@ -1,27 +1,39 @@
 ---
 title: Using fmridesign with fmrilss
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: yes
+    toc_depth: 2.0
+    css: albers.css
+    includes:
+      in_header:
+      - |-
+        <script src="albers.js"></script>
+        <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+      - albers-header.html
+params:
+  family: red
+  preset: homage
+resource_files:
+- albers.css
+- albers.js
+- albers-header.html
+
 vignette: |
   %\VignetteIndexEntry{Using fmridesign with fmrilss}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
-params:
-  family: red
-  preset: homage
-css: albers.css
-resource_files:
-- albers.css
-- albers.js
-includes:
-  in_header: |-
-    <script src="albers.js"></script>
-    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
-
 ---
 
 ```{r setup-opts, include = FALSE}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(family = params$family, preset = params$preset))
 has_fmridesign <- requireNamespace("fmridesign", quietly = TRUE)
+if (has_fmridesign &&
+    requireNamespace("ggplot2", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(
+    albersdown::theme_albers(family = params$family, preset = params$preset)
+  )
+}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -31,27 +43,23 @@ knitr::opts_chunk$set(
   warning = FALSE,
   message = FALSE
 )
+```
 
-if (has_fmridesign &&
-    requireNamespace("ggplot2", quietly = TRUE) &&
-    requireNamespace("albersdown", quietly = TRUE)) {
-  ggplot2::theme_set(
-    albersdown::theme_albers(family = params$family, preset = params$preset)
-  )
-}
+```{r albers-classes, echo=FALSE, results='asis'}
+cat(sprintf(
+  paste0(
+    '<script>document.addEventListener("DOMContentLoaded",function(){',
+    'document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-study","preset-structural","preset-adobe","preset-midnight");',
+    'document.body.classList.add("palette-%s","preset-%s");',
+    '});</script>'
+  ),
+  params$family,
+  params$preset
+))
 ```
 
 ```{r setup}
 library(fmrilss)
-```
-
-```{r check-package, echo = FALSE}
-if (!has_fmridesign) {
-  message("fmridesign not installed; code chunks not evaluated.")
-}
-```
-
-```{r load-deps, message = FALSE}
 library(fmridesign)
 library(fmrihrf)
 ```
@@ -81,58 +89,53 @@ Use the traditional `lss()` interface when:
 
 ## Simulated Data Setup
 
-To demonstrate the workflow, we'll create simulated fMRI data with realistic trial effects.
+We'll build a small two-run experiment from scratch so every piece of the workflow is visible. Start with the run-level parameters:
 
-```{r simulate-data}
+```{r sim-params}
 set.seed(123)
-
-# Two runs, 150 scans each, TR = 2s
 n_scans_per_run <- 150
-n_runs <- 2
-n_voxels <- 500
-TR <- 2
+n_runs          <- 2
+n_voxels        <- 500
+TR              <- 2
+```
 
-# True trial effects (betas) for 6 trials per run
-true_betas <- matrix(rnorm(12 * n_voxels, mean = 1.5, sd = 0.8),
-                     nrow = 12, ncol = n_voxels)
+Next, a trial table with run-relative onsets — six trials per run — and the matching sampling frame:
 
-# Trial data with run-relative onsets
+```{r sim-trials}
 trials <- data.frame(
   onset = rep(c(10, 30, 50, 70, 90, 110), times = 2),
-  run = rep(1:2, each = 6)
+  run   = rep(1:2, each = 6)
 )
-
-# Sampling frame
 sframe <- sampling_frame(blocklens = rep(n_scans_per_run, n_runs), TR = TR)
+```
 
-# Create design matrix to generate Y
+Build a trial-wise event model, then extract the design matrix used to generate the signal:
+
+```{r sim-design}
 emod_sim <- event_model(
   onset ~ trialwise(basis = "spmg1"),
-  data = trials,
-  block = ~run,
-  sampling_frame = sframe
+  data = trials, block = ~run, sampling_frame = sframe
 )
-
-# Extract trial design matrix and convert to matrix
 X_trial <- as.matrix(design_matrix(emod_sim))
+```
 
-# Baseline: intercept + linear drift per run
+A per-run intercept + linear drift serves as the baseline:
+
+```{r sim-baseline}
 bmodel_sim <- baseline_model(
-  basis = "poly",
-  degree = 1,
-  sframe = sframe,
-  intercept = "runwise"
+  basis = "poly", degree = 1, sframe = sframe, intercept = "runwise"
 )
 Z_baseline <- as.matrix(design_matrix(bmodel_sim))
+```
 
-# Generate Y with signal + noise
-signal <- X_trial %*% true_betas
-baseline_signal <- Z_baseline %*% matrix(rnorm(ncol(Z_baseline) * n_voxels, sd = 2),
-                                         ncol = n_voxels)
-noise <- matrix(rnorm(nrow(X_trial) * n_voxels, sd = 3),
-                nrow = nrow(X_trial), ncol = n_voxels)
+Finally, combine true trial effects, baseline drift, and noise to produce `Y`:
 
-Y <- signal + baseline_signal + noise
+```{r sim-data}
+true_betas <- matrix(rnorm(12 * n_voxels, mean = 1.5, sd = 0.8), 12, n_voxels)
+Y <- X_trial  %*% true_betas +
+     Z_baseline %*% matrix(rnorm(ncol(Z_baseline) * n_voxels, sd = 2), ncol = n_voxels) +
+     matrix(rnorm(nrow(X_trial) * n_voxels, sd = 3), nrow(X_trial), n_voxels)
+dim(Y)
 ```
 
 ## Quick Start
@@ -158,6 +161,9 @@ beta <- lss_design(Y_run1, emod, method = "oasis")
 
 # Result: 6 trials × 500 voxels
 dim(beta)
+```
+
+```{r quickstart-check, include = FALSE}
 stopifnot(all(dim(beta) == c(6, n_voxels)), all(is.finite(beta)))
 ```
 
@@ -365,7 +371,6 @@ recovery_summary <- data.frame(
   RMSE = sqrt(mean((est_vec - true_vec)^2))
 )
 recovery_summary
-stopifnot(all(is.finite(as.matrix(recovery_summary))))
 
 # Plot
 plot(true_vec, est_vec,
@@ -374,6 +379,10 @@ plot(true_vec, est_vec,
      main = sprintf("LSS Recovery (r = %.3f)", recovery_summary$Correlation))
 abline(0, 1, col = "red", lwd = 2, lty = 2)
 grid()
+```
+
+```{r validation-check, include = FALSE}
+stopifnot(all(is.finite(as.matrix(recovery_summary))))
 ```
 
 The fit is not perfect because the simulation adds substantial baseline structure and noise, but the recovered betas still track the ground truth in a way that is easy to diagnose numerically and visually.
@@ -463,7 +472,3 @@ For simple designs or when you already have design matrices prepared, the tradit
 - `vignette("oasis_method")` - OASIS method details
 - `vignette("a_04_event_models", package = "fmridesign")` - Event model tutorial
 - `vignette("a_03_baseline_model", package = "fmridesign")` - Baseline model tutorial
-
-```{r session-info, echo = FALSE}
-sessionInfo()
-```

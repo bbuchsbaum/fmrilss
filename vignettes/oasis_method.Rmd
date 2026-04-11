@@ -1,26 +1,37 @@
 ---
 title: 'The OASIS Method: Optimized Analytic Single-pass Inverse Solution'
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: yes
+    toc_depth: 2.0
+    css: albers.css
+    includes:
+      in_header:
+      - |-
+        <script src="albers.js"></script>
+        <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+      - albers-header.html
+params:
+  family: red
+  preset: homage
+resource_files:
+- albers.css
+- albers.js
+- albers-header.html
+
 vignette: |
   %\VignetteIndexEntry{The OASIS Method: Optimized Analytic Single-pass Inverse Solution}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
-params:
-  family: red
-  preset: homage
-css: albers.css
-resource_files:
-- albers.css
-- albers.js
-includes:
-  in_header: |-
-    <script src="albers.js"></script>
-    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
-
 ---
 
 ```{r setup-opts, include = FALSE}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(family = params$family, preset = params$preset))
+if (requireNamespace("ggplot2", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(
+    albersdown::theme_albers(family = params$family, preset = params$preset)
+  )
+}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -33,13 +44,17 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r setup-theme, include = FALSE}
-if (requireNamespace("ggplot2", quietly = TRUE) &&
-    requireNamespace("albersdown", quietly = TRUE)) {
-  ggplot2::theme_set(
-    albersdown::theme_albers(family = params$family, preset = params$preset)
-  )
-}
+```{r albers-classes, echo=FALSE, results='asis'}
+cat(sprintf(
+  paste0(
+    '<script>document.addEventListener("DOMContentLoaded",function(){',
+    'document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-study","preset-structural","preset-adobe","preset-midnight");',
+    'document.body.classList.add("palette-%s","preset-%s");',
+    '});</script>'
+  ),
+  params$family,
+  params$preset
+))
 ```
 
 ```{r setup}
@@ -109,13 +124,16 @@ The result is an `n_trials x n_voxels` matrix, exactly the same shape you get fr
 
 With a single-basis HRF and no ridge penalty, OASIS returns the same coefficients as the optimized LSS path. You can verify this up to floating-point tolerance.
 
-```{r oasis-equiv, eval=Sys.getenv("IN_PKGDOWN") != "true"}
+```{r oasis-equiv, eval = Sys.getenv("IN_PKGDOWN") != "true"}
 Z <- cbind(1, scale(1:n_time))
 b_lss   <- lss(Y, X_trials, Z = Z, method = "cpp_optimized")
 b_oasis <- lss(Y, X_trials, Z = Z, method = "oasis",
                oasis = list(ridge_mode = "absolute", ridge_x = 0, ridge_b = 0))
 equiv_err <- max(abs(b_lss - b_oasis))
 equiv_err
+```
+
+```{r oasis-equiv-check, include = FALSE, eval = Sys.getenv("IN_PKGDOWN") != "true"}
 stopifnot(equiv_err < 1e-10)
 ```
 
@@ -175,6 +193,9 @@ ridge_summary <- data.frame(
   )
 )
 ridge_summary
+```
+
+```{r ridge-compare-check, include = FALSE}
 stopifnot(ridge_summary$MeanTrialVariance[2] < ridge_summary$MeanTrialVariance[1])
 ```
 
@@ -305,6 +326,9 @@ res_se <- lss(
 ```{r se-tstats}
 t_stats <- res_se$beta / res_se$se
 cat("Mean |t|:", round(mean(abs(t_stats)), 2), "\n")
+```
+
+```{r se-tstats-check, include = FALSE}
 stopifnot(
   all(dim(res_se$beta) == dim(res_se$se)),
   all(is.finite(res_se$se))
@@ -341,7 +365,3 @@ OASIS applies the whitening transform consistently to data, trial design, and nu
 - `vignette("voxel-wise-hrf")` --- spatial HRF modeling
 - `vignette("sbhm")` --- library-constrained voxel-specific HRFs
 - `vignette("oasis_theory")` --- mathematical details
-
-```{r session-info, echo=FALSE}
-sessionInfo()
-```

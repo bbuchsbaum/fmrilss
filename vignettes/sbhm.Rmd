@@ -3,26 +3,36 @@ title: 'Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimatio
 output:
   rmarkdown::html_vignette:
     mathjax: default
+    toc: yes
+    toc_depth: 2.0
+    css: albers.css
+    includes:
+      in_header:
+      - |-
+        <script src="albers.js"></script>
+        <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+      - albers-header.html
+params:
+  family: red
+  preset: homage
+resource_files:
+- albers.css
+- albers.js
+- albers-header.html
+
 vignette: |
   %\VignetteIndexEntry{Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
-params:
-  family: red
-  preset: homage
-css: albers.css
-resource_files:
-- albers.css
-- albers.js
-includes:
-  in_header: |-
-    <script src="albers.js"></script>
-    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
-
 ---
 
 ```{r setup-opts, include = FALSE}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(family = params$family, preset = params$preset))
+if (requireNamespace("ggplot2", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(
+    albersdown::theme_albers(family = params$family, preset = params$preset)
+  )
+}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -46,13 +56,17 @@ n_time <- if (fast_mode) 160 else 200
 set.seed(123)
 ```
 
-```{r setup-theme, include = FALSE}
-if (requireNamespace("ggplot2", quietly = TRUE) &&
-    requireNamespace("albersdown", quietly = TRUE)) {
-  ggplot2::theme_set(
-    albersdown::theme_albers(family = params$family, preset = params$preset)
-  )
-}
+```{r albers-classes, echo=FALSE, results='asis'}
+cat(sprintf(
+  paste0(
+    '<script>document.addEventListener("DOMContentLoaded",function(){',
+    'document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-study","preset-structural","preset-adobe","preset-midnight");',
+    'document.body.classList.add("palette-%s","preset-%s");',
+    '});</script>'
+  ),
+  params$family,
+  params$preset
+))
 ```
 
 ## The Problem
@@ -185,7 +199,9 @@ safe_end <- max(sbhm$tgrid) - 30
 onsets <- seq(20, safe_end, length.out = n_trials)
 ```
 
-Assign each voxel a random library HRF and build per-trial regressors.
+Assign each voxel a random library HRF and build per-trial regressors. The
+fresh `set.seed()` here keeps the HRF assignment reproducible independently of
+earlier random draws.
 
 ```{r assign-hrfs, eval=eval_chunks}
 set.seed(456)
@@ -298,6 +314,9 @@ recovery_summary <- data.frame(
   MedianMargin = median(res_sbhm$margin)
 )
 recovery_summary
+```
+
+```{r recovery-summary-check, include = FALSE, eval = eval_chunks}
 stopifnot(all(is.finite(as.matrix(recovery_summary))))
 ```
 

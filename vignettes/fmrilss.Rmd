@@ -3,26 +3,36 @@ title: Getting started with fmrilss
 output:
   rmarkdown::html_vignette:
     mathjax: default
+    toc: yes
+    toc_depth: 2.0
+    css: albers.css
+    includes:
+      in_header:
+      - |-
+        <script src="albers.js"></script>
+        <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+      - albers-header.html
+params:
+  family: red
+  preset: homage
+resource_files:
+- albers.css
+- albers.js
+- albers-header.html
+
 vignette: |
   %\VignetteIndexEntry{Getting started with fmrilss}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
-params:
-  family: red
-  preset: homage
-css: albers.css
-resource_files:
-- albers.css
-- albers.js
-includes:
-  in_header: |-
-    <script src="albers.js"></script>
-    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
-
 ---
 
 ```{r setup-opts, include = FALSE}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(family = params$family, preset = params$preset))
+if (requireNamespace("ggplot2", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(
+    albersdown::theme_albers(family = params$family, preset = params$preset)
+  )
+}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -35,13 +45,17 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r setup-theme, include = FALSE}
-if (requireNamespace("ggplot2", quietly = TRUE) &&
-    requireNamespace("albersdown", quietly = TRUE)) {
-  ggplot2::theme_set(
-    albersdown::theme_albers(family = params$family, preset = params$preset)
-  )
-}
+```{r albers-classes, echo=FALSE, results='asis'}
+cat(sprintf(
+  paste0(
+    '<script>document.addEventListener("DOMContentLoaded",function(){',
+    'document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-study","preset-structural","preset-adobe","preset-midnight");',
+    'document.body.classList.add("palette-%s","preset-%s");',
+    '});</script>'
+  ),
+  params$family,
+  params$preset
+))
 ```
 
 ## Why fmrilss?
@@ -100,7 +114,7 @@ Y <- X %*% true_betas +
      matrix(rnorm(n_time * n_vox), n_time, n_vox)
 ```
 
-```{r simulate-check}
+```{r simulate-check, include = FALSE}
 stopifnot(
   all(dim(Y) == c(n_time, n_vox)),
   all(is.finite(Y))
@@ -120,6 +134,9 @@ Include `Z` and `Nuisance` for a more complete model:
 
 ```{r lss-full}
 beta_full <- lss(Y, X, Z = Z, Nuisance = Nuisance)
+```
+
+```{r lss-full-check, include = FALSE}
 stopifnot(
   all(dim(beta_full) == c(n_trials, n_vox)),
   all(is.finite(beta_full))
@@ -149,6 +166,9 @@ comparison_summary <- data.frame(
   )
 )
 comparison_summary
+```
+
+```{r compare-variance-check, include = FALSE}
 stopifnot(all(is.finite(as.matrix(comparison_summary[, -1]))))
 ```
 
@@ -184,7 +204,7 @@ See `?lss` for additional pooling strategies (`"voxel"`, `"run"`, `"parcel"`) an
 
 The default backend (`"r_optimized"`) is fast and readable. For large datasets, switch to the parallelized C++ engine:
 
-```{r cpp-backend, eval=require("Rcpp") && require("RcppArmadillo")}
+```{r cpp-backend, eval = requireNamespace("Rcpp", quietly = TRUE) && requireNamespace("RcppArmadillo", quietly = TRUE)}
 beta_cpp <- lss(Y, X, Z = Z, Nuisance = Nuisance, method = "cpp_optimized")
 all.equal(beta_full, beta_cpp, tolerance = 1e-8)
 ```
@@ -231,7 +251,3 @@ This is useful when sweeping over hyperparameters (e.g., ridge values) without r
 ## References
 
 Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012). Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses. *NeuroImage*, 59(3), 2636--2643.
-
-```{r session-info, echo=FALSE}
-sessionInfo()
-```

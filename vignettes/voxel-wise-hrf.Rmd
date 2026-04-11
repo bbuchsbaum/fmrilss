@@ -3,26 +3,36 @@ title: Voxel-wise HRF Modeling with fmrilss
 output:
   rmarkdown::html_vignette:
     mathjax: default
+    toc: yes
+    toc_depth: 2.0
+    css: albers.css
+    includes:
+      in_header:
+      - |-
+        <script src="albers.js"></script>
+        <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+      - albers-header.html
+params:
+  family: red
+  preset: homage
+resource_files:
+- albers.css
+- albers.js
+- albers-header.html
+
 vignette: |
   %\VignetteIndexEntry{Voxel-wise HRF Modeling with fmrilss}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
-params:
-  family: red
-  preset: homage
-css: albers.css
-resource_files:
-- albers.css
-- albers.js
-includes:
-  in_header: |-
-    <script src="albers.js"></script>
-    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
-
 ---
 
 ```{r setup-opts, include = FALSE}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(family = params$family, preset = params$preset))
+if (requireNamespace("ggplot2", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(
+    albersdown::theme_albers(family = params$family, preset = params$preset)
+  )
+}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -35,13 +45,17 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r setup-theme, include = FALSE}
-if (requireNamespace("ggplot2", quietly = TRUE) &&
-    requireNamespace("albersdown", quietly = TRUE)) {
-  ggplot2::theme_set(
-    albersdown::theme_albers(family = params$family, preset = params$preset)
-  )
-}
+```{r albers-classes, echo=FALSE, results='asis'}
+cat(sprintf(
+  paste0(
+    '<script>document.addEventListener("DOMContentLoaded",function(){',
+    'document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-study","preset-structural","preset-adobe","preset-midnight");',
+    'document.body.classList.add("palette-%s","preset-%s");',
+    '});</script>'
+  ),
+  params$family,
+  params$preset
+))
 ```
 
 ## Why HRF Variability Matters
@@ -67,7 +81,9 @@ set.seed(123)
 You need a sampling frame, jittered onsets, and a small set of voxels whose HRFs differ.
 
 ```{r sim-params}
-n_time <- 200; n_vox <- 5; TR <- 1.0
+n_time <- 200
+n_vox  <- 5
+TR     <- 1.0
 sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
 grid   <- fmrihrf::samples(sframe, global = TRUE)
 ```
@@ -235,6 +251,9 @@ comparison_summary <- data.frame(
   RMSE = round(rmses, 3)
 )
 comparison_summary
+```
+
+```{r compare-metrics-check, include = FALSE}
 stopifnot(all(is.finite(cors)), all(is.finite(rmses)))
 ```
 
@@ -274,7 +293,3 @@ for (i in seq_along(cors)) {
 - `vignette("oasis_method")` -- OASIS solver with ridge, multi-basis HRFs, and standard errors
 - `vignette("sbhm")` -- Shared-Basis HRF Matching for efficient voxel-specific HRFs
 - `?estimate_voxel_hrf` and `?lss_with_hrf` -- production-ready voxel-wise HRF workflow
-
-```{r session-info, echo=FALSE}
-sessionInfo()
-```
