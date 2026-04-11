@@ -8,8 +8,12 @@ concurrency:
 on:
   # Manually trigger the Action under Actions/pkgcheck
   workflow_dispatch:
-  # Run on every push to main
-  push:
+  # Run after R-CMD-check completes so pkgcheck's CI check sees final statuses.
+  workflow_run:
+    workflows:
+      - R-CMD-check
+    types:
+      - completed
     branches:
       - main
 
@@ -20,3 +24,5 @@ jobs:
       issues: write
     steps:
       - uses: ropensci-review-tools/pkgcheck-action@main
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}

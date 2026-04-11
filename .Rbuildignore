@@ -27,3 +27,5 @@
 ^figure$
 ^\.albersdown\.bak($|/)
 ^fmrilss_.*\.tar\.gz$
+^[^/]+\.Rcheck($|/)
+^\.pkgcheck($|/)

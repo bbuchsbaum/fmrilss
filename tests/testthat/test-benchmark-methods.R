@@ -1,5 +1,15 @@
 if (!exists("benchmark_lss_methods", mode = "function")) {
-  source(testthat::test_path("..", "..", "bench", "benchmark_harness.R"))
+  harness_candidates <- c(
+    testthat::test_path("..", "..", "bench", "benchmark_harness.R"),
+    system.file("bench", "benchmark_harness.R", package = "fmrilss")
+  )
+  harness_path <- harness_candidates[file.exists(harness_candidates)][1]
+
+  if (is.na(harness_path) || !nzchar(harness_path)) {
+    skip("benchmark harness is not available in this installation")
+  }
+
+  source(harness_path, local = environment())
 }
 
 test_that("benchmark_lss_methods returns benchmark object", {
