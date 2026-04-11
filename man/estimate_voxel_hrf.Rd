@@ -17,9 +17,9 @@ estimate_voxel_hrf(Y, events, basis, nuisance_regs = NULL)
 }
 \value{
 A \link{VoxelHRF} object containing at least:
-  \item{coefficients}{Matrix of HRF basis coefficients.}
-  \item{basis}{The HRF basis object used.}
-  \item{conditions}{Character vector of modeled conditions.}
+\item{coefficients}{Matrix of HRF basis coefficients.}
+\item{basis}{The HRF basis object used.}
+\item{conditions}{Character vector of modeled conditions.}
 }
 \description{
 Fits a GLM to estimate HRF basis coefficients for every voxel.

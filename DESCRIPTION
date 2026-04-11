@@ -43,6 +43,7 @@ Remotes:
     bbuchsbaum/fmridesign,
     bbuchsbaum/albersdown
 VignetteBuilder: knitr
+Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Config/testthat/edition: 3
 URL: https://bbuchsbaum.github.io/fmrilss/, https://github.com/bbuchsbaum/fmrilss

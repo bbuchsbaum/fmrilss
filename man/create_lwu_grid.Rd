@@ -32,3 +32,7 @@ List of HRF models and their parameters
 \description{
 Generates a grid of LWU HRF models with varying parameters
 }
+\examples{
+grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
+nrow(grid$parameters)
+}

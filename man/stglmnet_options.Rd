@@ -21,16 +21,16 @@ stglmnet_options(
 )
 }
 \arguments{
-\item{mode}{`"cv"` (default) selects lambda by internal cross-validation,
-while `"fixed"` uses the supplied lambda sequence or the smallest fitted
+\item{mode}{\code{"cv"} (default) selects lambda by internal cross-validation,
+while \code{"fixed"} uses the supplied lambda sequence or the smallest fitted
 lambda when no scalar is provided.}
 
-\item{alpha}{Elastic-net mixing parameter passed to `glmnet`.}
+\item{alpha}{Elastic-net mixing parameter passed to \code{glmnet}.}
 
 \item{lambda}{Optional lambda sequence (or scalar in fixed mode).}
 
-\item{overlap_strategy}{Trial-overlap penalty mapping. One of `"none"`,
-`"multiplicative"`, `"additive"`, `"hybrid"`, or `"threshold"`.}
+\item{overlap_strategy}{Trial-overlap penalty mapping. One of \code{"none"},
+\code{"multiplicative"}, \code{"additive"}, \code{"hybrid"}, or \code{"threshold"}.}
 
 \item{pool_to_mean}{Logical; reparameterize trial effects into a pooled mean
 plus orthogonal contrasts.}
@@ -39,26 +39,29 @@ plus orthogonal contrasts.}
 
 \item{pool_mean_penalty}{Penalty applied to the pooled mean coefficient.}
 
-\item{whiten}{One of `"inherit"` (default), `"auto"`, `"never"`, or
-`"always"`. `"inherit"` uses the top-level `prewhiten=` argument only.}
+\item{whiten}{One of \code{"inherit"} (default), \code{"auto"}, \code{"never"}, or
+\code{"always"}. \code{"inherit"} uses the top-level \verb{prewhiten=} argument only.}
 
-\item{cv_folds}{Number of folds used when `mode = "cv"`.}
+\item{cv_folds}{Number of folds used when \code{mode = "cv"}.}
 
 \item{cv_type.measure}{Cross-validation objective.}
 
-\item{cv_select}{Lambda selection rule in CV mode. `"optimal"` uses the
-best-scoring lambda, `"1se"` applies the one-standard-error rule.}
+\item{cv_select}{Lambda selection rule in CV mode. \code{"optimal"} uses the
+best-scoring lambda, \code{"1se"} applies the one-standard-error rule.}
 
-\item{return_fit}{Logical; when `TRUE`, `lss(method="stglmnet")` returns a
-list containing `beta`, fit metadata, and the selected lambda.}
+\item{return_fit}{Logical; when \code{TRUE}, \code{lss(method="stglmnet")} returns a
+list containing \code{beta}, fit metadata, and the selected lambda.}
 
 \item{...}{Additional backend options.}
 }
 \value{
-A list with class `"fmrilss_stglmnet_options"`.
+A list with class \code{"fmrilss_stglmnet_options"}.
 }
 \description{
-Convenience constructor for the `stglmnet=` list accepted by
-`lss(method = "stglmnet")`.
-Unknown fields are allowed via `...` for forward compatibility.
+Convenience constructor for the \verb{stglmnet=} list accepted by
+\code{lss(method = "stglmnet")}.
+Unknown fields are allowed via \code{...} for forward compatibility.
+}
+\examples{
+stglmnet_options(mode = "fixed", lambda = 0.05, alpha = 0.5)
 }

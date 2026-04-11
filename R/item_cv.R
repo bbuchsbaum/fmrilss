@@ -25,6 +25,22 @@
 #' @return Object of class `item_cv_result` with per-fold metrics, aggregate
 #'   metric summary, and trial-level predictions.
 #'
+#' @examples
+#' Gamma <- matrix(
+#'   c(1, 0,
+#'     0.9, 0.1,
+#'     0.1, 0.9,
+#'     0, 1),
+#'   ncol = 2,
+#'   byrow = TRUE
+#' )
+#' item_cv(
+#'   Gamma = Gamma,
+#'   T_target = factor(c("A", "A", "B", "B")),
+#'   U = diag(4),
+#'   run_id = c(1, 1, 2, 2)
+#' )
+#'
 #' @export
 item_cv <- function(Gamma,
                     T_target = NULL,

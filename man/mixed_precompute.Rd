@@ -20,3 +20,9 @@ Workspace object for use with mixed_solve_optimized
 Performs expensive matrix computations that don't depend on the response
 vector, allowing for efficient reuse across multiple voxels.
 }
+\examples{
+X <- matrix(1, 6, 1)
+Z <- diag(6)
+ws <- mixed_precompute(X, Z)
+names(ws)
+}

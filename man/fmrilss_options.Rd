@@ -3,6 +3,15 @@
 \name{fmrilss_options}
 \alias{fmrilss_options}
 \title{Option constructors for nested interfaces}
+\value{
+No value itself. This topic groups the documented constructors
+\code{stglmnet_options()}, \code{oasis_options()}, and \code{prewhiten_options()}.
+}
 \description{
-These helpers create validated option lists for `lss()` and friends.
+These helpers create validated option lists for \code{lss()} and friends.
+}
+\examples{
+stglmnet_options(mode = "fixed", lambda = 0.1)
+oasis_options(ridge_x = 0.1, ridge_b = 0.1)
+prewhiten_options(method = "ar", p = 1)
 }

@@ -25,32 +25,32 @@ item_from_lsa(
 )
 }
 \arguments{
-\item{Y}{Numeric data matrix (`n_time x n_features`).}
+\item{Y}{Numeric data matrix (\verb{n_time x n_features}).}
 
-\item{X_t}{Numeric trial-wise design matrix (`n_time x n_trials`).}
+\item{X_t}{Numeric trial-wise design matrix (\verb{n_time x n_trials}).}
 
-\item{T_target}{Supervised targets with `n_trials` rows.}
+\item{T_target}{Supervised targets with \code{n_trials} rows.}
 
-\item{run_id}{Trial-level run/session identifier (`n_trials`).}
+\item{run_id}{Trial-level run/session identifier (\code{n_trials}).}
 
-\item{Z}{Optional nuisance matrix passed to `lsa()`.}
+\item{Z}{Optional nuisance matrix passed to \code{lsa()}.}
 
-\item{Nuisance}{Alias for `Z` in `lsa()`.}
+\item{Nuisance}{Alias for \code{Z} in \code{lsa()}.}
 
-\item{V}{Optional covariance/precision for `item_compute_u()`.}
+\item{V}{Optional covariance/precision for \code{item_compute_u()}.}
 
-\item{v_type}{Whether `V` is covariance or precision.}
+\item{v_type}{Whether \code{V} is covariance or precision.}
 
-\item{ridge}{Ridge passed to `item_compute_u()`.}
+\item{ridge}{Ridge passed to \code{item_compute_u()}.}
 
-\item{lsa_method}{LS-A backend (`"r"` or `"cpp"`).}
+\item{lsa_method}{LS-A backend (\code{"r"} or \code{"cpp"}).}
 
-\item{solver}{Solver preference for `item_compute_u()`.}
+\item{solver}{Solver preference for \code{item_compute_u()}.}
 
-\item{u_output}{Return full `U` matrix or `U_by_run` blocks.}
+\item{u_output}{Return full \code{U} matrix or \code{U_by_run} blocks.}
 
-\item{C_transform}{Optional transform matrix used to map `X_t`
-to the working design matrix `X`.}
+\item{C_transform}{Optional transform matrix used to map \code{X_t}
+to the working design matrix \code{X}.}
 
 \item{trial_id}{Optional trial id vector.}
 
@@ -61,10 +61,31 @@ to the working design matrix `X`.}
 \item{validate}{Logical; enforce strict checks before returning.}
 }
 \value{
-`item_bundle` with fields `Gamma`, `X_t`, `T_target`, `U`/`U_by_run`,
-  `run_id`, `meta`, and `diagnostics`.
+\code{item_bundle} with fields \code{Gamma}, \code{X_t}, \code{T_target}, \code{U}/\code{U_by_run},
+\code{run_id}, \code{meta}, and \code{diagnostics}.
 }
 \description{
-Convenience wrapper that runs `lsa()` to estimate trial-wise amplitudes,
-computes `U`, and returns an `item_bundle` ready for crossvalidation.
+Convenience wrapper that runs \code{lsa()} to estimate trial-wise amplitudes,
+computes \code{U}, and returns an \code{item_bundle} ready for crossvalidation.
+}
+\examples{
+set.seed(1)
+X_t <- diag(4)
+Y <- X_t \%*\% matrix(
+  c(1, 0,
+    0.8, 0.2,
+    0.2, 0.8,
+    0, 1),
+  ncol = 2,
+  byrow = TRUE
+) + matrix(rnorm(8, sd = 0.01), 4, 2)
+bundle <- item_from_lsa(
+  Y = Y,
+  X_t = X_t,
+  T_target = factor(c("A", "B", "A", "B")),
+  run_id = c(1, 1, 2, 2),
+  lsa_method = "r"
+)
+names(bundle)
+
 }

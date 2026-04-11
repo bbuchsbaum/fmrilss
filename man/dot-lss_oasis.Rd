@@ -23,29 +23,33 @@
 \item{Nuisance}{(T x P) confounds (intercept, motion, drift, aCompCor, ...)}
 
 \item{oasis}{list of options:
-- design_spec: list describing events/HRF to build X via fmrihrf
-- K: explicit basis dimension (recommended when X is supplied directly)
-- infer_K_from_X: logical; if TRUE and K is missing, infer basis
-  dimension heuristically from X (default FALSE for safety)
-- ridge_mode: "fractional" (default) or "absolute"
-- ridge_x, ridge_b: nonnegative ridge on the [a_j, b_j] Gram
-  (default 0.05 in fractional mode)
-- block_cols: voxel block size (default 4096)
-- return_se: logical (default FALSE)
-- return_diag: logical (default FALSE)}
+\itemize{
+\item design_spec: list describing events/HRF to build X via fmrihrf
+\item K: explicit basis dimension (recommended when X is supplied directly)
+\item infer_K_from_X: logical; if TRUE and K is missing, infer basis
+dimension heuristically from X (default FALSE for safety)
+\item ridge_mode: "fractional" (default) or "absolute"
+\item ridge_x, ridge_b: nonnegative ridge on the \code{a_j} / \code{b_j} Gram
+(default 0.05 in fractional mode)
+\item block_cols: voxel block size (default 4096)
+\item return_se: logical (default FALSE)
+\item return_diag: logical (default FALSE)
+}}
 
 \item{prewhiten}{list of prewhitening options using fmriAR (see \code{?lss}
 and \code{\link{prewhiten_options}} for details).  The legacy
 \code{oasis$whiten} field is ignored; use this parameter instead.}
 }
 \value{
-by default: (N_trials x V) matrix of betas; if `return_se` or `return_diag`, a list
+by default: (N_trials x V) matrix of betas; if \code{return_se} or \code{return_diag}, a list
 }
 \description{
-Add `method="oasis"` to fmrilss::lss(). This path:
-  - (optionally) builds trial-wise design X via fmrihrf
-  - residualizes Y (and X downstream) against confounds + Z + other-condition aggregates
-  - computes all trial betas in one batched pass via the closed-form LSS (exact; or ridge-LSS)
-  - optionally returns per-trial SEs and design diagnostics
+Add \code{method="oasis"} to fmrilss::lss(). This path:
+\itemize{
+\item (optionally) builds trial-wise design X via fmrihrf
+\item residualizes Y (and X downstream) against confounds + Z + other-condition aggregates
+\item computes all trial betas in one batched pass via the closed-form LSS (exact; or ridge-LSS)
+\item optionally returns per-trial SEs and design diagnostics
+}
 }
 \keyword{internal}

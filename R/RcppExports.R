@@ -56,23 +56,30 @@ mixed_solve_internal <- function(y_in, Z_in = NULL, K_in = NULL, X_in = NULL, me
 #' across multiple voxels to avoid repeated expensive computations.
 #' 
 #' @name MixedWorkspace
+#' @keywords internal
+#' @noRd
 NULL
 
 #' Fast analytical REML estimation for single variance component
 #' 
-#' For a single variance component model, the REML estimate of λ = σe²/σu²
+#' For a single variance component model, the REML estimate of
+#' lambda = sigma_e^2 / sigma_u^2
 #' has a closed-form solution that can be computed efficiently.
 #' 
 #' @param omega Transformed response vector Q'y
 #' @param theta Transformed eigenvalues 
 #' @param tol Convergence tolerance for Newton iterations
 #' @param max_iter Maximum Newton iterations
-#' @return Estimated variance ratio λ
+#' @return Estimated variance ratio lambda
 #' @name fast_reml_lambda
+#' @keywords internal
+#' @noRd
 NULL
 
 #' Convert R list back to MixedWorkspace
 #' @name list_to_workspace
+#' @keywords internal
+#' @noRd
 NULL
 
 #' Precompute workspace for mixed model optimization
@@ -84,6 +91,8 @@ NULL
 #' @param Z Random effects design matrix (n × q) 
 #' @param K Kinship/covariance matrix for random effects (q × q)
 #' @return MixedWorkspace object containing precomputed matrices
+#' @keywords internal
+#' @noRd
 mixed_precompute_workspace <- function(X, Z, K) {
     .Call(`_fmrilss_mixed_precompute_workspace`, X, Z, K)
 }
@@ -94,6 +103,8 @@ mixed_precompute_workspace <- function(X, Z, K) {
 #' @param ws_list Precomputed workspace (as R list)
 #' @param compute_se Whether to compute standard errors
 #' @return List with beta, u, Vu, Ve, and optionally standard errors
+#' @keywords internal
+#' @noRd
 mixed_single_voxel_cpp <- function(y, ws_list, compute_se = FALSE) {
     .Call(`_fmrilss_mixed_single_voxel_cpp`, y, ws_list, compute_se)
 }
@@ -108,6 +119,8 @@ mixed_single_voxel_cpp <- function(y, ws_list, compute_se = FALSE) {
 #' @param compute_se Whether to compute standard errors
 #' @param n_threads Number of OpenMP threads (0 = auto)
 #' @return List with matrices of estimates across voxels
+#' @keywords internal
+#' @noRd
 mixed_multi_voxel_cpp <- function(Y, ws_list, compute_se = FALSE, n_threads = 0L) {
     .Call(`_fmrilss_mixed_multi_voxel_cpp`, Y, ws_list, compute_se, n_threads)
 }

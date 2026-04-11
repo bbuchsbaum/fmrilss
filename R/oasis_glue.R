@@ -19,7 +19,7 @@
 #'    - infer_K_from_X: logical; if TRUE and K is missing, infer basis
 #'      dimension heuristically from X (default FALSE for safety)
 #'    - ridge_mode: "fractional" (default) or "absolute"
-#'    - ridge_x, ridge_b: nonnegative ridge on the [a_j, b_j] Gram
+#'    - ridge_x, ridge_b: nonnegative ridge on the `a_j` / `b_j` Gram
 #'      (default 0.05 in fractional mode)
 #'    - block_cols: voxel block size (default 4096)
 #'    - return_se: logical (default FALSE)

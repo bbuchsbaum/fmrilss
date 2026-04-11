@@ -10,6 +10,19 @@
 #' @param use_cpp Logical. If TRUE (default), uses the C++ implementation. If FALSE,
 #'   uses the new optimized R implementation.
 #' @return A numeric matrix of LSS beta estimates.
+#' @examples
+#' set.seed(1)
+#' Y <- matrix(rnorm(16), 8, 2)
+#' X_trials <- matrix(0, 8, 2)
+#' X_trials[2:3, 1] <- 1
+#' X_trials[5:6, 2] <- 1
+#' bdes <- list(
+#'   dmat_base = matrix(1, 8, 1),
+#'   dmat_ran = X_trials,
+#'   dmat_fixed = NULL,
+#'   fixed_ind = NULL
+#' )
+#' lss_optimized(Y, bdes, use_cpp = FALSE)
 #' @export
 lss_optimized <- function(Y = NULL, bdes, dset = NULL, use_cpp = TRUE) {
   # This function acts as a wrapper, calling the optimized engine.

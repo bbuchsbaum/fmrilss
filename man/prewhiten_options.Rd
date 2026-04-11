@@ -17,27 +17,30 @@ prewhiten_options(
 )
 }
 \arguments{
-\item{method}{`"none"`, `"ar"`, or `"arma"`.}
+\item{method}{\code{"none"}, \code{"ar"}, or \code{"arma"}.}
 
-\item{p}{AR order or `"auto"`.}
+\item{p}{AR order or \code{"auto"}.}
 
 \item{q}{MA order for ARMA.}
 
-\item{p_max}{Maximum AR order when `p="auto"`.}
+\item{p_max}{Maximum AR order when \code{p="auto"}.}
 
-\item{pooling}{`"global"`, `"voxel"`, `"run"`, or `"parcel"`.}
+\item{pooling}{\code{"global"}, \code{"voxel"}, \code{"run"}, or \code{"parcel"}.}
 
 \item{runs}{Optional run identifiers.}
 
 \item{parcels}{Optional parcel ids.}
 
-\item{exact_first}{`"ar1"` or `"none"`.}
+\item{exact_first}{\code{"ar1"} or \code{"none"}.}
 
 \item{compute_residuals}{Logical.}
 }
 \value{
-A list with class `"fmrilss_prewhiten_options"`.
+A list with class \code{"fmrilss_prewhiten_options"}.
 }
 \description{
-Convenience constructor for the `prewhiten=` list accepted by `lss()`.
+Convenience constructor for the \verb{prewhiten=} list accepted by \code{lss()}.
+}
+\examples{
+prewhiten_options(method = "ar", p = 1, pooling = "run")
 }

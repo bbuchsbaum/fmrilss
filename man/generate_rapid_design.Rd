@@ -34,3 +34,6 @@ Generate Rapid Event-Related Design
 \details{
 Creates a rapid event-related design with specified ISI range
 }
+\examples{
+generate_rapid_design(n_events = 5, total_time = 40, seed = 1)
+}

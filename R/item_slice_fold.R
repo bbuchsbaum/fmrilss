@@ -11,6 +11,17 @@
 #' `Gamma_train`, `Gamma_test`, `T_train`, `T_test`,
 #' `U_train`, `U_test`, `train_idx`, `test_idx`, `train_runs`, `test_run`.
 #'
+#' @examples
+#' bundle <- item_build_design(
+#'   X_t = diag(4),
+#'   T_target = factor(c("A", "B", "A", "B")),
+#'   run_id = c(1, 1, 2, 2)
+#' )
+#' bundle$Gamma <- matrix(c(1, 0, 0.8, 0.2, 0.2, 0.8, 0, 1), 4, 2, byrow = TRUE)
+#' bundle$U <- diag(4)
+#' fold <- item_slice_fold(bundle, test_run = 2)
+#' fold$test_idx
+#'
 #' @export
 item_slice_fold <- function(bundle, test_run, check_hash = FALSE) {
   .item_validate_bundle(

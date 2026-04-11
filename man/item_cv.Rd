@@ -20,41 +20,58 @@ item_cv(
 )
 }
 \arguments{
-\item{Gamma}{Trial-wise beta matrix (`n_trials x n_features`) or an
-`item_bundle` object.}
+\item{Gamma}{Trial-wise beta matrix (\verb{n_trials x n_features}) or an
+\code{item_bundle} object.}
 
-\item{T_target}{Supervised targets (`n_trials x p`) or target vector.
-Ignored when `Gamma` is an `item_bundle`.}
+\item{T_target}{Supervised targets (\verb{n_trials x p}) or target vector.
+Ignored when \code{Gamma} is an \code{item_bundle}.}
 
-\item{U}{Trial covariance as full matrix (`n_trials x n_trials`) or run-block
-list. Ignored when `Gamma` is an `item_bundle`.}
+\item{U}{Trial covariance as full matrix (\verb{n_trials x n_trials}) or run-block
+list. Ignored when \code{Gamma} is an \code{item_bundle}.}
 
-\item{run_id}{Run/session id vector (`n_trials`). Ignored when `Gamma` is an
-`item_bundle`.}
+\item{run_id}{Run/session id vector (\code{n_trials}). Ignored when \code{Gamma} is an
+\code{item_bundle}.}
 
-\item{mode}{Decoding mode: `"classification"` or `"regression"`.}
+\item{mode}{Decoding mode: \code{"classification"} or \code{"regression"}.}
 
 \item{metric}{Optional metric name.
-Classification: `"accuracy"` (default), `"balanced_accuracy"`.
-Regression: `"correlation"` (default), `"rmse"`.}
+Classification: \code{"accuracy"} (default), \code{"balanced_accuracy"}.
+Regression: \code{"correlation"} (default), \code{"rmse"}.}
 
-\item{ridge}{Ridge passed to `item_fit()`.}
+\item{ridge}{Ridge passed to \code{item_fit()}.}
 
-\item{method}{Solver preference for `item_fit()`.}
+\item{method}{Solver preference for \code{item_fit()}.}
 
 \item{class_levels}{Optional fixed class order for classification.}
 
-\item{trial_id}{Optional trial id vector (used if `Gamma` is not a bundle).}
+\item{trial_id}{Optional trial id vector (used if \code{Gamma} is not a bundle).}
 
-\item{trial_hash}{Optional trial hash (used if `Gamma` is not a bundle).}
+\item{trial_hash}{Optional trial hash (used if \code{Gamma} is not a bundle).}
 
 \item{check_hash}{Logical; validate stored trial hash before CV.}
 }
 \value{
-Object of class `item_cv_result` with per-fold metrics, aggregate
-  metric summary, and trial-level predictions.
+Object of class \code{item_cv_result} with per-fold metrics, aggregate
+metric summary, and trial-level predictions.
 }
 \description{
 Run deterministic leave-one-run-out (LOSO) crossvalidation for classification
 or regression using ITEM decoder weights.
+}
+\examples{
+Gamma <- matrix(
+  c(1, 0,
+    0.9, 0.1,
+    0.1, 0.9,
+    0, 1),
+  ncol = 2,
+  byrow = TRUE
+)
+item_cv(
+  Gamma = Gamma,
+  T_target = factor(c("A", "A", "B", "B")),
+  U = diag(4),
+  run_id = c(1, 1, 2, 2)
+)
+
 }

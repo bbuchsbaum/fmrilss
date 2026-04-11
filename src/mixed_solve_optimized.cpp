@@ -17,6 +17,8 @@ using namespace arma;
 //' across multiple voxels to avoid repeated expensive computations.
 //' 
 //' @name MixedWorkspace
+//' @keywords internal
+//' @noRd
 struct MixedWorkspace {
   mat Q;           // n × (n-p) matrix from QR of nuisance regressors
   mat U;           // Eigenvectors from spectral decomposition  
@@ -36,15 +38,18 @@ struct MixedWorkspace {
 
 //' Fast analytical REML estimation for single variance component
 //' 
-//' For a single variance component model, the REML estimate of λ = σe²/σu²
+//' For a single variance component model, the REML estimate of
+//' lambda = sigma_e^2 / sigma_u^2
 //' has a closed-form solution that can be computed efficiently.
 //' 
 //' @param omega Transformed response vector Q'y
 //' @param theta Transformed eigenvalues 
 //' @param tol Convergence tolerance for Newton iterations
 //' @param max_iter Maximum Newton iterations
-//' @return Estimated variance ratio λ
+//' @return Estimated variance ratio lambda
 //' @name fast_reml_lambda
+//' @keywords internal
+//' @noRd
 double fast_reml_lambda(const vec& omega, const vec& theta, 
                        double tol = 1e-8, int max_iter = 10) {
   
@@ -100,6 +105,8 @@ double fast_reml_lambda(const vec& omega, const vec& theta,
 //' @param Z Random effects design matrix (n × q) 
 //' @param K Kinship/covariance matrix for random effects (q × q)
 //' @return MixedWorkspace object containing precomputed matrices
+//' @keywords internal
+//' @noRd
 // [[Rcpp::export]]
 List mixed_precompute_workspace(const arma::mat& X, 
                                const arma::mat& Z,
@@ -200,6 +207,8 @@ List mixed_precompute_workspace(const arma::mat& X,
 
 //' Convert R list back to MixedWorkspace
 //' @name list_to_workspace
+//' @keywords internal
+//' @noRd
 MixedWorkspace list_to_workspace(const List& ws_list) {
   MixedWorkspace ws;
   ws.Q = as<mat>(ws_list["Q"]);
@@ -222,6 +231,8 @@ MixedWorkspace list_to_workspace(const List& ws_list) {
 //' @param ws_list Precomputed workspace (as R list)
 //' @param compute_se Whether to compute standard errors
 //' @return List with beta, u, Vu, Ve, and optionally standard errors
+//' @keywords internal
+//' @noRd
 // [[Rcpp::export]]
 List mixed_single_voxel_cpp(const arma::vec& y,
                            const List& ws_list,
@@ -315,6 +326,8 @@ List mixed_single_voxel_cpp(const arma::vec& y,
 //' @param compute_se Whether to compute standard errors
 //' @param n_threads Number of OpenMP threads (0 = auto)
 //' @return List with matrices of estimates across voxels
+//' @keywords internal
+//' @noRd
 // [[Rcpp::export]]
 List mixed_multi_voxel_cpp(const arma::mat& Y,
                           const List& ws_list,

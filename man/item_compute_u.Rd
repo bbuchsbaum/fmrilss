@@ -16,34 +16,42 @@ item_compute_u(
 )
 }
 \arguments{
-\item{X_t}{Numeric trial-wise design matrix (`n_time x n_trials`).}
+\item{X_t}{Numeric trial-wise design matrix (\verb{n_time x n_trials}).}
 
 \item{V}{Optional temporal covariance/precision object.
 Accepted forms:
-- `NULL` (identity),
-- dense/sparse matrix (`n_time x n_time`),
-- run-block list of square matrices whose block sizes sum to `n_time`.}
+\itemize{
+\item \code{NULL} (identity),
+\item dense/sparse matrix (\verb{n_time x n_time}),
+\item run-block list of square matrices whose block sizes sum to \code{n_time}.
+}}
 
-\item{v_type}{Whether `V` is covariance (`"cov"`) or precision (`"precision"`).}
+\item{v_type}{Whether \code{V} is covariance (\code{"cov"}) or precision (\code{"precision"}).}
 
 \item{ridge}{Non-negative ridge term added to the trial-wise system matrix
 before inversion.}
 
-\item{method}{Preferred solver path (`"chol"`, `"svd"`, or `"pinv"`).}
+\item{method}{Preferred solver path (\code{"chol"}, \code{"svd"}, or \code{"pinv"}).}
 
-\item{run_id}{Optional trial-level run ids (length `n_trials`). Required only
-when `output = "by_run"`.}
+\item{run_id}{Optional trial-level run ids (length \code{n_trials}). Required only
+when \code{output = "by_run"}.}
 
-\item{output}{Return full `U` (`"matrix"`) or split run blocks (`"by_run"`).}
+\item{output}{Return full \code{U} (\code{"matrix"}) or split run blocks (\code{"by_run"}).}
 
 \item{tol}{Numerical tolerance for rank/solver fallbacks.}
 }
 \value{
-Numeric matrix `U` by default, or a named list `U_by_run` when
-  `output = "by_run"`. Returned object includes `item_diagnostics` attribute
-  with rank/condition/solver details.
+Numeric matrix \code{U} by default, or a named list \code{U_by_run} when
+\code{output = "by_run"}. Returned object includes \code{item_diagnostics} attribute
+with rank/condition/solver details.
 }
 \description{
 Compute the trial covariance term as the inverse of a ridge-stabilized
 normal-equation system, using stable solve paths with fallbacks.
+}
+\examples{
+X_t <- diag(4)
+item_compute_u(X_t)
+item_compute_u(X_t, run_id = c(1, 1, 2, 2), output = "by_run")
+
 }

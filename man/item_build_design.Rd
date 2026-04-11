@@ -17,37 +17,46 @@ item_build_design(
 )
 }
 \arguments{
-\item{X_t}{Numeric trial-wise design matrix with shape `n_time x n_trials`.}
+\item{X_t}{Numeric trial-wise design matrix with shape \verb{n_time x n_trials}.}
 
-\item{T_target}{Optional supervised targets with `n_trials` rows. Accepts:
+\item{T_target}{Optional supervised targets with \code{n_trials} rows. Accepts:
 numeric matrix/data.frame, numeric vector (regression), or
 factor/character/logical vector (classification labels).}
 
-\item{run_id}{Optional run/session identifier of length `n_trials`.
-If `NULL`, all trials are assigned to a single run.}
+\item{run_id}{Optional run/session identifier of length \code{n_trials}.
+If \code{NULL}, all trials are assigned to a single run.}
 
-\item{C_transform}{Optional transformation matrix used to map `X_t`
-to the working design matrix `X`. Must have `n_trials` rows when provided.}
+\item{C_transform}{Optional transformation matrix used to map \code{X_t}
+to the working design matrix \code{X}. Must have \code{n_trials} rows when provided.}
 
-\item{trial_id}{Optional trial identifier vector of length `n_trials`.
-Defaults to `colnames(X_t)` when available, else `Trial_1..Trial_n`.}
+\item{trial_id}{Optional trial identifier vector of length \code{n_trials}.
+Defaults to \code{colnames(X_t)} when available, else \code{Trial_1..Trial_n}.}
 
 \item{trial_hash}{Optional hash used by alignment guards.
-If supplied, `item_cv(..., check_hash = TRUE)` validates it.}
+If supplied, \code{item_cv(..., check_hash = TRUE)} validates it.}
 
 \item{meta}{Optional metadata list.}
 
 \item{diagnostics}{Optional diagnostics list to attach to the bundle.}
 
-\item{validate}{Logical; when `TRUE` run strict structure checks.}
+\item{validate}{Logical; when \code{TRUE} run strict structure checks.}
 }
 \value{
-An object of class `item_bundle` with fields:
-  `Gamma`, `X_t`, `C_transform`, `T_target`, `U`, `U_by_run`, `run_id`,
-  `trial_id`, `trial_hash`, `trial_info`, `meta`, and `diagnostics`.
+An object of class \code{item_bundle} with fields:
+\code{Gamma}, \code{X_t}, \code{C_transform}, \code{T_target}, \code{U}, \code{U_by_run}, \code{run_id},
+\code{trial_id}, \code{trial_hash}, \code{trial_info}, \code{meta}, and \code{diagnostics}.
 }
 \description{
 Build and validate trial-wise design objects used by the ITEM helper layer.
-The returned object has class `item_bundle` and carries trial-level metadata
-needed by `item_cv()` and `item_slice_fold()`.
+The returned object has class \code{item_bundle} and carries trial-level metadata
+needed by \code{item_cv()} and \code{item_slice_fold()}.
+}
+\examples{
+bundle <- item_build_design(
+  X_t = diag(4),
+  T_target = factor(c("A", "B", "A", "B")),
+  run_id = c(1, 1, 2, 2)
+)
+bundle$trial_info
+
 }

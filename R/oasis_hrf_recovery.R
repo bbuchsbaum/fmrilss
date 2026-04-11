@@ -13,6 +13,8 @@
 #' @param max_isi Maximum inter-stimulus interval in seconds
 #' @param seed Random seed for reproducibility
 #' @return Numeric vector of event onset times
+#' @examples
+#' generate_rapid_design(n_events = 5, total_time = 40, seed = 1)
 #' @importFrom stats runif
 #' @export
 generate_rapid_design <- function(n_events = 25, 
@@ -49,6 +51,12 @@ generate_rapid_design <- function(n_events = 25,
 #' @param noise_sd Standard deviation of noise
 #' @param seed Random seed
 #' @return List with Y (data matrix), true_hrf, true_betas, and design info
+#' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
+#' \dontrun{
+#' onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
+#' sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
+#' dim(sim$Y)
+#' }
 #' @importFrom stats rnorm
 #' @export
 generate_lwu_data <- function(onsets,
@@ -146,6 +154,9 @@ generate_lwu_data <- function(onsets,
 #' @param n_sigma Number of sigma values in grid
 #' @param n_rho Number of rho values in grid
 #' @return List of HRF models and their parameters
+#' @examples
+#' grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
+#' nrow(grid$parameters)
 #' @export
 create_lwu_grid <- function(tau_range = c(4, 8),
                            sigma_range = c(1.5, 3.5),
@@ -199,6 +210,14 @@ create_lwu_grid <- function(tau_range = c(4, 8),
 #' @param ridge_x Ridge parameter for design matrix
 #' @param ridge_b Ridge parameter for aggregator
 #' @return List with best HRF index, parameters, and beta estimates
+#' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
+#' \dontrun{
+#' onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
+#' sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
+#' grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
+#' fit <- fit_oasis_grid(sim$Y, sim$onsets, sim$sframe, grid)
+#' fit$best_params
+#' }
 #' @export
 fit_oasis_grid <- function(Y, onsets, sframe, hrf_grid,
                            ridge_x = 0.01, ridge_b = 0.01) {
@@ -339,6 +358,14 @@ fit_oasis_grid <- function(Y, onsets, sframe, hrf_grid,
 #' @param data Synthetic data from generate_lwu_data
 #' @param hrf_grid Optional pre-computed HRF grid for OASIS
 #' @return List with results from all methods
+#' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
+#' \dontrun{
+#' onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
+#' sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
+#' grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
+#' res <- compare_hrf_recovery(sim, hrf_grid = grid)
+#' names(res)
+#' }
 #' @export
 compare_hrf_recovery <- function(data, hrf_grid = NULL) {
 
@@ -426,6 +453,14 @@ compare_hrf_recovery <- function(data, hrf_grid = NULL) {
 #' @param results Output from compare_hrf_recovery
 #' @param true_hrf Ground truth HRF
 #' @return Data frame with recovery metrics
+#' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
+#' \dontrun{
+#' onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
+#' sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
+#' grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
+#' res <- compare_hrf_recovery(sim, hrf_grid = grid)
+#' calculate_recovery_metrics(res, sim$true_hrf)
+#' }
 #' @export
 calculate_recovery_metrics <- function(results, true_hrf) {
 
@@ -526,6 +561,16 @@ calculate_recovery_metrics <- function(results, true_hrf) {
 #'
 #' @param results Output from compare_hrf_recovery
 #' @param save_path Optional path to save plot
+#' @return A `ggplot2` plot object. When `save_path` is supplied, the same plot
+#'   is also written to disk.
+#' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
+#' \dontrun{
+#' onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
+#' sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
+#' grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
+#' res <- compare_hrf_recovery(sim, hrf_grid = grid)
+#' plot_hrf_comparison(res)
+#' }
 #' @importFrom ggplot2 ggplot aes geom_line scale_color_manual scale_linetype_manual labs theme_minimal theme ggsave
 #' @export
 plot_hrf_comparison <- function(results, save_path = NULL) {

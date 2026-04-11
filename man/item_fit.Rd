@@ -14,22 +14,35 @@ item_fit(
 )
 }
 \arguments{
-\item{Gamma_train}{Numeric matrix (`n_train x n_features`).}
+\item{Gamma_train}{Numeric matrix (\verb{n_train x n_features}).}
 
-\item{T_train}{Numeric target matrix (`n_train x p`).}
+\item{T_train}{Numeric target matrix (\verb{n_train x p}).}
 
-\item{U_train}{Trial covariance (`n_train x n_train`) or run-block list.}
+\item{U_train}{Trial covariance (\verb{n_train x n_train}) or run-block list.}
 
 \item{ridge}{Non-negative ridge term added to the left-hand system.}
 
-\item{method}{Preferred solver path (`"chol"`, `"svd"`, `"pinv"`).}
+\item{method}{Preferred solver path (\code{"chol"}, \code{"svd"}, \code{"pinv"}).}
 
 \item{tol}{Numerical tolerance for rank/solver fallbacks.}
 }
 \value{
-Numeric weight matrix `W_hat` (`n_features x p`) with
-  `item_diagnostics` attribute.
+Numeric weight matrix \code{W_hat} (\verb{n_features x p}) with
+\code{item_diagnostics} attribute.
 }
 \description{
 Fit ITEM weights with a ridge-stabilized generalized least-squares solve.
+}
+\examples{
+Gamma_train <- matrix(
+  c(1, 0,
+    0.9, 0.1,
+    0.1, 0.9),
+  ncol = 2,
+  byrow = TRUE
+)
+T_train <- rbind(c(1, 0), c(1, 0), c(0, 1))
+W_hat <- item_fit(Gamma_train, T_train, diag(3))
+item_predict(Gamma_train, W_hat)
+
 }

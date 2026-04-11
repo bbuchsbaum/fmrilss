@@ -7,13 +7,18 @@
 item_predict(Gamma_test, W_hat)
 }
 \arguments{
-\item{Gamma_test}{Numeric matrix (`n_test x n_features`).}
+\item{Gamma_test}{Numeric matrix (\verb{n_test x n_features}).}
 
-\item{W_hat}{Numeric matrix (`n_features x p`).}
+\item{W_hat}{Numeric matrix (\verb{n_features x p}).}
 }
 \value{
-Numeric matrix of predictions (`n_test x p`).
+Numeric matrix of predictions (\verb{n_test x p}).
 }
 \description{
-Compute `T_hat = Gamma_test %*% W_hat`.
+Compute \code{T_hat = Gamma_test \%*\% W_hat}.
+}
+\examples{
+Gamma_test <- matrix(c(1, 0, 0, 1), ncol = 2, byrow = TRUE)
+W_hat <- diag(2)
+item_predict(Gamma_test, W_hat)
 }

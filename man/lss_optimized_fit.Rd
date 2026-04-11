@@ -23,17 +23,25 @@ lss_optimized_fit(
 
 \item{Nuisance}{Optional nuisance regressors to project out.}
 
-\item{engine}{`"cpp"` (default) for `method="cpp_optimized"` or `"r"` for
-`method="r_optimized"`.}
+\item{engine}{\code{"cpp"} (default) for \code{method="cpp_optimized"} or \code{"r"} for
+\code{method="r_optimized"}.}
 
 \item{block_size}{Block size used by the C++ optimized path.}
 
-\item{prewhiten}{Optional prewhitening options list (see `prewhiten_options()`).}
+\item{prewhiten}{Optional prewhitening options list (see \code{prewhiten_options()}).}
 }
 \value{
 A numeric matrix (trials x voxels) of beta estimates.
 }
 \description{
-This is a convenience wrapper around `lss()` that selects one of the optimized
+This is a convenience wrapper around \code{lss()} that selects one of the optimized
 implementations.
+}
+\examples{
+set.seed(1)
+Y <- matrix(rnorm(16), 8, 2)
+X <- matrix(0, 8, 2)
+X[2:3, 1] <- 1
+X[5:6, 2] <- 1
+lss_optimized_fit(Y, X, engine = "r")
 }

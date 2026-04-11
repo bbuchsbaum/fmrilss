@@ -600,6 +600,9 @@ lss_fast <- function(dset, bdes, Y = NULL, use_cpp = TRUE) {
 #'
 #' @param dset Dataset object (format depends on your specific use case)
 #' @return A numeric matrix where rows are timepoints and columns are voxels
+#' @examples
+#' get_data_matrix(matrix(1:6, nrow = 3))
+#' get_data_matrix(data.frame(a = 1:3, b = 4:6))
 #' @keywords internal
 #' @export
 get_data_matrix <- function(dset) {

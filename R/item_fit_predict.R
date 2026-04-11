@@ -12,6 +12,18 @@
 #' @return Numeric weight matrix `W_hat` (`n_features x p`) with
 #'   `item_diagnostics` attribute.
 #'
+#' @examples
+#' Gamma_train <- matrix(
+#'   c(1, 0,
+#'     0.9, 0.1,
+#'     0.1, 0.9),
+#'   ncol = 2,
+#'   byrow = TRUE
+#' )
+#' T_train <- rbind(c(1, 0), c(1, 0), c(0, 1))
+#' W_hat <- item_fit(Gamma_train, T_train, diag(3))
+#' item_predict(Gamma_train, W_hat)
+#'
 #' @export
 item_fit <- function(Gamma_train,
                      T_train,
@@ -114,6 +126,10 @@ item_fit <- function(Gamma_train,
 #' @param W_hat Numeric matrix (`n_features x p`).
 #'
 #' @return Numeric matrix of predictions (`n_test x p`).
+#' @examples
+#' Gamma_test <- matrix(c(1, 0, 0, 1), ncol = 2, byrow = TRUE)
+#' W_hat <- diag(2)
+#' item_predict(Gamma_test, W_hat)
 #' @export
 item_predict <- function(Gamma_test, W_hat) {
   Gamma_test <- .item_as_numeric_matrix(Gamma_test, "Gamma_test")
@@ -159,6 +175,26 @@ item_predict <- function(Gamma_test, W_hat) {
 #'
 #' @return `item_bundle` with fields `Gamma`, `X_t`, `T_target`, `U`/`U_by_run`,
 #'   `run_id`, `meta`, and `diagnostics`.
+#'
+#' @examples
+#' set.seed(1)
+#' X_t <- diag(4)
+#' Y <- X_t %*% matrix(
+#'   c(1, 0,
+#'     0.8, 0.2,
+#'     0.2, 0.8,
+#'     0, 1),
+#'   ncol = 2,
+#'   byrow = TRUE
+#' ) + matrix(rnorm(8, sd = 0.01), 4, 2)
+#' bundle <- item_from_lsa(
+#'   Y = Y,
+#'   X_t = X_t,
+#'   T_target = factor(c("A", "B", "A", "B")),
+#'   run_id = c(1, 1, 2, 2),
+#'   lsa_method = "r"
+#' )
+#' names(bundle)
 #'
 #' @export
 item_from_lsa <- function(Y,

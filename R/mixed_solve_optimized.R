@@ -12,6 +12,14 @@
 #' @param compute_se Whether to compute standard errors (default: FALSE)
 #' @param n_threads Number of OpenMP threads for multi-voxel (0 = auto)
 #' @return List with estimated parameters and variance components
+#' @examples
+#' set.seed(1)
+#' X <- matrix(1, 6, 1)
+#' Z <- diag(6)
+#' Y <- matrix(rnorm(12), 6, 2)
+#' ws <- mixed_precompute(X, Z)
+#' fit <- mixed_solve_optimized(X, Z, Y, workspace = ws)
+#' names(fit)
 #' @export
 mixed_solve_optimized <- function(X, Z, Y, K = NULL, workspace = NULL, 
                                  compute_se = FALSE, n_threads = 0) {
@@ -59,6 +67,11 @@ mixed_solve_optimized <- function(X, Z, Y, K = NULL, workspace = NULL,
 #' @param Z Random effects design matrix (n × q) 
 #' @param K Kinship/covariance matrix for random effects (q × q)
 #' @return Workspace object for use with mixed_solve_optimized
+#' @examples
+#' X <- matrix(1, 6, 1)
+#' Z <- diag(6)
+#' ws <- mixed_precompute(X, Z)
+#' names(ws)
 #' @export
 mixed_precompute <- function(X, Z, K = NULL) {
   if (is.null(K)) {

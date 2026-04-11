@@ -37,3 +37,12 @@ An optimized implementation of mixed model estimation that precomputes
 expensive matrix operations and can be reused across multiple voxels
 for significant performance improvements.
 }
+\examples{
+set.seed(1)
+X <- matrix(1, 6, 1)
+Z <- diag(6)
+Y <- matrix(rnorm(12), 6, 2)
+ws <- mixed_precompute(X, Z)
+fit <- mixed_solve_optimized(X, Z, Y, workspace = ws)
+names(fit)
+}

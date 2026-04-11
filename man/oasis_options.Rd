@@ -19,11 +19,11 @@ oasis_options(
 )
 }
 \arguments{
-\item{design_spec}{Optional design spec list used to build `X` via `fmrihrf`.}
+\item{design_spec}{Optional design spec list used to build \code{X} via \code{fmrihrf}.}
 
 \item{K}{Optional basis dimension override.}
 
-\item{ridge_mode}{`"fractional"` (default) or `"absolute"`.}
+\item{ridge_mode}{\code{"fractional"} (default) or \code{"absolute"}.}
 
 \item{ridge_x, ridge_b}{Non-negative ridge penalties (defaults 0.05 each).}
 
@@ -33,16 +33,19 @@ oasis_options(
 
 \item{return_diag}{Logical; return diagnostics.}
 
-\item{add_intercept}{Logical; add intercept when `Z` is NULL.}
+\item{add_intercept}{Logical; add intercept when \code{Z} is NULL.}
 
-\item{hrf_mode}{Optional mode (e.g. `"voxhrf"`); advanced use.}
+\item{hrf_mode}{Optional mode (e.g. \code{"voxhrf"}); advanced use.}
 
 \item{...}{Additional options.}
 }
 \value{
-A list with class `"fmrilss_oasis_options"`.
+A list with class \code{"fmrilss_oasis_options"}.
 }
 \description{
-Convenience constructor for the `oasis=` list accepted by `lss(method="oasis")`.
-Unknown fields are allowed via `...` for forward compatibility.
+Convenience constructor for the \verb{oasis=} list accepted by \code{lss(method="oasis")}.
+Unknown fields are allowed via \code{...} for forward compatibility.
+}
+\examples{
+oasis_options(ridge_mode = "fractional", ridge_x = 0.1, ridge_b = 0.1)
 }

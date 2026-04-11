@@ -15,11 +15,19 @@ lss_naive_fit(Y, X, Z = NULL, Nuisance = NULL, prewhiten = NULL)
 
 \item{Nuisance}{Optional nuisance regressors to project out.}
 
-\item{prewhiten}{Optional prewhitening options list (see `prewhiten_options()`).}
+\item{prewhiten}{Optional prewhitening options list (see \code{prewhiten_options()}).}
 }
 \value{
 A numeric matrix (trials x voxels) of beta estimates.
 }
 \description{
-Equivalent to calling `lss(..., method = "naive")`.
+Equivalent to calling \code{lss(..., method = "naive")}.
+}
+\examples{
+set.seed(1)
+Y <- matrix(rnorm(16), 8, 2)
+X <- matrix(0, 8, 2)
+X[2:3, 1] <- 1
+X[5:6, 2] <- 1
+lss_naive_fit(Y, X)
 }

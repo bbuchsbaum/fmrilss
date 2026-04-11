@@ -25,3 +25,14 @@ List with best HRF index, parameters, and beta estimates
 \description{
 Fits OASIS models with different HRF parameters and selects best
 }
+\examples{
+\dontshow{if (requireNamespace("fmrihrf", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+\dontrun{
+onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
+sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
+grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
+fit <- fit_oasis_grid(sim$Y, sim$onsets, sim$sframe, grid)
+fit$best_params
+}
+\dontshow{\}) # examplesIf}
+}

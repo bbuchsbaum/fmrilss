@@ -3,6 +3,13 @@
 #' These helpers create validated option lists for `lss()` and friends.
 #'
 #' @name fmrilss_options
+#' @return No value itself. This topic groups the documented constructors
+#'   `stglmnet_options()`, `oasis_options()`, and `prewhiten_options()`.
+#'
+#' @examples
+#' stglmnet_options(mode = "fixed", lambda = 0.1)
+#' oasis_options(ridge_x = 0.1, ridge_b = 0.1)
+#' prewhiten_options(method = "ar", p = 1)
 NULL
 
 #' Construct stglmnet backend options
@@ -33,6 +40,8 @@ NULL
 #' @param ... Additional backend options.
 #'
 #' @return A list with class `"fmrilss_stglmnet_options"`.
+#' @examples
+#' stglmnet_options(mode = "fixed", lambda = 0.05, alpha = 0.5)
 #' @export
 stglmnet_options <- function(
   mode = c("cv", "fixed"),
@@ -93,6 +102,8 @@ stglmnet_options <- function(
 #' @param ... Additional options.
 #'
 #' @return A list with class `"fmrilss_oasis_options"`.
+#' @examples
+#' oasis_options(ridge_mode = "fractional", ridge_x = 0.1, ridge_b = 0.1)
 #' @export
 oasis_options <- function(
   design_spec = NULL,
@@ -148,6 +159,8 @@ oasis_options <- function(
 #' @param compute_residuals Logical.
 #'
 #' @return A list with class `"fmrilss_prewhiten_options"`.
+#' @examples
+#' prewhiten_options(method = "ar", p = 1, pooling = "run")
 #' @export
 prewhiten_options <- function(
   method = c("none", "ar", "arma"),

@@ -17,7 +17,7 @@
 #'    - design_spec: list describing events/HRF to build X via fmrihrf
 #'    - K: explicit basis dimension (auto-detected if not provided)
 #'    - ridge_mode: "fractional" (default) or "absolute"
-#'    - ridge_x, ridge_b: nonnegative ridge on the [a_j, b_j] Gram
+#'    - ridge_x, ridge_b: nonnegative ridge on the `a_j` / `b_j` Gram
 #'      (default 0.05 in fractional mode)
 #'    - block_cols: voxel block size (default 4096)
 #'    - return_se: logical (default FALSE)

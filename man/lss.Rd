@@ -36,17 +36,17 @@ noise). If NULL, no nuisance projection is performed. Defaults to NULL}
 \item{method}{Character string specifying which implementation to use.
 Options are:
 \itemize{
-  \item "r_optimized" - Optimized R implementation (recommended, default)
-  \item "cpp_optimized" - Optimized C++ implementation with parallel support
-  \item "r_vectorized" - Standard R vectorized implementation  
-  \item "cpp" - Standard C++ implementation
-  \item "naive" - Simple loop-based R implementation (for testing)
-  \item "oasis" - OASIS method with HRF support and ridge regularization
-  \item "stglmnet" - overlap-aware elastic-net backend using `glmnet`
+\item "r_optimized" - Optimized R implementation (recommended, default)
+\item "cpp_optimized" - Optimized C++ implementation with parallel support
+\item "r_vectorized" - Standard R vectorized implementation
+\item "cpp" - Standard C++ implementation
+\item "naive" - Simple loop-based R implementation (for testing)
+\item "oasis" - OASIS method with HRF support and ridge regularization
+\item "stglmnet" - overlap-aware elastic-net backend using \code{glmnet}
 }}
 
 \item{block_size}{An integer specifying the voxel block size for parallel
-processing, only applicable when `method = "cpp_optimized"`. Defaults to 96.}
+processing, only applicable when \code{method = "cpp_optimized"}. Defaults to 96.}
 
 \item{oasis}{A list of options for the OASIS method (ridge, SE, design
 construction, etc.).
@@ -54,7 +54,7 @@ See Details and \code{\link{oasis_options}} for the full list.
 \strong{Note:} \code{oasis$whiten} is deprecated and ignored.
 Use the \code{prewhiten} parameter instead for all temporal whitening.}
 
-\item{stglmnet}{A list of options for the `method = "stglmnet"` backend.
+\item{stglmnet}{A list of options for the \code{method = "stglmnet"} backend.
 See Details and \code{\link{stglmnet_options}} for the common fields.}
 
 \item{prewhiten}{A list of prewhitening options using the \pkg{fmriAR}
@@ -63,8 +63,8 @@ See Details and \code{\link{prewhiten_options}} for the full list.}
 }
 \value{
 A numeric matrix of size T × V containing the trial-wise beta estimates.
-  Note: Currently only returns estimates for the trial regressors (X). Beta
-  estimates for the experimental regressors (Z) are computed but not returned.
+Note: Currently only returns estimates for the trial regressors (X). Beta
+estimates for the experimental regressors (Z) are computed but not returned.
 }
 \description{
 Computes trial-wise beta estimates using the Least Squares Separate approach
@@ -74,9 +74,9 @@ with the trial of interest and all other trials as separate regressors.
 \details{
 The LSS approach fits a separate GLM for each trial, where each model includes:
 \itemize{
-  \item The trial of interest (from column i of X)
-  \item All other trials combined (sum of all other columns of X) 
-  \item Experimental regressors (Z matrix) - these are modeled to get beta estimates but not trial-wise
+\item The trial of interest (from column i of X)
+\item All other trials combined (sum of all other columns of X)
+\item Experimental regressors (Z matrix) - these are modeled to get beta estimates but not trial-wise
 }
 
 If Nuisance regressors are provided, they are first projected out from both
@@ -85,31 +85,31 @@ Y and X using standard linear regression residualization.
 When using method="oasis", the following options are available in the oasis list
 (see also \code{\link{oasis_options}} for a validated constructor):
 \itemize{
-  \item \code{design_spec}: A list for building trial-wise designs from event onsets using fmrihrf.
-    Must contain: \code{sframe} (sampling frame), \code{cond} (list with \code{onsets},
-    \code{hrf}, and optionally \code{span}), and optionally \code{others} (list of other conditions
-    to be modeled as nuisances). When provided, X can be NULL and will be constructed automatically.
-  \item \code{K}: Explicit basis dimension for multi-basis HRF models (e.g., 3 for SPMG3).
-    If not provided, it's auto-detected from X dimensions or defaults to 1 for single-basis HRFs.
-  \item \code{ridge_mode}: Either "fractional" (default) or "absolute". In absolute mode,
-    ridge_x and ridge_b are used directly as regularization parameters. In fractional mode,
-    they represent fractions of the mean design energy for adaptive regularization.
-  \item \code{ridge_x}: Ridge parameter for trial-specific regressors (default 0.05).
-    Controls
-    regularization strength for individual trial estimates.
-  \item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0.05).
-    Controls
-    regularization strength for the sum of all other trials.
-  \item \code{return_se}: Logical, whether to return standard errors (default FALSE). When TRUE,
-    returns a list with \code{beta} (trial estimates) and \code{se} (standard errors) components.
-  \item \code{return_diag}: Logical, whether to return design diagnostics (default FALSE).
-    When TRUE, includes diagnostic information about the design matrix structure.
-  \item \code{block_cols}: Integer, voxel block size for memory-efficient processing (default 4096).
-    Larger values use more memory but may be faster for systems with sufficient RAM.
-  \item \code{ntrials}: Explicit number of trials (used when K > 1 to determine output dimensions).
-    If not provided, calculated as ncol(X) / K.
-  \item \code{hrf_grid}: Vector of HRF indices for grid-based HRF selection (advanced use).
-    Allows testing multiple HRF shapes simultaneously.
+\item \code{design_spec}: A list for building trial-wise designs from event onsets using fmrihrf.
+Must contain: \code{sframe} (sampling frame), \code{cond} (list with \code{onsets},
+\code{hrf}, and optionally \code{span}), and optionally \code{others} (list of other conditions
+to be modeled as nuisances). When provided, X can be NULL and will be constructed automatically.
+\item \code{K}: Explicit basis dimension for multi-basis HRF models (e.g., 3 for SPMG3).
+If not provided, it's auto-detected from X dimensions or defaults to 1 for single-basis HRFs.
+\item \code{ridge_mode}: Either "fractional" (default) or "absolute". In absolute mode,
+ridge_x and ridge_b are used directly as regularization parameters. In fractional mode,
+they represent fractions of the mean design energy for adaptive regularization.
+\item \code{ridge_x}: Ridge parameter for trial-specific regressors (default 0.05).
+Controls
+regularization strength for individual trial estimates.
+\item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0.05).
+Controls
+regularization strength for the sum of all other trials.
+\item \code{return_se}: Logical, whether to return standard errors (default FALSE). When TRUE,
+returns a list with \code{beta} (trial estimates) and \code{se} (standard errors) components.
+\item \code{return_diag}: Logical, whether to return design diagnostics (default FALSE).
+When TRUE, includes diagnostic information about the design matrix structure.
+\item \code{block_cols}: Integer, voxel block size for memory-efficient processing (default 4096).
+Larger values use more memory but may be faster for systems with sufficient RAM.
+\item \code{ntrials}: Explicit number of trials (used when K > 1 to determine output dimensions).
+If not provided, calculated as ncol(X) / K.
+\item \code{hrf_grid}: Vector of HRF indices for grid-based HRF selection (advanced use).
+Allows testing multiple HRF shapes simultaneously.
 }
 
 \strong{Prewhitening (temporal autocorrelation correction):}
@@ -131,46 +131,46 @@ separate whitening path.
 The \code{prewhiten} list accepts the following fields
 (see also \code{\link{prewhiten_options}} for a validated constructor):
 \itemize{
-  \item \code{method}: Character, \code{"ar"} (default when the list is
-    non-NULL), \code{"arma"}, or \code{"none"}.
-    \code{"ar"} fits a pure autoregressive model; \code{"arma"} adds a
-    moving-average component (requires \code{q > 0}).
-  \item \code{p}: AR order.
-    An integer, or \code{"auto"} (default) to select via AIC/BIC up to
-    \code{p_max}. Use \code{p = 1} for a simple AR(1) model (the most
-    common choice for fMRI); higher orders are rarely needed but may
-    help with short TRs or multi-band sequences.
-  \item \code{q}: Integer MA order for ARMA models (default 0).  Only
-    relevant when \code{method = "arma"}.
-  \item \code{p_max}: Integer, maximum AR order when \code{p = "auto"}
-    (default 6).
-  \item \code{pooling}: How AR coefficients are estimated across voxels.
-    One of:
-    \describe{
-      \item{\code{"global"}}{(default) A single set of AR coefficients is
-        estimated from the median autocorrelation across all voxels.
-        Fast and usually adequate.}
-      \item{\code{"voxel"}}{Fit a separate AR model per voxel.  Most
-        accurate but slow; consider \code{"parcel"} instead.}
-      \item{\code{"run"}}{Fit one AR model per run (requires \code{runs}).
-        Useful when noise structure differs between runs.}
-      \item{\code{"parcel"}}{Fit one AR model per parcel (requires
-        \code{parcels}). Good compromise between \code{"global"} and
-        \code{"voxel"}.}
-    }
-  \item \code{runs}: Integer vector of length \code{nrow(Y)} giving
-    run/block labels. Required for \code{pooling = "run"} and recommended
-    whenever data span multiple runs so that whitening respects run
-    boundaries.
-  \item \code{parcels}: Integer vector of length \code{ncol(Y)} giving
-    parcel labels.  Required for \code{pooling = "parcel"}.
-  \item \code{exact_first}: Character, \code{"ar1"} (default) or
-    \code{"none"}.  When \code{"ar1"}, the first observation of each
-    segment is scaled by \eqn{\sqrt{1 - \phi_1^2}} for the exact
-    likelihood; \code{"none"} drops the first observation instead.
-  \item \code{compute_residuals}: Logical (default TRUE). When TRUE,
-    OLS residuals from the full design are computed before fitting the
-    noise model.  Set to FALSE only if Y is already residualized.
+\item \code{method}: Character, \code{"ar"} (default when the list is
+non-NULL), \code{"arma"}, or \code{"none"}.
+\code{"ar"} fits a pure autoregressive model; \code{"arma"} adds a
+moving-average component (requires \code{q > 0}).
+\item \code{p}: AR order.
+An integer, or \code{"auto"} (default) to select via AIC/BIC up to
+\code{p_max}. Use \code{p = 1} for a simple AR(1) model (the most
+common choice for fMRI); higher orders are rarely needed but may
+help with short TRs or multi-band sequences.
+\item \code{q}: Integer MA order for ARMA models (default 0).  Only
+relevant when \code{method = "arma"}.
+\item \code{p_max}: Integer, maximum AR order when \code{p = "auto"}
+(default 6).
+\item \code{pooling}: How AR coefficients are estimated across voxels.
+One of:
+\describe{
+\item{\code{"global"}}{(default) A single set of AR coefficients is
+estimated from the median autocorrelation across all voxels.
+Fast and usually adequate.}
+\item{\code{"voxel"}}{Fit a separate AR model per voxel.  Most
+accurate but slow; consider \code{"parcel"} instead.}
+\item{\code{"run"}}{Fit one AR model per run (requires \code{runs}).
+Useful when noise structure differs between runs.}
+\item{\code{"parcel"}}{Fit one AR model per parcel (requires
+\code{parcels}). Good compromise between \code{"global"} and
+\code{"voxel"}.}
+}
+\item \code{runs}: Integer vector of length \code{nrow(Y)} giving
+run/block labels. Required for \code{pooling = "run"} and recommended
+whenever data span multiple runs so that whitening respects run
+boundaries.
+\item \code{parcels}: Integer vector of length \code{ncol(Y)} giving
+parcel labels.  Required for \code{pooling = "parcel"}.
+\item \code{exact_first}: Character, \code{"ar1"} (default) or
+\code{"none"}.  When \code{"ar1"}, the first observation of each
+segment is scaled by \eqn{\sqrt{1 - \phi_1^2}} for the exact
+likelihood; \code{"none"} drops the first observation instead.
+\item \code{compute_residuals}: Logical (default TRUE). When TRUE,
+OLS residuals from the full design are computed before fitting the
+noise model.  Set to FALSE only if Y is already residualized.
 }
 
 \strong{Typical prewhiten recipes:}

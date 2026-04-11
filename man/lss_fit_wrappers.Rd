@@ -2,8 +2,20 @@
 % Please edit documentation in R/lss_fit_wrappers.R
 \name{lss_fit_wrappers}
 \alias{lss_fit_wrappers}
-\title{Convenience wrappers for modern `lss()` usage}
+\title{Convenience wrappers for modern \code{lss()} usage}
+\value{
+No value itself. This topic groups \code{lss_naive_fit()} and
+\code{lss_optimized_fit()}.
+}
 \description{
 These functions provide a modern-signature entry point for methods that
-historically required a block-design (`bdes`) object.
+historically required a block-design (\code{bdes}) object.
+}
+\examples{
+set.seed(1)
+Y <- matrix(rnorm(16), 8, 2)
+X <- matrix(0, 8, 2)
+X[2:3, 1] <- 1
+X[5:6, 2] <- 1
+lss_naive_fit(Y, X)
 }

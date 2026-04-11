@@ -22,6 +22,11 @@
 #'   `output = "by_run"`. Returned object includes `item_diagnostics` attribute
 #'   with rank/condition/solver details.
 #'
+#' @examples
+#' X_t <- diag(4)
+#' item_compute_u(X_t)
+#' item_compute_u(X_t, run_id = c(1, 1, 2, 2), output = "by_run")
+#'
 #' @export
 item_compute_u <- function(X_t,
                            V = NULL,

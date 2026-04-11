@@ -24,7 +24,7 @@ lss_with_hrf(
 
 \item{nuisance_regs}{Optional numeric matrix of nuisance regressors.}
 
-\item{engine}{Computational engine: "R" for pure R implementation (default), 
+\item{engine}{Computational engine: "R" for pure R implementation (default),
 "C++" for optimized C++ (experimental).}
 
 \item{chunk_size}{Number of voxels to process per batch (C++ engine only).}
@@ -36,7 +36,7 @@ temporary directory is used (C++ engine only).}
 }
 \value{
 An object of class \link{LSSBeta} for C++ engine, or a numeric matrix
-  (n_trials x n_vox) for R engine.
+(n_trials x n_vox) for R engine.
 }
 \description{
 Computes trial-wise beta estimates using voxel-specific HRFs.

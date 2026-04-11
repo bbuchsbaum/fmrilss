@@ -24,6 +24,14 @@
 #'   `Gamma`, `X_t`, `C_transform`, `T_target`, `U`, `U_by_run`, `run_id`,
 #'   `trial_id`, `trial_hash`, `trial_info`, `meta`, and `diagnostics`.
 #'
+#' @examples
+#' bundle <- item_build_design(
+#'   X_t = diag(4),
+#'   T_target = factor(c("A", "B", "A", "B")),
+#'   run_id = c(1, 1, 2, 2)
+#' )
+#' bundle$trial_info
+#'
 #' @export
 item_build_design <- function(X_t,
                               T_target = NULL,

@@ -17,3 +17,16 @@ a matrix of beta estimates
 \description{
 A wrapper for the optimized C++ LSS implementation
 }
+\examples{
+set.seed(1)
+Y <- matrix(rnorm(16), 8, 2)
+X_trials <- matrix(0, 8, 2)
+X_trials[2:3, 1] <- 1
+X_trials[5:6, 2] <- 1
+bdes <- list(
+  dmat_base = matrix(1, 8, 1),
+  dmat_fixed = NULL,
+  dmat_ran = X_trials
+)
+lss_cpp_optimized(Y, bdes)
+}
