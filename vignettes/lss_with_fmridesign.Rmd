@@ -2,7 +2,9 @@
 title: Using fmridesign with fmrilss
 output: rmarkdown::html_vignette
 vignette: |
-  %\VignetteIndexEntry{Using fmridesign with fmrilss} %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}
+  %\VignetteIndexEntry{Using fmridesign with fmrilss}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
   preset: homage
@@ -18,6 +20,7 @@ includes:
 ---
 
 ```{r setup-opts, include = FALSE}
+if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(family = params$family, preset = params$preset))
 has_fmridesign <- requireNamespace("fmridesign", quietly = TRUE)
 knitr::opts_chunk$set(
   collapse = TRUE,
