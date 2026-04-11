@@ -14,5 +14,6 @@ pkgdown/
 .albersdown.bak/
 .omc/
 vignettes/*.html
+!vignettes/albers-header.html
 vignettes/*.R
 vignettes/.build.timestamp
