@@ -1,0 +1,308 @@
+[![R-CMD-check](https://github.com/bbuchsbaum/fmrilss/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/bbuchsbaum/fmrilss/actions/workflows/R-CMD-check.yaml)
+[![pkgdown](https://github.com/bbuchsbaum/fmrilss/actions/workflows/pkgdown.yaml/badge.svg)](https://bbuchsbaum.github.io/fmrilss/)
+
+Least Squares Separate (LSS) Analysis for fMRI Data.
+
+## Overview
+
+The `fmrilss` package provides an efficient and flexible implementation
+of the Least Squares Separate (LSS) method for fMRI analysis, as
+proposed by Mumford et al. (2012). This approach models each trial with
+a separate GLM, making it a powerful technique for multivariate pattern
+analysis (MVPA) and connectivity studies where trial-specific estimates
+are needed.
+
+The package offers multiple backends, from a simple reference
+implementation to a highly optimized, parallel C++ engine, all
+accessible through a clean, unified interface.
+
+## Features
+
+- **Five Implementations**: Includes a highly optimized C++ version, an
+  optimized R version, standard vectorized R and C++ versions, and a
+  simple R loop for testing and validation.
+- **Parallel Processing**: The optimized C++ version uses OpenMP for
+  multi-threaded execution to maximize performance on modern hardware.
+- **Flexible & Modern Interface**: A clean `lss(Y, X, Z, Nuisance)`
+  signature that is powerful and intuitive.
+- **Nuisance Regression**: Built-in support for projecting out nuisance
+  regressors (e.g., motion parameters, physiological noise) before the
+  LSS analysis.
+- **CRAN-Compliant**: Built with portable configurations suitable for
+  CRAN submission.
+
+## Installation
+
+You can install the development version of `fmrilss` from GitHub with:
+
+``` r
+# install.packages("devtools")
+devtools::install_github("bbuchsbaum/fmrilss")
+```
+
+## Usage
+
+The primary function is
+[`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md), which
+takes your data `Y`, trial design `X`, experimental regressors `Z`, and
+optional nuisance regressors.
+
+``` r
+library(fmrilss)
+
+# 1. Generate synthetic data
+set.seed(123)
+n_timepoints <- 120
+n_trials <- 15
+n_voxels <- 50
+
+# Trial design matrix (X): one column per trial
+X <- matrix(0, n_timepoints, n_trials)
+onsets <- seq(from = 5, to = n_timepoints - 10, length.out = n_trials)
+for(i in 1:n_trials) {
+  X[onsets[i]:(onsets[i] + 4), i] <- 1
+}
+colnames(X) <- paste0("Trial_", 1:n_trials)
+
+# Experimental regressors (Z): intercept and condition-specific effects
+# These are experimental regressors we want to model and get beta estimates for,
+# but not trial-wise (e.g., condition differences, block effects)
+Z <- cbind(Intercept = 1, LinearTrend = scale(1:n_timepoints, center = TRUE, scale = FALSE))
+
+# Nuisance regressors: e.g., 6 motion parameters
+Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)
+
+# Data (Y): timepoints x voxels
+# (Simulate some effects for demonstration)
+true_betas <- matrix(rnorm(n_trials * n_voxels, 0, 1.5), n_trials, n_voxels)
+Y <- Z %*% matrix(c(10, -0.2), 2, n_voxels) + 
+     X %*% true_betas +
+     Nuisance %*% matrix(rnorm(6 * n_voxels, 0, 2), 6, n_voxels) +
+     matrix(rnorm(n_timepoints * n_voxels, 0, 0.8), n_timepoints, n_voxels)
+colnames(Y) <- paste0("Voxel_", 1:n_voxels)
+
+
+# 2. Run LSS analysis
+
+# Example 1: Basic LSS with default intercept
+# If Z is NULL, an intercept is automatically added.
+beta_estimates <- lss(Y, X)
+
+# Example 2: LSS with experimental regressors (intercept + condition effects)
+beta_fixed <- lss(Y, X, Z = Z)
+
+# Example 3: LSS with experimental regressors and nuisance regression
+beta_clean <- lss(Y, X, Z = Z, Nuisance = Nuisance)
+
+# Example 4: Use the super-fast, parallelized C++ implementation
+beta_fast <- lss(Y, X, Z = Z, Nuisance = Nuisance, method = "cpp_optimized")
+
+# The result is a (trials x voxels) matrix of beta estimates
+print(dim(beta_fast))
+#> [1] 15 50
+print(beta_fast[1:5, 1:4])
+```
+
+## Recommended workflows
+
+For real fMRI analyses, most users will want one of the higher-level,
+design-aware interfaces (see package vignettes for full examples):
+
+- **Formula-based designs (multi-run, modulators, validation):**
+  [`lss_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_design.md)
+  with `fmridesign`
+  ([`vignette("lss_with_fmridesign", package = "fmrilss")`](https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.md)).
+- **Voxel-specific HRFs from a library (SBHM):**
+  [`lss_sbhm_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm_design.md)
+  (recommended if you use `fmridesign`) or
+  [`lss_sbhm()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm.md)
+  ([`vignette("sbhm", package = "fmrilss")`](https://bbuchsbaum.github.io/fmrilss/articles/sbhm.md)).
+
+Minimal SBHM call (showing the “override-only” pattern):
+
+``` r
+# res <- lss_sbhm_design(Y, sbhm, event_model = emod, return = "amplitude")
+res <- lss_sbhm(Y, sbhm, design_spec, match = list(topK = 3, soft_blend = TRUE))
+```
+
+## References
+
+Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
+Deconvolving BOLD activation in event-related designs for multivoxel
+pattern classification analyses. *NeuroImage*, 59(3), 2636-2643.
+
+## License
+
+GPL-3
+
+## Albers theme
+
+This package uses the albersdown theme. Existing vignette theme hooks
+are replaced so `albers.css` and local `albers.js` render consistently
+on CRAN and GitHub Pages. The palette family is provided via
+`params$family` (default ‘red’). The pkgdown site uses
+`template: { package: albersdown }`.
+
+# Package index
+
+## All functions
+
+- [`LSSBeta`](https://bbuchsbaum.github.io/fmrilss/reference/LSSBeta.md)
+  : LSSBeta object
+
+- [`VoxelHRF`](https://bbuchsbaum.github.io/fmrilss/reference/VoxelHRF.md)
+  : VoxelHRF object
+
+- [`benchmark_mixed_solve()`](https://bbuchsbaum.github.io/fmrilss/reference/benchmark_mixed_solve.md)
+  : Benchmark Mixed Model Implementations
+
+- [`calculate_recovery_metrics()`](https://bbuchsbaum.github.io/fmrilss/reference/calculate_recovery_metrics.md)
+  : Calculate HRF Recovery Metrics
+
+- [`compare_hrf_recovery()`](https://bbuchsbaum.github.io/fmrilss/reference/compare_hrf_recovery.md)
+  : Compare HRF Recovery Methods
+
+- [`create_lwu_grid()`](https://bbuchsbaum.github.io/fmrilss/reference/create_lwu_grid.md)
+  : Create LWU HRF Grid for OASIS Search
+
+- [`estimate_voxel_hrf()`](https://bbuchsbaum.github.io/fmrilss/reference/estimate_voxel_hrf.md)
+  : Estimate Voxel-wise HRF Basis Coefficients
+
+- [`fit_oasis_grid()`](https://bbuchsbaum.github.io/fmrilss/reference/fit_oasis_grid.md)
+  : Fit OASIS with HRF Grid Search
+
+- [`fmrilss-package`](https://bbuchsbaum.github.io/fmrilss/reference/fmrilss-package.md)
+  [`fmrilss`](https://bbuchsbaum.github.io/fmrilss/reference/fmrilss-package.md)
+  : fmrilss: Least Squares Separate (LSS) Analysis for fMRI Data
+
+- [`fmrilss_options`](https://bbuchsbaum.github.io/fmrilss/reference/fmrilss_options.md)
+  : Option constructors for nested interfaces
+
+- [`generate_lwu_data()`](https://bbuchsbaum.github.io/fmrilss/reference/generate_lwu_data.md)
+  : Generate Synthetic fMRI Data with LWU HRF
+
+- [`generate_rapid_design()`](https://bbuchsbaum.github.io/fmrilss/reference/generate_rapid_design.md)
+  : OASIS HRF Recovery Testing Functions
+
+- [`item_build_design()`](https://bbuchsbaum.github.io/fmrilss/reference/item_build_design.md)
+  : Build ITEM design metadata
+
+- [`item_compute_u()`](https://bbuchsbaum.github.io/fmrilss/reference/item_compute_u.md)
+  : Compute ITEM trial covariance matrix
+
+- [`item_cv()`](https://bbuchsbaum.github.io/fmrilss/reference/item_cv.md)
+  : Crossvalidated ITEM decoding
+
+- [`item_fit()`](https://bbuchsbaum.github.io/fmrilss/reference/item_fit.md)
+  : Fit ITEM decoder weights
+
+- [`item_from_lsa()`](https://bbuchsbaum.github.io/fmrilss/reference/item_from_lsa.md)
+  : Build an ITEM bundle from LS-A estimates
+
+- [`item_predict()`](https://bbuchsbaum.github.io/fmrilss/reference/item_predict.md)
+  : Predict targets from ITEM weights
+
+- [`item_slice_fold()`](https://bbuchsbaum.github.io/fmrilss/reference/item_slice_fold.md)
+  : Slice an ITEM bundle into train/test fold objects
+
+- [`lsa()`](https://bbuchsbaum.github.io/fmrilss/reference/lsa.md) :
+  Least Squares All (LSA) Analysis
+
+- [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md) :
+  Least Squares Separate (LSS) Analysis
+
+- [`lss_beta_cpp()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_beta_cpp.md)
+  : Vectorized LSS Beta Computation Using C++
+
+- [`lss_cpp_optimized()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_cpp_optimized.md)
+  : A wrapper for the optimized C++ LSS implementation
+
+- [`lss_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_design.md)
+  : LSS Analysis with fmridesign Objects
+
+- [`lss_fit_wrappers`](https://bbuchsbaum.github.io/fmrilss/reference/lss_fit_wrappers.md)
+  :
+
+  Convenience wrappers for modern
+  [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md) usage
+
+- [`lss_naive()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_naive.md)
+  : Naive Least Squares Separate (LSS) Analysis
+
+- [`lss_naive_fit()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_naive_fit.md)
+  : Naive LSS with modern signature
+
+- [`lss_optimized()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_optimized.md)
+  : Optimized LSS Analysis (Pure R)
+
+- [`lss_optimized_fit()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_optimized_fit.md)
+  : Optimized LSS with modern signature
+
+- [`lss_sbhm()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm.md)
+  : End-to-End LSS with Shared-Basis HRF Matching (SBHM)
+
+- [`lss_sbhm_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm_design.md)
+  : SBHM Pipeline with fmridesign Models
+
+- [`lss_with_hrf()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_with_hrf.md)
+  : Perform LSS using Voxel-wise HRFs
+
+- [`mixed_precompute()`](https://bbuchsbaum.github.io/fmrilss/reference/mixed_precompute.md)
+  : Precompute Workspace for Optimized Mixed Model
+
+- [`mixed_solve()`](https://bbuchsbaum.github.io/fmrilss/reference/mixed_solve.md)
+  [`mixed_solve_cpp()`](https://bbuchsbaum.github.io/fmrilss/reference/mixed_solve.md)
+  : Mixed Model Solver
+
+- [`mixed_solve_optimized()`](https://bbuchsbaum.github.io/fmrilss/reference/mixed_solve_optimized.md)
+  : Optimized Mixed Model Solver
+
+- [`oasis_options()`](https://bbuchsbaum.github.io/fmrilss/reference/oasis_options.md)
+  : Construct OASIS options
+
+- [`plot_hrf_comparison()`](https://bbuchsbaum.github.io/fmrilss/reference/plot_hrf_comparison.md)
+  : Plot HRF Recovery Comparison
+
+- [`prewhiten_options()`](https://bbuchsbaum.github.io/fmrilss/reference/prewhiten_options.md)
+  : Construct prewhitening options
+
+- [`project_confounds()`](https://bbuchsbaum.github.io/fmrilss/reference/project_confounds.md)
+  : Project Out Confound Variables
+
+- [`project_confounds_cpp()`](https://bbuchsbaum.github.io/fmrilss/reference/project_confounds_cpp.md)
+  : Project Out Confounds Using C++
+
+- [`sbhm_build()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_build.md)
+  : Build a Shared-Basis HRF Library (SBHM)
+
+- [`sbhm_hrf()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_hrf.md)
+  : Wrap a Learned Basis as an HRF (SBHM HRF)
+
+- [`sbhm_match()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_match.md)
+  : Match Voxels to Library HRFs in Shared Basis (SBHM)
+
+- [`sbhm_prepass()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_prepass.md)
+  : SBHM Prepass: Aggregate Fit in Shared Basis
+
+- [`sbhm_project()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_project.md)
+  : Project Trial-wise SBHM Coefficients to Scalar Amplitudes
+
+- [`stglmnet_options()`](https://bbuchsbaum.github.io/fmrilss/reference/stglmnet_options.md)
+  : Construct stglmnet backend options
+
+# Articles
+
+### All vignettes
+
+- [Getting started with
+  fmrilss](https://bbuchsbaum.github.io/fmrilss/articles/fmrilss.md):
+- [Using fmridesign with
+  fmrilss](https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.md):
+- [The OASIS Method: Optimized Analytic Single-pass Inverse
+  Solution](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md):
+- [OASIS Theory: Algebra and Implementation
+  Details](https://bbuchsbaum.github.io/fmrilss/articles/oasis_theory.md):
+- [Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF
+  Estimation](https://bbuchsbaum.github.io/fmrilss/articles/sbhm.md):
+- [Voxel-wise HRF Modeling with
+  fmrilss](https://bbuchsbaum.github.io/fmrilss/articles/voxel-wise-hrf.md):

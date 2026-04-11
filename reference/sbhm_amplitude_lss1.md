@@ -1,0 +1,19 @@
+# Single-shape LSS amplitudes (2x2 per trial) given matched coordinates
+
+Uses one regressor for the trial of interest and one for all other
+trials, with optional fractional ridge on the 2x2 Gram for stability.
+
+## Usage
+
+``` r
+sbhm_amplitude_lss1(
+  Y,
+  sbhm,
+  design_spec,
+  alpha_hat,
+  Nuisance = NULL,
+  ridge_frac = list(x = 0.02, b = 0.02),
+  prewhiten = NULL,
+  return_se = FALSE
+)
+```
