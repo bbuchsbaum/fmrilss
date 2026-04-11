@@ -3,6 +3,12 @@ template:
   bootstrap: 5
   package: albersdown
 home:
-  strip_header: true
+  strip_header: yes
   sidebar:
-    structure: [links, license, community, citation, authors, dev]
+    structure:
+    - links
+    - license
+    - community
+    - citation
+    - authors
+    - dev
