@@ -46,9 +46,34 @@ implementation is conceptually clear and serves as a reference for validation.
 }
 \examples{
 \donttest{
+set.seed(1)
+n_timepoints <- 20
+n_trials <- 4
+n_voxels <- 3
+
+X <- matrix(0, n_timepoints, n_trials)
+for (i in seq_len(n_trials)) {
+  onset <- 1 + (i - 1) * 4
+  X[onset:(onset + 2), i] <- 1
+}
+
+Z <- cbind(Intercept = 1, Linear = seq_len(n_timepoints))
+Y <- matrix(rnorm(n_timepoints * n_voxels), n_timepoints, n_voxels)
+
+for (i in seq_len(n_trials)) {
+  Y <- Y + X[, i] \%*\% matrix(rnorm(n_voxels, sd = 0.2), 1, n_voxels)
+}
+
+bdes <- list(
+  dmat_base = Z,
+  dmat_ran = X,
+  dmat_fixed = NULL,
+  fixed_ind = NULL
+)
+
 beta_estimates_naive <- lss_naive(Y = Y, bdes = bdes)
 
-beta_estimates_fast <- lss(Y = Y, bdes = bdes)
+beta_estimates_fast <- lss(Y = Y, X = X, Z = Z)
 max(abs(beta_estimates_naive - beta_estimates_fast))
 }
 

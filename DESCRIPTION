@@ -37,11 +37,7 @@ Suggests:
     fmridesign,
     Matrix,
     albersdown
-Remotes:
-    bbuchsbaum/fmrihrf,
-    bbuchsbaum/fmriAR,
-    bbuchsbaum/fmridesign,
-    bbuchsbaum/albersdown
+Additional_repositories: https://bbuchsbaum.r-universe.dev
 VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
