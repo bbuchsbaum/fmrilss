@@ -1,23 +1,25 @@
 Package: fmrilss
 Type: Package
 Title: Least Squares Separate (LSS) Analysis for fMRI Data
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: person(given = "Brad",
                   family = "Buchsbaum",
                   role = c("aut", "cre"),
                   email = "brad.buchsbaum@gmail.com")
-Description: Implements efficient least squares separate (LSS) analysis for 
-    functional magnetic resonance imaging (fMRI) data. LSS is used to estimate 
-    trial-by-trial activation patterns in event-related fMRI designs. The package 
-    provides both R and C++ implementations for computational efficiency.
+Description: Implements efficient least squares separate (LSS) analysis for
+    functional magnetic resonance imaging (fMRI) data, following Mumford et al.
+    (2012) <doi:10.1016/j.neuroimage.2011.08.076>. LSS estimates trial-by-trial
+    activation patterns in event-related designs. The package provides reference
+    R implementations, optimized C++ backends, prewhitening, and methods for
+    voxel-specific haemodynamic response functions.
 License: GPL-3
 Encoding: UTF-8
-Depends: R (>= 3.5.0)
+Depends: R (>= 4.0.0)
 Imports:
     MASS,
     Rcpp (>= 0.12.0),
-    fmrihrf (>= 0.1.0),
-    fmriAR (>= 0.0.0.9000),
+    fmrihrf (>= 0.3.0),
+    fmriAR (>= 0.3.2),
     bigmemory,
     ggplot2,
     glmnet

@@ -98,7 +98,7 @@ test_that(".lss_oasis validates ridge_x is non-negative", {
 
   expect_error(
     fmrilss:::.lss_oasis(Y = Y, X = X, oasis = list(ridge_x = -0.1)),
-    "ridge_x must be non-negative"
+    "ridge_x must be a non-negative scalar"
   )
 })
 
@@ -108,7 +108,7 @@ test_that(".lss_oasis validates ridge_b is non-negative", {
 
   expect_error(
     fmrilss:::.lss_oasis(Y = Y, X = X, oasis = list(ridge_b = -0.1)),
-    "ridge_b must be non-negative"
+    "ridge_b must be a non-negative scalar"
   )
 })
 

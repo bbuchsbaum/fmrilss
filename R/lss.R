@@ -256,6 +256,10 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
                 block_size = 96, oasis = list(), stglmnet = list(), prewhiten = NULL) {
   
   method <- match.arg(method)
+
+  if (method == "cpp_optimized") {
+    block_size <- .as_positive_integer(block_size, "block_size")
+  }
   
   # Drop legacy oasis$whiten: ignore and warn once if provided
   if (method == "oasis" && !is.null(oasis$whiten)) {
@@ -414,6 +418,7 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
 
 .lss_cpp_optimized <- function(Y, X, Z, block_size = 96) {
   # This now calls the new single-pass C++ function
+  block_size <- .as_positive_integer(block_size, "block_size")
   
   # Ensure Z (confounds) is a matrix, even if NULL or a vector
   if (is.null(Z)) {
@@ -595,24 +600,19 @@ lss_fast <- function(dset, bdes, Y = NULL, use_cpp = TRUE) {
 
 #' Extract Data Matrix from Dataset
 #'
-#' Helper function to extract data matrix from various dataset formats.
-#' This is a placeholder that should be customized based on your data format.
+#' Internal helper to normalize supported in-memory dataset formats.
 #'
 #' @param dset Dataset object (format depends on your specific use case)
 #' @return A numeric matrix where rows are timepoints and columns are voxels
-#' @examples
-#' get_data_matrix(matrix(1:6, nrow = 3))
-#' get_data_matrix(data.frame(a = 1:3, b = 4:6))
 #' @keywords internal
-#' @export
+#' @noRd
 get_data_matrix <- function(dset) {
-  # This is a placeholder function - customize based on your data format
   if (is.matrix(dset)) {
     return(dset)
   } else if (is.data.frame(dset)) {
     return(as.matrix(dset))
   } else {
-    stop("Unsupported dataset format. Please provide Y matrix directly or customize get_data_matrix function.")
+    stop("Unsupported dataset format. Provide Y as a matrix or data frame.")
   }
 }
 

@@ -43,7 +43,7 @@ project_confounds_cpp <- function(X_confounds, Y_data, C_trials) {
 #' This vectorized implementation computes all LSS betas simultaneously using
 #' matrix algebra. It's significantly faster than per-trial loops and automatically
 #' benefits from BLAS multithreading. The algorithm handles numerical edge cases
-#' by setting problematic denominators to NaN.
+#' by applying finite lower bounds to degenerate denominators.
 #'
 #' For best performance on large datasets, ensure your R installation uses
 #' optimized BLAS (like OpenBLAS or Intel MKL).
@@ -58,4 +58,4 @@ project_confounds_cpp <- function(X_confounds, Y_data, C_trials) {
 lss_beta_cpp <- function(C_projected, Y_projected) {
   # Use the actual exported C++ function name  
   lss_compute_cpp(C_projected, Y_projected)
-} 
+}

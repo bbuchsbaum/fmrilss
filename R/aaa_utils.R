@@ -15,6 +15,31 @@
   x
 }
 
+#' Validate and coerce a positive scalar integer
+#'
+#' @keywords internal
+#' @noRd
+.as_positive_integer <- function(x, name) {
+  valid <- is.numeric(x) && length(x) == 1L && !is.na(x) && is.finite(x) &&
+    x >= 1 && x == floor(x) && x <= .Machine$integer.max
+  if (!valid) {
+    stop(name, " must be a positive integer", call. = FALSE)
+  }
+  as.integer(x)
+}
+
+#' Validate and coerce a non-negative numeric scalar
+#'
+#' @keywords internal
+#' @noRd
+.as_nonnegative_scalar <- function(x, name) {
+  valid <- is.numeric(x) && length(x) == 1L && !is.na(x) && is.finite(x) && x >= 0
+  if (!valid) {
+    stop(name, " must be a non-negative scalar", call. = FALSE)
+  }
+  as.numeric(x)
+}
+
 #' Null-coalescing helper
 #'
 #' @keywords internal

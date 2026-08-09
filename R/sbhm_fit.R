@@ -198,5 +198,3 @@ sbhm_prepass <- function(Y, sbhm, design_spec,
     diag     = list(K = K, ntrials = ntrials, times = sbhm$tgrid, used_prewhiten = used_prewhiten)
   )
 }
-
-`%||%` <- function(a, b) if (is.null(a)) b else a

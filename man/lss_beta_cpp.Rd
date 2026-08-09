@@ -22,7 +22,7 @@ vectorized matrix operations. Computes all trial betas in a single pass without 
 This vectorized implementation computes all LSS betas simultaneously using
 matrix algebra. It's significantly faster than per-trial loops and automatically
 benefits from BLAS multithreading. The algorithm handles numerical edge cases
-by setting problematic denominators to NaN.
+by applying finite lower bounds to degenerate denominators.
 
 For best performance on large datasets, ensure your R installation uses
 optimized BLAS (like OpenBLAS or Intel MKL).

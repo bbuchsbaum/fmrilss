@@ -15,7 +15,9 @@
 #' @param Nuisance (T x P) confounds (intercept, motion, drift, aCompCor, ...)
 #' @param oasis list of options:
 #'    - design_spec: list describing events/HRF to build X via fmrihrf
-#'    - K: explicit basis dimension (auto-detected if not provided)
+#'    - K: explicit basis dimension (recommended when X is supplied directly)
+#'    - infer_K_from_X: logical; if TRUE and K is missing, infer basis
+#'      dimension heuristically from X (default FALSE for safety)
 #'    - ridge_mode: "fractional" (default) or "absolute"
 #'    - ridge_x, ridge_b: nonnegative ridge on the `a_j` / `b_j` Gram
 #'      (default 0.05 in fractional mode)
@@ -61,12 +63,16 @@
   
   # Validate oasis options
   if (!is.list(oasis)) stop("oasis must be a list")
-  
-  if (!is.null(oasis$ridge_x) && (oasis$ridge_x < 0)) {
-    stop("ridge_x must be non-negative")
+  block_cols <- .as_positive_integer(oasis$block_cols %||% 4096L, "block_cols")
+  if (!is.null(oasis$K)) {
+    oasis$K <- .as_positive_integer(oasis$K, "K")
   }
-  if (!is.null(oasis$ridge_b) && (oasis$ridge_b < 0)) {
-    stop("ridge_b must be non-negative")
+  
+  if (!is.null(oasis$ridge_x)) {
+    oasis$ridge_x <- .as_nonnegative_scalar(oasis$ridge_x, "ridge_x")
+  }
+  if (!is.null(oasis$ridge_b)) {
+    oasis$ridge_b <- .as_nonnegative_scalar(oasis$ridge_b, "ridge_b")
   }
   if (!is.null(oasis$ridge_mode)) {
     oasis$ridge_mode <- match.arg(oasis$ridge_mode, c("absolute", "fractional"))
@@ -104,7 +110,7 @@
       conf_for_grid <- cbind(if (!is.null(Z)) Z, if (!is.null(Nuisance)) Nuisance)
       oasis$design_spec$cond$hrf <- .oasis_pick_hrf_lwu_fast(
         Y, oasis$design_spec, oasis$design_spec$hrf_grid, 
-        confounds = conf_for_grid, block_cols = as.integer(oasis$block_cols %||% 4096L)
+        confounds = conf_for_grid, block_cols = block_cols
       )
     }
     
@@ -123,30 +129,16 @@
     if (!is.null(oasis$design_spec$cond$hrf)) {
       detected_K <- tryCatch(fmrihrf::nbasis(oasis$design_spec$cond$hrf), error = function(e) 1L)
     } else if (!is.null(oasis$ntrials) && !is.null(X)) {
-      N <- ncol(X); ntr <- as.integer(oasis$ntrials)
+      N <- ncol(X)
+      ntr <- .as_positive_integer(oasis$ntrials, "ntrials")
       if (N %% ntr != 0L) stop(sprintf("ncol(X)=%d is not divisible by ntrials=%d", N, ntr))
       detected_K <- as.integer(N / ntr)
-    } else if (!is.null(X)) {
-      N <- ncol(X)
-      for (Kcand in c(2L,3L,4L,5L,6L,8L,10L,12L)) {
-        if (N %% Kcand != 0L) next
-        ntr <- N / Kcand
-        trials <- seq_len(min(ntr, 8L))
-        ok <- TRUE
-        for (i in trials) {
-          idx <- ((i-1L)*Kcand + 1L):(i*Kcand)
-          B <- X[, idx, drop=FALSE]
-          G <- crossprod(B)
-          Dn <- 1/sqrt(pmax(diag(G), .Machine$double.eps))
-          Cn <- diag(Dn) %*% G %*% diag(Dn)
-          if (mean(abs(Cn[upper.tri(Cn)])) < 0.5) { ok <- FALSE; break }
-        }
-        if (ok) { detected_K <- as.integer(Kcand); break }
-      }
+    } else if (!is.null(X) && isTRUE(oasis$infer_K_from_X %||% FALSE)) {
+      detected_K <- .detect_basis_dimension(X)
     }
     detected_K
   }
-  K <- as.integer(K)
+  K <- .as_positive_integer(K, "K")
 
   # 3) Nuisance design used for projection: Z + Nuisance + (aggregates of other conditions)
   N_nuis <- cbind(if (!is.null(Z)) Z, if (!is.null(Nuisance)) Nuisance, X_other)
@@ -173,7 +165,7 @@
       X_trials = X,
       design_spec = oasis$design_spec,
       N_nuis = N_nuis,
-      K = oasis$K %||% .detect_basis_dimension(X),
+      K = K,
       lambda_shape = oasis$lambda_shape %||% 0,
       mu_rough     = oasis$mu_rough %||% 0,
       ref_hrf      = oasis$ref_hrf %||% NULL,
@@ -224,7 +216,7 @@
   if (K == 1L) {
     # Single-basis path
     pre   <- oasis_precompute_design(X, if (is.null(N_nuis)) matrix(0, nrow(X), 0) else N_nuis)
-    mats  <- oasis_AtY_SY_blocked(pre$A, pre$s_all, pre$Q, Y, as.integer(oasis$block_cols %||% 4096L))
+    mats  <- oasis_AtY_SY_blocked(pre$A, pre$s_all, pre$Q, Y, block_cols)
     
     # Resolve ridge
     lam   <- .oasis_resolve_ridge(
@@ -247,7 +239,7 @@
   } else {
     # Multi-basis path (K > 1)
     pre  <- oasisk_precompute_design(X, if (is.null(N_nuis)) matrix(0, nrow(X), 0) else N_nuis, K)
-    mats <- oasisk_products(pre$A, pre$S, pre$Q, Y, as.integer(oasis$block_cols %||% 4096L))
+    mats <- oasisk_products(pre$A, pre$S, pre$Q, Y, block_cols)
     
     # Resolve ridge
     lam  <- .oasis_resolve_ridge(

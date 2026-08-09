@@ -55,6 +55,15 @@ test_that("oasis_options validates block_cols", {
   expect_error(oasis_options(block_cols = 0), "block_cols must be a positive integer")
   expect_error(oasis_options(block_cols = -1), "block_cols must be a positive integer")
   expect_error(oasis_options(block_cols = NA), "block_cols must be a positive integer")
+  expect_error(oasis_options(block_cols = 1.5), "block_cols must be a positive integer")
+  expect_error(oasis_options(block_cols = Inf), "block_cols must be a positive integer")
+})
+
+test_that("oasis_options validates K", {
+  expect_error(oasis_options(K = 0), "K must be a positive integer")
+  expect_error(oasis_options(K = 1.5), "K must be a positive integer")
+  expect_error(oasis_options(K = NA), "K must be a positive integer")
+  expect_equal(oasis_options(K = 3)$K, 3L)
 })
 
 test_that("oasis_options validates ridge_mode", {

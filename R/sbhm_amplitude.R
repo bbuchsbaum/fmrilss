@@ -1,7 +1,5 @@
 # Internal helpers for SBHM amplitude estimation (single-shape GLM / LSS1 / OASIS-K1)
 
-`%||%` <- function(a, b) if (is.null(a)) b else a
-
 #' Residualize columns of M against Z (FWL)
 #' @keywords internal
 .sbhm_resid <- function(M, Z) {

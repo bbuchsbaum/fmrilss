@@ -18,10 +18,6 @@
 ^\.vscode($|/)
 ^pkgdown$
 ^scripts$
-^test_oasis_scale\.R$
-^test_projection_debug\.R$
-^test_sign_debug\.R$
-^test_sign_debug2\.R$
 ^\.rcmdcheck_result.*\.rds$
 ^\.planning($|/)
 ^figure$
@@ -30,3 +26,4 @@
 ^[^/]+\.Rcheck($|/)
 ^\.pkgcheck($|/)
 ^CONTRIBUTING\.md$
+^cran-comments\.md$

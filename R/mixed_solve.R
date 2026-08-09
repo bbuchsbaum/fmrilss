@@ -58,8 +58,11 @@ mixed_solve <- function(Y, X = NULL, Z = NULL, K = NULL, Nuisance = NULL,
   method <- match.arg(method)
   
   # Input validation
-  if (!is.vector(Y) && !is.matrix(Y)) {
-    stop("Y must be a vector or matrix")
+  if ((!is.vector(Y) && !is.matrix(Y)) || !is.numeric(Y)) {
+    stop("Y must be a numeric vector or matrix")
+  }
+  if (is.matrix(Y) && ncol(Y) < 1L) {
+    stop("Y must contain at least one response column", call. = FALSE)
   }
   
   # Handle Nuisance parameter (alias for X)
@@ -75,10 +78,43 @@ mixed_solve <- function(Y, X = NULL, Z = NULL, K = NULL, Nuisance = NULL,
     if (nrow(X) != n_obs) {
       stop("X must have the same number of rows as Y", call. = FALSE)
     }
-    n_filtered <- if (is.matrix(Y)) sum(stats::complete.cases(Y)) else sum(!is.na(Y))
-    if (n_filtered <= ncol(X)) {
+    n_filtered <- if (is.matrix(Y)) NULL else sum(is.finite(Y))
+    if (!is.null(n_filtered) && n_filtered <= ncol(X)) {
       stop("Need more non-NA observations than columns in X", call. = FALSE)
     }
+  }
+  if (!is.null(Z) && (!is.matrix(Z) || !is.numeric(Z) || nrow(Z) != n_obs)) {
+    stop("Z must be a numeric matrix with the same number of rows as Y", call. = FALSE)
+  }
+
+  if (is.matrix(Y)) {
+    fits <- lapply(seq_len(ncol(Y)), function(j) {
+      mixed_solve(
+        Y = Y[, j], X = X, Z = Z, K = K, method = method,
+        bounds = bounds, SE = SE, return_Hinv = return_Hinv
+      )
+    })
+    response_names <- colnames(Y) %||% paste0("Response_", seq_len(ncol(Y)))
+    combine_rows <- function(field) {
+      out <- t(vapply(fits, `[[`, numeric(length(fits[[1]][[field]])), field))
+      rownames(out) <- response_names
+      out
+    }
+    result <- list(
+      Vu = stats::setNames(vapply(fits, `[[`, numeric(1), "Vu"), response_names),
+      Ve = stats::setNames(vapply(fits, `[[`, numeric(1), "Ve"), response_names),
+      beta = combine_rows("beta"),
+      u = combine_rows("u"),
+      LL = stats::setNames(vapply(fits, `[[`, numeric(1), "LL"), response_names)
+    )
+    if (SE) {
+      result$beta.SE <- combine_rows("beta.SE")
+      result$u.SE <- combine_rows("u.SE")
+    }
+    if (return_Hinv) {
+      result$Hinv <- stats::setNames(lapply(fits, `[[`, "Hinv"), response_names)
+    }
+    return(result)
   }
   
   # Use the C++ implementation (currently the only available method)

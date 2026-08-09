@@ -28,6 +28,10 @@ arma::mat lss_fused_optim_cpp(const arma::mat& X,          // (n x k) Nuisance r
                               const arma::mat& C,          // (n x T) Trial matrix
                               int block_size = 96) {       // Voxel block size
 
+    if (block_size <= 0) {
+        Rcpp::stop("block_size must be positive");
+    }
+
     const uword V = Y.n_cols;
     const uword T = C.n_cols;
 

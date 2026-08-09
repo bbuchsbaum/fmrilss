@@ -139,13 +139,16 @@ Each basis function captures a principal mode of HRF variation: the main shape,
 timing shifts, width differences, and undershoot features.
 
 ```{r visualize-basis, fig.width=10, fig.height=6, eval=eval_chunks, fig.alt="Six panels showing SBHM shared basis functions capturing principal modes of HRF variation."}
-par(mfrow = c(2, 3), mar = c(3, 3, 2, 1))
-for (i in 1:ncol(sbhm$B)) {
-  plot(sbhm$tgrid, sbhm$B[, i], type = "l", col = "navy", lwd = 2,
-       main = paste0("Basis ", i, " (s=", round(sbhm$S[i], 2), ")"),
-       xlab = "Time (s)", ylab = "Amplitude")
-  abline(h = 0, col = "gray", lty = 2)
-}
+local({
+  oldpar <- par(mfrow = c(2, 3), mar = c(3, 3, 2, 1))
+  on.exit(par(oldpar), add = TRUE)
+  for (i in 1:ncol(sbhm$B)) {
+    plot(sbhm$tgrid, sbhm$B[, i], type = "l", col = "navy", lwd = 2,
+         main = paste0("Basis ", i, " (s=", round(sbhm$S[i], 2), ")"),
+         xlab = "Time (s)", ylab = "Amplitude")
+    abline(h = 0, col = "gray", lty = 2)
+  }
+})
 ```
 
 ### Choosing the Rank
@@ -327,15 +330,18 @@ vox_show <- head(order(-res_sbhm$margin), n = min(6, n_voxels))
 ```
 
 ```{r matched-vs-true, fig.width=10, fig.height=6, eval=eval_chunks, fig.alt="Six panels comparing true and matched HRF shapes for the most confident voxels."}
-par(mfrow = c(2, 3), mar = c(3, 3, 2, 1))
-for (v in vox_show) {
-  rng <- range(c(H_hat[, true_hrf_idx[v]], H_hat[, res_sbhm$matched_idx[v]]))
-  plot(sbhm$tgrid, H_hat[, true_hrf_idx[v]], type = "l", col = "#2c7fb8",
-       lwd = 2, ylim = rng, main = paste0("Voxel ", v), xlab = "Time (s)", ylab = "HRF")
-  lines(sbhm$tgrid, H_hat[, res_sbhm$matched_idx[v]], col = "#d95f02", lwd = 2, lty = 2)
-  legend("topright", bty = "n", cex = 0.8, legend = c("True", "Matched"),
-         lty = 1:2, lwd = 2, col = c("#2c7fb8", "#d95f02"))
-}
+local({
+  oldpar <- par(mfrow = c(2, 3), mar = c(3, 3, 2, 1))
+  on.exit(par(oldpar), add = TRUE)
+  for (v in vox_show) {
+    rng <- range(c(H_hat[, true_hrf_idx[v]], H_hat[, res_sbhm$matched_idx[v]]))
+    plot(sbhm$tgrid, H_hat[, true_hrf_idx[v]], type = "l", col = "#2c7fb8",
+         lwd = 2, ylim = rng, main = paste0("Voxel ", v), xlab = "Time (s)", ylab = "HRF")
+    lines(sbhm$tgrid, H_hat[, res_sbhm$matched_idx[v]], col = "#d95f02", lwd = 2, lty = 2)
+    legend("topright", bty = "n", cex = 0.8, legend = c("True", "Matched"),
+           lty = 1:2, lwd = 2, col = c("#2c7fb8", "#d95f02"))
+  }
+})
 ```
 
 ### Library Manifold

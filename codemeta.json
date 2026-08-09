@@ -3,7 +3,7 @@
   "@type": "SoftwareSourceCode",
   "identifier": "fmrilss",
   "name": "fmrilss",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Implements efficient least squares separate (LSS) analysis for functional magnetic resonance imaging (fMRI) data. LSS is used to estimate trial-by-trial activation patterns in event-related fMRI designs. The package provides both R and C++ implementations for computational efficiency.",
   "title": "Least Squares Separate (LSS) Analysis for fMRI Data",
   "keywords": [
@@ -28,7 +28,7 @@
     {
       "@type": "ComputerLanguage",
       "name": "R",
-      "version": ">= 3.5.0",
+      "version": ">= 4.0.0",
       "url": "https://r-project.org"
     },
     {
@@ -47,7 +47,7 @@
       "@type": "SoftwareApplication",
       "identifier": "R",
       "name": "R",
-      "version": ">= 3.5.0"
+      "version": ">= 4.0.0"
     },
     {
       "@type": "SoftwareApplication",
@@ -235,4 +235,4 @@
     "operatingSystem": ["Linux", "Windows", "macOS"],
     "applicationCategory": "Science"
   }
-} 
+}

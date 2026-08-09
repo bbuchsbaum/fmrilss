@@ -20,7 +20,7 @@ using namespace arma;
 // [[Rcpp::export]]
 Rcpp::List oasis_precompute_design(const arma::mat& X_trials,
                                    const arma::mat& N_nuis) {
-  const uword T = X_trials.n_rows, N = X_trials.n_cols;
+  const uword T = X_trials.n_rows;
   arma::mat Q, Rq;
   if (N_nuis.n_cols > 0) qr_econ(Q, Rq, N_nuis); else Q.set_size(T, 0);
 
@@ -48,6 +48,7 @@ Rcpp::List oasis_AtY_SY_blocked(const arma::mat& A,
                                 const arma::mat& Q,
                                 const arma::mat& Y,
                                 const int block_cols = 4096) {
+  if (block_cols <= 0) stop("block_cols must be positive");
   const uword V = Y.n_cols, N = A.n_cols;
   arma::mat N_Y(N, V, fill::zeros);
   arma::rowvec S_Y(V, fill::zeros);
@@ -137,6 +138,7 @@ Rcpp::List oasis_betas_gammas(const arma::mat& N_Y,
 Rcpp::List oasisk_precompute_design(const arma::mat& X_trials,
                                     const arma::mat& N_nuis,
                                     const int K) {
+  if (K <= 0) stop("K must be positive");
   const uword T = X_trials.n_rows;
   const uword NK = X_trials.n_cols;
   if (NK % K != 0) stop("X_trials ncol not divisible by K.");
@@ -190,6 +192,7 @@ Rcpp::List oasisk_products(const arma::mat& A,
                            const arma::mat& Q,
                            const arma::mat& Y,
                            const int block_cols = 4096) {
+  if (block_cols <= 0) stop("block_cols must be positive");
   const uword V  = Y.n_cols;
   const uword NK = A.n_cols;
   const uword K  = S.n_cols;

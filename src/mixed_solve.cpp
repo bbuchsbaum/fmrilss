@@ -239,7 +239,7 @@ List mixed_solve_internal(NumericVector y_in,
     ML_obj_fun obj_fun(n_filtered, theta, omega_sq, phi);
     roptim::Roptim<ML_obj_fun> opt("L-BFGS-B");
     
-    opt.control.trace = 1;
+    opt.control.trace = 0;
     opt.control.maxit = 1000;
     opt.control.abstol = 1e-8;
     opt.control.reltol = 1e-8;
@@ -286,7 +286,7 @@ List mixed_solve_internal(NumericVector y_in,
     REML_obj_fun obj_fun(n_filtered - p, theta, omega_sq);
     roptim::Roptim<REML_obj_fun> opt("L-BFGS-B");
     
-    opt.control.trace = 1;
+    opt.control.trace = 0;
     opt.control.maxit = 1000;
     opt.control.abstol = 1e-8;
     opt.control.reltol = 1e-8;

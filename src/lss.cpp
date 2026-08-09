@@ -90,15 +90,14 @@ arma::mat lss_compute_cpp(const arma::mat& C,   // projected (n×T)
     return num / den;
 }
 
-// User-friendly exported names
-// [[Rcpp::export]]
+// C++ aliases retained for internal native callers; the public R wrappers call
+// compute_residuals_cpp() and lss_compute_cpp() directly.
 List project_confounds_cpp(const arma::mat& X_confounds,
                            const arma::mat& Y_data,
                            const arma::mat& C_trials) {
     return compute_residuals_cpp(X_confounds, Y_data, C_trials);
 }
 
-// [[Rcpp::export]]
 arma::mat lss_beta_cpp(const arma::mat& C_projected,
                        const arma::mat& Y_projected) {
     return lss_compute_cpp(C_projected, Y_projected);

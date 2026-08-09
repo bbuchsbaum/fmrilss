@@ -36,31 +36,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// project_confounds_cpp
-List project_confounds_cpp(const arma::mat& X_confounds, const arma::mat& Y_data, const arma::mat& C_trials);
-RcppExport SEXP _fmrilss_project_confounds_cpp(SEXP X_confoundsSEXP, SEXP Y_dataSEXP, SEXP C_trialsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type X_confounds(X_confoundsSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type Y_data(Y_dataSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type C_trials(C_trialsSEXP);
-    rcpp_result_gen = Rcpp::wrap(project_confounds_cpp(X_confounds, Y_data, C_trials));
-    return rcpp_result_gen;
-END_RCPP
-}
-// lss_beta_cpp
-arma::mat lss_beta_cpp(const arma::mat& C_projected, const arma::mat& Y_projected);
-RcppExport SEXP _fmrilss_lss_beta_cpp(SEXP C_projectedSEXP, SEXP Y_projectedSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type C_projected(C_projectedSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type Y_projected(Y_projectedSEXP);
-    rcpp_result_gen = Rcpp::wrap(lss_beta_cpp(C_projected, Y_projected));
-    return rcpp_result_gen;
-END_RCPP
-}
 // lss_fused_optim_cpp
 arma::mat lss_fused_optim_cpp(const arma::mat& X, const arma::mat& Y, const arma::mat& C, int block_size);
 RcppExport SEXP _fmrilss_lss_fused_optim_cpp(SEXP XSEXP, SEXP YSEXP, SEXP CSEXP, SEXP block_sizeSEXP) {
@@ -349,8 +324,6 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_compute_residuals_cpp", (DL_FUNC) &_fmrilss_compute_residuals_cpp, 3},
     {"_fmrilss_lss_compute_cpp", (DL_FUNC) &_fmrilss_lss_compute_cpp, 2},
-    {"_fmrilss_project_confounds_cpp", (DL_FUNC) &_fmrilss_project_confounds_cpp, 3},
-    {"_fmrilss_lss_beta_cpp", (DL_FUNC) &_fmrilss_lss_beta_cpp, 2},
     {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 4},
     {"_fmrilss_lss_engine_vox_hrf_cpp", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf_cpp, 4},
     {"_fmrilss_lss_engine_vox_hrf_arma", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf_arma, 4},

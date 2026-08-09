@@ -43,16 +43,25 @@ lss_optimized <- function(Y = NULL, bdes, dset = NULL, use_cpp = TRUE) {
 #' @keywords internal
 #' @noRd
 .project_R_optimized <- function(X, Y, C) {
-  XtX  <- crossprod(X)                # k x k, efficient
-  Xi   <- chol2inv(chol(XtX))         # Fast and stable inverse
-  XtY  <- crossprod(X, Y)             # k x V
-  XtC  <- crossprod(X, C)             # k x T
-  
-  # Return a list of the residualized matrices
-  list(
-    Y_res = Y - (X %*% (Xi %*% XtY)),
-    C_res = C - (X %*% (Xi %*% XtC))
-  )
+  XtX <- crossprod(X)
+  reciprocal_condition <- rcond(XtX)
+  well_conditioned <- is.finite(reciprocal_condition) &&
+    reciprocal_condition > sqrt(.Machine$double.eps)
+
+  if (well_conditioned) {
+    chol_XtX <- tryCatch(chol(XtX), error = function(e) NULL)
+    if (!is.null(chol_XtX)) {
+      XtX_inv <- chol2inv(chol_XtX)
+      return(list(
+        Y_res = Y - X %*% (XtX_inv %*% crossprod(X, Y)),
+        C_res = C - X %*% (XtX_inv %*% crossprod(X, C))
+      ))
+    }
+  }
+
+  # Pivoted QR is the safe fallback for singular or ill-conditioned confounds.
+  qrX <- qr(X)
+  list(Y_res = qr.resid(qrX, Y), C_res = qr.resid(qrX, C))
 }
 
 #' Memory-Efficient and Algebraically Optimized LSS Beta Computation

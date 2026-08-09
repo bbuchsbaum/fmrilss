@@ -119,18 +119,17 @@ oasis_options <- function(
   ...
 ) {
   ridge_mode <- match.arg(ridge_mode)
-  if (!is.null(K)) K <- as.integer(K)
-  if (!is.numeric(ridge_x) || length(ridge_x) != 1L || ridge_x < 0) stop("ridge_x must be a non-negative scalar")
-  if (!is.numeric(ridge_b) || length(ridge_b) != 1L || ridge_b < 0) stop("ridge_b must be a non-negative scalar")
-  block_cols <- as.integer(block_cols)
-  if (!is.finite(block_cols) || block_cols < 1L) stop("block_cols must be a positive integer")
+  if (!is.null(K)) K <- .as_positive_integer(K, "K")
+  ridge_x <- .as_nonnegative_scalar(ridge_x, "ridge_x")
+  ridge_b <- .as_nonnegative_scalar(ridge_b, "ridge_b")
+  block_cols <- .as_positive_integer(block_cols, "block_cols")
 
   opts <- list(
     design_spec = design_spec,
     K = K,
     ridge_mode = ridge_mode,
-    ridge_x = as.numeric(ridge_x),
-    ridge_b = as.numeric(ridge_b),
+    ridge_x = ridge_x,
+    ridge_b = ridge_b,
     block_cols = block_cols,
     return_se = isTRUE(return_se),
     return_diag = isTRUE(return_diag),

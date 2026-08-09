@@ -11,7 +11,6 @@
 #'   \item \code{\link{project_confounds}}: R implementation for projecting out confounds
 #'   \item \code{\link{project_confounds_cpp}}: Fast C++ confound projection
 #'   \item \code{\link{lss_beta_cpp}}: Vectorized C++ LSS beta computation
-#'   \item \code{\link{get_data_matrix}}: Helper function for data extraction
 #' }
 #'
 #' @section Features:

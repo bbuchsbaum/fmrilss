@@ -140,6 +140,3 @@ sbhm_match <- function(beta_bar, S, A,
   }
   out
 }
-
-# local utility for defaulting
-`%||%` <- function(a, b) if (is.null(a)) b else a

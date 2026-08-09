@@ -21,6 +21,7 @@ jobs:
   pkgcheck:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       issues: write
     steps:
       - uses: ropensci-review-tools/pkgcheck-action@main

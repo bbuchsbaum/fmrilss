@@ -1,6 +1,6 @@
 # fmrilss News
 
-## Version 0.2.0 (Development)
+## fmrilss 0.2.0
 
 ### Major Enhancements
 
@@ -14,10 +14,13 @@
 - Works with all LSS methods (r_optimized, cpp_optimized, oasis, etc.)
 - Leverages fmriAR's optimized C++ implementations with OpenMP
 
-#### Backward Compatibility
-- Old `oasis$whiten = "ar1"` syntax remains functional with deprecation notice
-- Automatic conversion to new API format
-- Smooth migration path for existing code
+#### API changes
+- The legacy `oasis$whiten` option is deprecated and ignored. Use the top-level
+  `prewhiten` argument and `prewhiten_options()` instead.
+- Matrix responses are now supported by `mixed_solve()` as documented; each
+  response column is fitted independently.
+- Invalid block sizes and basis dimensions now fail before entering native
+  blocked loops.
 
 ### Documentation Updates
 - Enhanced vignettes with prewhitening examples:
@@ -29,11 +32,16 @@
 ### Testing
 - New test suite for fmriAR integration (`test-fmriAR-integration.R`)
 - Updated existing tests to use new API
-- Backward compatibility tests included
+- Added regression tests for rank-deficient confounds, matrix responses, and
+  blocked-loop contracts.
 
 ### Dependencies
-- Added `fmriAR (>= 0.0.0.9000)` to Imports
-- Added `bbuchsbaum/fmriAR` to Remotes
+- Added `fmriAR (>= 0.3.2)` to Imports.
+- Raised the minimum R version to 4.0, matching the imported `fmriAR` package.
+
+### Maintenance
+- Consolidated the OASIS backend into one implementation owner and removed
+  duplicate helper definitions.
 
 ## Version 0.1.0
 

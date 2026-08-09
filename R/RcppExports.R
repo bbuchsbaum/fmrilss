@@ -9,14 +9,6 @@ lss_compute_cpp <- function(C, Y) {
     .Call(`_fmrilss_lss_compute_cpp`, C, Y)
 }
 
-project_confounds_cpp <- function(X_confounds, Y_data, C_trials) {
-    .Call(`_fmrilss_project_confounds_cpp`, X_confounds, Y_data, C_trials)
-}
-
-lss_beta_cpp <- function(C_projected, Y_projected) {
-    .Call(`_fmrilss_lss_beta_cpp`, C_projected, Y_projected)
-}
-
 #' Fused Single-Pass LSS Solver (C++)
 #'
 #' This function computes Least Squares-Separate (LSS) beta estimates using

@@ -174,16 +174,10 @@ List mixed_precompute_workspace(const arma::mat& X,
     
     // Step 5: Form Q matrix for transformation (reduced rank)
     // Use only the columns corresponding to positive eigenvalues
-    uword effective_rank = pos_idx.n_elem;
     ws.Q = ws.U;  // For simplicity, use eigenvectors directly
     
     // For REML, we need theta = phi (eigenvalues)
     ws.theta = ws.phi;
-    
-    Rcout << "Workspace precomputed successfully:" << std::endl;
-    Rcout << "  - n=" << ws.n << ", p=" << ws.p << ", q=" << ws.q << std::endl;
-    Rcout << "  - Effective rank: " << ws.phi.n_elem << std::endl;
-    Rcout << "  - Using identity K: " << (ws.use_identity_K ? "yes" : "no") << std::endl;
     
   } catch (const std::exception& e) {
     stop("Error in workspace precomputation: " + std::string(e.what()));
@@ -346,8 +340,6 @@ List mixed_multi_voxel_cpp(const arma::mat& Y,
   if (n_threads > 0) {
     omp_set_num_threads(n_threads);
   }
-  int actual_threads = omp_get_max_threads();
-  Rcout << "Using " << actual_threads << " OpenMP threads" << std::endl;
 #endif
   
   // Initialize result matrices

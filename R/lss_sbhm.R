@@ -474,5 +474,3 @@ lss_sbhm <- function(Y, sbhm, design_spec,
 
   .sbhm_alpha_from_beta_rt(proj_rt)
 }
-
-`%||%` <- function(a, b) if (is.null(a)) b else a
