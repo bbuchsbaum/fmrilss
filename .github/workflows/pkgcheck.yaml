@@ -24,6 +24,17 @@ jobs:
       contents: read
       issues: write
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # pkgcheck runs in a Docker action and otherwise sees CRAN only. Use a
+      # project profile so pak can resolve the optional fmridesign integration.
+      - name: Configure R-universe repository
+        run: cp .github/pkgcheck.Rprofile .Rprofile
+
       - uses: ropensci-review-tools/pkgcheck-action@main
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          # The exact ref is already checked out above; preserve the temporary
+          # .Rprofile instead of letting the composite action clean the tree.
+          ref: ''

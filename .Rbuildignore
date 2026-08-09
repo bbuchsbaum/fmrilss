@@ -3,6 +3,7 @@
 ^\.\.Rcheck($|/)
 ^\.git($|/)
 ^\.gitignore$
+^\.Rprofile$
 ^codemeta\.json$
 ^\.github($|/)
 ^_pkgdown\.yml$
