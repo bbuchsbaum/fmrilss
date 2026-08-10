@@ -30,8 +30,14 @@ jobs:
 
       # pkgcheck runs in a Docker action and otherwise sees CRAN only. Use a
       # project profile so pak can resolve the optional fmridesign integration.
-      - name: Configure R-universe repository
-        run: cp .github/pkgcheck.Rprofile .Rprofile
+      # The container runs as root against a runner-owned bind mount, so its
+      # libgit2 also needs the exact mounted path in the container HOME config.
+      - name: Configure pkgcheck container
+        run: |
+          cp .github/pkgcheck.Rprofile .Rprofile
+          mkdir -p "$RUNNER_TEMP/_github_home"
+          git config --file "$RUNNER_TEMP/_github_home/.gitconfig" \
+            --add safe.directory /github/workspace
 
       - uses: ropensci-review-tools/pkgcheck-action@main
         with:
