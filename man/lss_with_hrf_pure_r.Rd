@@ -58,9 +58,20 @@ regressors before LSS (standard residualization). Experimental regressors
 }
 }
 \examples{
-\dontrun{
-betas <- lss_with_hrf_pure_r(Y, onset_idx, durations, basis, coeffs, Z = NULL, Nuisance = NULL)
-betas <- lss_with_hrf_pure_r(Y, onset_idx, durations, basis, coeffs, method = "cpp")
+\donttest{
+set.seed(1)
+Y <- matrix(rnorm(40 * 2), 40, 2)
+onset_idx <- c(5L, 20L, 32L)
+durations <- rep(0L, length(onset_idx))
+time <- 0:12
+basis <- cbind(exp(-time / 3), time * exp(-time / 3))
+coeffs <- matrix(c(1, 0.2, 0.8, -0.1), 2, 2)
+betas <- fmrilss:::lss_with_hrf_pure_r(
+  Y, onset_idx, durations, basis, coeffs, Z = NULL, Nuisance = NULL
+)
+betas_cpp <- fmrilss:::lss_with_hrf_pure_r(
+  Y, onset_idx, durations, basis, coeffs, method = "cpp"
+)
 }
 }
 \keyword{internal}

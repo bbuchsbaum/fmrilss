@@ -75,7 +75,7 @@ baseline-removed and L2-normalized, and decomposed via SVD into
 \code{A = diag(S) \%*\% t(V_r)}.
 }
 \examples{
-\dontrun{
+\donttest{
   library(fmrihrf)
   param_grid <- expand.grid(shape = c(6, 8, 10), rate = c(0.9, 1.0, 1.1))
   gamma_fun  <- function(shape, rate) fmrihrf::as_hrf(

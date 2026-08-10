@@ -78,7 +78,7 @@ u ~ N(0, Vu\emph{K) and error ~ N(0, Ve}I). The variance components Vu and Ve
 are estimated using REML or ML.
 }
 \examples{
-\dontrun{
+\donttest{
 set.seed(123)
 n <- 100
 Y <- rnorm(n)

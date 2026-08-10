@@ -29,7 +29,7 @@
 #'   - `diag`    list with K=r, ntrials, times, used_prewhiten
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #'   library(fmrihrf)
 #'   set.seed(1)
 #'   Tlen <- 120; V <- 5; r <- 4
@@ -37,6 +37,7 @@
 #'   H <- cbind(exp(-seq(0, 30, length.out = Tlen)/4),
 #'              exp(-seq(0, 30, length.out = Tlen)/6))
 #'   sbhm <- sbhm_build(library_H = H, r = r, sframe = sframe, normalize = TRUE)
+#'   r <- ncol(sbhm$B)
 #'   onsets <- seq(5, 95, by = 10)
 #'   design_spec <- list(sframe = sframe, cond = list(onsets = onsets, duration = 0, span = 30))
 #'   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)

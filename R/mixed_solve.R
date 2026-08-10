@@ -38,7 +38,7 @@
 #' are estimated using REML or ML.
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' set.seed(123)
 #' n <- 100
 #' Y <- rnorm(n)

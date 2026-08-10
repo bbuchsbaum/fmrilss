@@ -209,7 +209,7 @@
 #' Nuisance <- matrix(rnorm(n_timepoints * 6), n_timepoints, 6)
 #' beta_estimates_clean <- lss(Y, X, Z = Z, Nuisance = Nuisance)
 #'
-#' \dontrun{
+#' \donttest{
 #' beta_oasis <- lss(Y, X, method = "oasis",
 #'                   oasis = list(ridge_x = 0.1, ridge_b = 0.1,
 #'                               ridge_mode = "fractional"))
@@ -219,19 +219,19 @@
 #' beta_estimates <- result_with_se$beta
 #' standard_errors <- result_with_se$se
 #'
-#'   sframe <- sampling_frame(blocklens = 200, TR = 1.0)
+#'   sframe <- fmrihrf::sampling_frame(blocklens = nrow(Y), TR = 1.0)
 #'
 #'   beta_auto <- lss(Y, X = NULL, method = "oasis",
 #'                    oasis = list(
 #'                      design_spec = list(
 #'                        sframe = sframe,
 #'                        cond = list(
-#'                          onsets = c(10, 30, 50, 70, 90, 110, 130, 150),
-#'                          hrf = HRF_SPMG1,
+#'                          onsets = c(10, 30, 50, 70),
+#'                          hrf = fmrihrf::HRF_SPMG1,
 #'                          span = 25
 #'                        ),
 #'                        others = list(
-#'                          list(onsets = c(20, 40, 60, 80, 100, 120, 140))
+#'                          list(onsets = c(20, 40, 60, 80))
 #'                        )
 #'                      )
 #'                    ))
@@ -241,8 +241,8 @@
 #'                           design_spec = list(
 #'                             sframe = sframe,
 #'                             cond = list(
-#'                               onsets = c(10, 30, 50, 70, 90),
-#'                               hrf = HRF_SPMG3,
+#'                               onsets = c(10, 30, 50, 70),
+#'                               hrf = fmrihrf::HRF_SPMG3,
 #'                               span = 30
 #'                             )
 #'                           ),
@@ -632,9 +632,10 @@ get_data_matrix <- function(dset) {
 #' Q can be applied to data to remove the influence of confound regressors.
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' n <- 100
 #' X_confounds <- cbind(1, 1:n)
+#' Y_raw <- matrix(rnorm(n * 3), n, 3)
 #'
 #' Q <- project_confounds(X_confounds)
 #'

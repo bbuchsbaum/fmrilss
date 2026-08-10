@@ -52,7 +52,7 @@ generate_rapid_design <- function(n_events = 25,
 #' @param seed Random seed
 #' @return List with Y (data matrix), true_hrf, true_betas, and design info
 #' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
-#' \dontrun{
+#' \donttest{
 #' onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
 #' sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
 #' dim(sim$Y)
@@ -211,7 +211,7 @@ create_lwu_grid <- function(tau_range = c(4, 8),
 #' @param ridge_b Ridge parameter for aggregator
 #' @return List with best HRF index, parameters, and beta estimates
 #' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
-#' \dontrun{
+#' \donttest{
 #' onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
 #' sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
 #' grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
@@ -359,7 +359,7 @@ fit_oasis_grid <- function(Y, onsets, sframe, hrf_grid,
 #' @param hrf_grid Optional pre-computed HRF grid for OASIS
 #' @return List with results from all methods
 #' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
-#' \dontrun{
+#' \donttest{
 #' onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
 #' sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
 #' grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
@@ -454,7 +454,7 @@ compare_hrf_recovery <- function(data, hrf_grid = NULL) {
 #' @param true_hrf Ground truth HRF
 #' @return Data frame with recovery metrics
 #' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
-#' \dontrun{
+#' \donttest{
 #' onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
 #' sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
 #' grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
@@ -564,7 +564,7 @@ calculate_recovery_metrics <- function(results, true_hrf) {
 #' @return A `ggplot2` plot object. When `save_path` is supplied, the same plot
 #'   is also written to disk.
 #' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
-#' \dontrun{
+#' \donttest{
 #' onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
 #' sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
 #' grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)

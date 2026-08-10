@@ -119,7 +119,8 @@ ridge is already configured via \code{oasis$ridge_x} or \code{oasis$ridge_b})
 }
 }
 \examples{
-\dontrun{
+\dontshow{if (requireNamespace("fmridesign", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+\donttest{
 library(fmridesign)
 library(fmrihrf)
 
@@ -154,7 +155,7 @@ beta <- lss_design(Y, emod, bmodel, method = "oasis")
 
 dim(beta)
 }
-
+\dontshow{\}) # examplesIf}
 }
 \seealso{
 \code{\link{lss}} for the traditional matrix-based interface,

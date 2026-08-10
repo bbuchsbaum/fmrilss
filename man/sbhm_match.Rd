@@ -65,7 +65,7 @@ simple shrinkage of \code{beta_bar} towards a reference coordinate before
 matching, and an orientation fix.
 }
 \examples{
-\dontrun{
+\donttest{
   set.seed(42)
   r <- 4; K <- 12; V <- 3
   A <- matrix(rnorm(r*K), r, K)

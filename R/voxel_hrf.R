@@ -6,7 +6,7 @@
 #' @return No value itself. This topic documents the structure returned by
 #'   `estimate_voxel_hrf()`.
 #' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
-#' \dontrun{
+#' \donttest{
 #' Y <- matrix(rnorm(100), 50, 2)
 #' events <- data.frame(onset = c(5, 25), duration = 1, condition = "A")
 #' basis <- fmrihrf::HRF_SPMG1
@@ -23,7 +23,7 @@ NULL
 #' @return No value itself. This topic documents the object returned by
 #'   `lss_with_hrf(..., engine = "C++")`.
 #' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
-#' \dontrun{
+#' \donttest{
 #' Y <- matrix(rnorm(100), 50, 2)
 #' events <- data.frame(onset = c(5, 25), duration = 1, condition = "A")
 #' basis <- fmrihrf::HRF_SPMG1
@@ -43,21 +43,22 @@ NULL
 #' @param nuisance_regs Optional numeric matrix of nuisance regressors.
 #'
 #' @return A \link{VoxelHRF} object containing at least:
-#'   \item{coefficients}{Matrix of HRF basis coefficients.}
+#'   \item{coefficients}{Matrix of HRF basis coefficients with one row per
+#'     basis function and one column per voxel.}
 #'   \item{basis}{The HRF basis object used.}
 #'   \item{conditions}{Character vector of modeled conditions.}
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' set.seed(1)
 #' Y <- matrix(rnorm(100), 50, 2)
 #' events <- data.frame(onset = c(5, 25), duration = 1,
 #'                      condition = "A")
-#' basis <- fmrihrf::hrf_gamma()
+#' basis <- fmrihrf::HRF_SPMG1
 #' sframe <- fmrihrf::sampling_frame(blocklens = nrow(Y), TR = 1)
 #' times <- fmrihrf::samples(sframe, global = TRUE)
 #' rset <- fmrihrf::regressor_set(onsets = events$onset,
-#'                                fac = factor(1:nrow(events)),
+#'                                fac = factor(rep("all events", nrow(events))),
 #'                                hrf = basis, duration = events$duration,
 #'                                span = 30)
 #' X <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")
@@ -96,10 +97,12 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL) {
   sframe <- fmrihrf::sampling_frame(blocklens = nrow(Y), TR = 1)
   times <- fmrihrf::samples(sframe, global = TRUE)
   
-  # Build regressor set with correct API
+  # Pool events into one condition so the fitted coefficient matrix has one
+  # row per HRF basis function. lss_with_hrf() consumes this K x V contract;
+  # using a trial-wise factor here would instead produce (K * n_trials) x V.
   rset <- fmrihrf::regressor_set(
     onsets = events$onset,
-    fac = factor(seq_len(nrow(events))),
+    fac = factor(rep("all events", nrow(events))),
     hrf = basis,
     duration = events$duration,
     span = if (!is.null(attr(basis, "span"))) attr(basis, "span") else 30
@@ -144,16 +147,16 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL) {
 #'   (n_trials x n_vox) for R engine.
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' set.seed(1)
 #' Y <- matrix(rnorm(100), 50, 2)
 #' events <- data.frame(onset = c(5, 25), duration = 1,
 #'                      condition = "A")
-#' basis <- fmrihrf::hrf_gamma()
+#' basis <- fmrihrf::HRF_SPMG1
 #' sframe <- fmrihrf::sampling_frame(blocklens = nrow(Y), TR = 1)
 #' times <- fmrihrf::samples(sframe, global = TRUE)
 #' rset <- fmrihrf::regressor_set(onsets = events$onset,
-#'                                fac = factor(1:nrow(events)),
+#'                                fac = factor(rep("all events", nrow(events))),
 #'                                hrf = basis, duration = events$duration,
 #'                                span = 30)
 #' X <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")

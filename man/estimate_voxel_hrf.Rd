@@ -17,7 +17,8 @@ estimate_voxel_hrf(Y, events, basis, nuisance_regs = NULL)
 }
 \value{
 A \link{VoxelHRF} object containing at least:
-\item{coefficients}{Matrix of HRF basis coefficients.}
+\item{coefficients}{Matrix of HRF basis coefficients with one row per
+basis function and one column per voxel.}
 \item{basis}{The HRF basis object used.}
 \item{conditions}{Character vector of modeled conditions.}
 }
@@ -25,16 +26,16 @@ A \link{VoxelHRF} object containing at least:
 Fits a GLM to estimate HRF basis coefficients for every voxel.
 }
 \examples{
-\dontrun{
+\donttest{
 set.seed(1)
 Y <- matrix(rnorm(100), 50, 2)
 events <- data.frame(onset = c(5, 25), duration = 1,
                      condition = "A")
-basis <- fmrihrf::hrf_gamma()
+basis <- fmrihrf::HRF_SPMG1
 sframe <- fmrihrf::sampling_frame(blocklens = nrow(Y), TR = 1)
 times <- fmrihrf::samples(sframe, global = TRUE)
 rset <- fmrihrf::regressor_set(onsets = events$onset,
-                               fac = factor(1:nrow(events)),
+                               fac = factor(rep("all events", nrow(events))),
                                hrf = basis, duration = events$duration,
                                span = 30)
 X <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")

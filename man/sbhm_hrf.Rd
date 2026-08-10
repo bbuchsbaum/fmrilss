@@ -24,8 +24,12 @@ r basis columns evaluated at arbitrary times by piecewise-linear
 interpolation on the provided time grid.
 }
 \examples{
-\dontrun{
-  hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
+\donttest{
+  tgrid <- 0:30
+  candidates <- cbind(exp(-tgrid / 5), tgrid * exp(-tgrid / 5))
+  B <- qr.Q(qr(candidates))
+  hrf_B <- sbhm_hrf(B, tgrid, span = 30)
+  fmrihrf::nbasis(hrf_B)
 }
 
 }

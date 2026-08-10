@@ -91,8 +91,8 @@
 #'   \item Compatibility: event_model and baseline_model use same sampling_frame
 #' }
 #'
-#' @examples
-#' \dontrun{
+#' @examplesIf requireNamespace("fmridesign", quietly = TRUE)
+#' \donttest{
 #' library(fmridesign)
 #' library(fmrihrf)
 #'

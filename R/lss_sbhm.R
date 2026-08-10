@@ -62,7 +62,7 @@
 #'   - `diag` list with `r`, `ntrials`, and `times`
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #'   library(fmrihrf)
 #'   set.seed(3)
 #'   Tlen <- 180; V <- 4

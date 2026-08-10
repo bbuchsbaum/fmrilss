@@ -14,11 +14,13 @@
 #' @return Numeric matrix ntrials x V of scalar amplitudes.
 #'
 #' @examples
-#' \dontrun{
-#'   r <- nrow(alpha_hat)
-#'   ntrials <- nrow(beta_mat) / r
-#'   beta_rt <- array(beta_mat, dim = c(r, ntrials, ncol(beta_mat)))
+#' \donttest{
+#'   set.seed(1)
+#'   r <- 2; ntrials <- 3; nvox <- 2
+#'   alpha_hat <- matrix(rnorm(r * nvox), r, nvox)
+#'   beta_rt <- array(rnorm(r * ntrials * nvox), c(r, ntrials, nvox))
 #'   amps <- sbhm_project(beta_rt, alpha_hat)
+#'   dim(amps)
 #' }
 #'
 #' @export

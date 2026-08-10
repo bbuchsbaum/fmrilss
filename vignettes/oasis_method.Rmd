@@ -14,6 +14,7 @@ resource_files:
 - albers.css
 - albers.js
 - albers-header.html
+- fonts
 
 vignette: |
   %\VignetteIndexEntry{The OASIS Method: Optimized Analytic Single-pass Inverse Solution}
@@ -22,6 +23,8 @@ vignette: |
 ---
 
 ```{r setup-opts, include = FALSE}
+if (requireNamespace("ragg", quietly = TRUE)) knitr::opts_chunk$set(dev = "ragg_png")
+if (requireNamespace("systemfonts", quietly = TRUE)) albersdown::albers_register_fonts()
 if (requireNamespace("ggplot2", quietly = TRUE) &&
     requireNamespace("albersdown", quietly = TRUE)) {
   ggplot2::theme_set(
@@ -44,7 +47,7 @@ knitr::opts_chunk$set(
 cat(sprintf(
   paste0(
     '<script>document.addEventListener("DOMContentLoaded",function(){',
-    'document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-study","preset-structural","preset-adobe","preset-midnight");',
+    'document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");',
     'document.body.classList.add("palette-%s","preset-%s");',
     '});</script>'
   ),
@@ -52,6 +55,7 @@ cat(sprintf(
   params$preset
 ))
 ```
+
 
 ```{r setup}
 library(fmrihrf)

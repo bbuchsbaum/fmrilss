@@ -15,9 +15,9 @@
 #' This approach uses ~100x less memory for large n and is numerically more stable.
 #'
 #' @examples
-#' \dontrun{
-#' n <- 200; k <- 5; V <- 1000; T <- 50
-#' X_confounds <- cbind(1, 1:n, rnorm(n*3))
+#' \donttest{
+#' n <- 100; V <- 50; T <- 10
+#' X_confounds <- cbind(1, seq_len(n), matrix(rnorm(n * 3), n, 3))
 #' Y_data <- matrix(rnorm(n*V), n, V)
 #' C_trials <- matrix(rnorm(n*T), n, T)
 #'
@@ -49,7 +49,11 @@ project_confounds_cpp <- function(X_confounds, Y_data, C_trials) {
 #' optimized BLAS (like OpenBLAS or Intel MKL).
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
+#' n <- 40; V <- 3; T <- 4
+#' X_confounds <- cbind(1, seq_len(n))
+#' Y_data <- matrix(rnorm(n * V), n, V)
+#' C_trials <- matrix(rnorm(n * T), n, T)
 #' result <- project_confounds_cpp(X_confounds, Y_data, C_trials)
 #' betas <- lss_beta_cpp(result$Q_dmat_ran, result$residual_data)
 #' }

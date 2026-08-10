@@ -17,7 +17,7 @@ test_that("estimate_voxel_hrf recovers known coefficients", {
   sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = 1)
   times <- fmrihrf::samples(sframe, global = TRUE)
   rset <- fmrihrf::regressor_set(onsets = events$onset, 
-                                 fac = factor(1:nrow(events)),
+                                 fac = factor(rep("all events", nrow(events))),
                                  hrf = basis,
                                  duration = events$duration,
                                  span = 30)

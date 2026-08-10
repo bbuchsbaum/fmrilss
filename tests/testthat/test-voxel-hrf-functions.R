@@ -80,6 +80,7 @@ test_that("estimate_voxel_hrf returns VoxelHRF object", {
   expect_true("basis" %in% names(result))
   expect_true("conditions" %in% names(result))
   expect_true(is.matrix(result$coefficients))
+  expect_equal(dim(result$coefficients), c(fmrihrf::nbasis(basis), n_vox))
 })
 
 test_that("estimate_voxel_hrf works with nuisance regressors", {
@@ -185,15 +186,45 @@ test_that("lss_with_hrf validates chunk_size", {
 
 test_that("lss_with_hrf R engine works", {
   skip_if_not_installed("fmrihrf")
-  # Skip due to dimension mismatch between estimate_voxel_hrf coefficients and lss_with_hrf requirements
-  # This is a known integration complexity - the functions require careful coefficient setup
-  skip("lss_with_hrf R engine tested in test-lss-with-hrf.R with properly configured VoxelHRF")
+
+  set.seed(345)
+  Y <- matrix(rnorm(60 * 3), 60, 3)
+  events <- data.frame(
+    onset = c(5, 20, 40), duration = 1, condition = "A"
+  )
+  estimate <- estimate_voxel_hrf(Y, events, fmrihrf::HRF_SPMG3)
+
+  expect_equal(
+    dim(estimate$coefficients),
+    c(fmrihrf::nbasis(fmrihrf::HRF_SPMG3), ncol(Y))
+  )
+
+  betas <- lss_with_hrf(
+    Y, events, estimate, engine = "R", verbose = FALSE
+  )
+  expect_equal(dim(betas), c(nrow(events), ncol(Y)))
+  expect_true(all(is.finite(betas)))
 })
 
 test_that("lss_with_hrf handles nuisance regressors", {
   skip_if_not_installed("fmrihrf")
-  # Skip due to dimension mismatch between estimate_voxel_hrf coefficients and lss_with_hrf requirements
-  skip("lss_with_hrf nuisance tested in test-lss-with-hrf.R with properly configured VoxelHRF")
+
+  set.seed(456)
+  Y <- matrix(rnorm(60 * 2), 60, 2)
+  events <- data.frame(
+    onset = c(5, 20, 40), duration = 1, condition = "A"
+  )
+  nuisance <- cbind(linear = scale(seq_len(nrow(Y))))
+  estimate <- estimate_voxel_hrf(
+    Y, events, fmrihrf::HRF_SPMG1, nuisance_regs = nuisance
+  )
+  betas <- lss_with_hrf(
+    Y, events, estimate, nuisance_regs = nuisance,
+    engine = "R", verbose = FALSE
+  )
+
+  expect_equal(dim(betas), c(nrow(events), ncol(Y)))
+  expect_true(all(is.finite(betas)))
 })
 
 test_that("lss_with_hrf engine argument is validated", {

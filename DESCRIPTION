@@ -38,7 +38,9 @@ Suggests:
     progress,
     fmridesign,
     Matrix,
-    albersdown
+    albersdown,
+    ragg,
+    systemfonts
 Additional_repositories: https://bbuchsbaum.r-universe.dev
 VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE)

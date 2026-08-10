@@ -46,7 +46,7 @@ Creates synthetic fMRI time series using specified LWU HRF parameters
 }
 \examples{
 \dontshow{if (requireNamespace("fmrihrf", quietly = TRUE)) withAutoprint(\{ # examplesIf}
-\dontrun{
+\donttest{
 onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
 sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
 dim(sim$Y)

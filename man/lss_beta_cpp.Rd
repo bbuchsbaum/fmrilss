@@ -28,7 +28,11 @@ For best performance on large datasets, ensure your R installation uses
 optimized BLAS (like OpenBLAS or Intel MKL).
 }
 \examples{
-\dontrun{
+\donttest{
+n <- 40; V <- 3; T <- 4
+X_confounds <- cbind(1, seq_len(n))
+Y_data <- matrix(rnorm(n * V), n, V)
+C_trials <- matrix(rnorm(n * T), n, T)
 result <- project_confounds_cpp(X_confounds, Y_data, C_trials)
 betas <- lss_beta_cpp(result$Q_dmat_ran, result$residual_data)
 }

@@ -34,7 +34,7 @@
 #'   - `weights` optional top-K weights per voxel (when topK > 1)
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #'   set.seed(42)
 #'   r <- 4; K <- 12; V <- 3
 #'   A <- matrix(rnorm(r*K), r, K)

@@ -24,9 +24,10 @@ computing the Moore-Penrose pseudoinverse directly. The resulting matrix
 Q can be applied to data to remove the influence of confound regressors.
 }
 \examples{
-\dontrun{
+\donttest{
 n <- 100
 X_confounds <- cbind(1, 1:n)
+Y_raw <- matrix(rnorm(n * 3), n, 3)
 
 Q <- project_confounds(X_confounds)
 

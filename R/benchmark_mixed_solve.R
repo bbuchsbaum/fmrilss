@@ -10,7 +10,7 @@
 #' @param n_reps Number of repetitions for benchmarking
 #' @return Data frame with timing results
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' X <- matrix(rnorm(100 * 2), 100, 2)
 #' Z <- matrix(rnorm(100 * 3), 100, 3)
 #' Y <- matrix(rnorm(100 * 5), 100, 5)

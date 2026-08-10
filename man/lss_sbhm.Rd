@@ -102,7 +102,7 @@ If you already use \code{fmridesign}, prefer \code{\link[=lss_sbhm_design]{lss_s
 assembling an OASIS \code{design_spec}.
 }
 \examples{
-\dontrun{
+\donttest{
   library(fmrihrf)
   set.seed(3)
   Tlen <- 180; V <- 4

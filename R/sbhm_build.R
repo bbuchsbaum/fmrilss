@@ -42,7 +42,7 @@
 #'   - `meta`: list with `r`, `K`, `normalize`, `baseline`
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #'   library(fmrihrf)
 #'   param_grid <- expand.grid(shape = c(6, 8, 10), rate = c(0.9, 1.0, 1.1))
 #'   gamma_fun  <- function(shape, rate) fmrihrf::as_hrf(
