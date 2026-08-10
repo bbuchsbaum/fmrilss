@@ -126,7 +126,7 @@ estimated using REML or ML.
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
 set.seed(123)
 n <- 100
 Y <- rnorm(n)
@@ -135,5 +135,5 @@ K <- diag(5)
 X <- matrix(1, n, 1)
 
 result <- mixed_solve(Y, X, Z, K)
-} # }
+# }
 ```

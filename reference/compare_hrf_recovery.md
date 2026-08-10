@@ -25,11 +25,17 @@ List with results from all methods
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
 onsets <- generate_rapid_design(n_events = 4, total_time = 60, seed = 1)
 sim <- generate_lwu_data(onsets, total_time = 60, n_voxels = 2, seed = 1)
 grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
 res <- compare_hrf_recovery(sim, hrf_grid = grid)
+#> Fitting OASIS with HRF grid search...
+#> Fitting SPMG1...
+#> Fitting SPMG3...
+#> Fitting FIR...
 names(res)
-} # }
+#> [1] "oasis"       "spmg1"       "spmg3"       "fir"         "true_hrf"   
+#> [6] "true_params" "true_betas" 
+# }
 ```

@@ -64,16 +64,16 @@ C++ engine, or a numeric matrix (n_trials x n_vox) for R engine.
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
 set.seed(1)
 Y <- matrix(rnorm(100), 50, 2)
 events <- data.frame(onset = c(5, 25), duration = 1,
                      condition = "A")
-basis <- fmrihrf::hrf_gamma()
+basis <- fmrihrf::HRF_SPMG1
 sframe <- fmrihrf::sampling_frame(blocklens = nrow(Y), TR = 1)
 times <- fmrihrf::samples(sframe, global = TRUE)
 rset <- fmrihrf::regressor_set(onsets = events$onset,
-                               fac = factor(1:nrow(events)),
+                               fac = factor(rep("all events", nrow(events))),
                                hrf = basis, duration = events$duration,
                                span = 30)
 X <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")
@@ -82,5 +82,6 @@ Y <- X %*% coef + Y * 0.1
 est <- estimate_voxel_hrf(Y, events, basis)
 betas <- lss_with_hrf(Y, events, est, verbose = FALSE, engine = "R")
 dim(betas)
-} # }
+#> [1] 2 2
+# }
 ```

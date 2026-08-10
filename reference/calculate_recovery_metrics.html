@@ -70,13 +70,21 @@
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
 <span class="r-in"><span><span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="generate_rapid_design.html">generate_rapid_design</a></span><span class="op">(</span>n_events <span class="op">=</span> <span class="fl">4</span>, total_time <span class="op">=</span> <span class="fl">60</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">sim</span> <span class="op">&lt;-</span> <span class="fu"><a href="generate_lwu_data.html">generate_lwu_data</a></span><span class="op">(</span><span class="va">onsets</span>, total_time <span class="op">=</span> <span class="fl">60</span>, n_voxels <span class="op">=</span> <span class="fl">2</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">grid</span> <span class="op">&lt;-</span> <span class="fu"><a href="create_lwu_grid.html">create_lwu_grid</a></span><span class="op">(</span>n_tau <span class="op">=</span> <span class="fl">2</span>, n_sigma <span class="op">=</span> <span class="fl">2</span>, n_rho <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="compare_hrf_recovery.html">compare_hrf_recovery</a></span><span class="op">(</span><span class="va">sim</span>, hrf_grid <span class="op">=</span> <span class="va">grid</span><span class="op">)</span></span></span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Fitting OASIS with HRF grid search...</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Fitting SPMG1...</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Fitting SPMG3...</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Fitting FIR...</span>
 <span class="r-in"><span><span class="fu">calculate_recovery_metrics</span><span class="op">(</span><span class="va">res</span>, <span class="va">sim</span><span class="op">$</span><span class="va">true_hrf</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   method        mse correlation peak_time_error width_error beta_correlation</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  OASIS 0.09837911   0.5481435               2           1       -0.1939123</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2  SPMG1 0.10810231   0.9199958               1          NA        0.2827130</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3  SPMG3 0.10810231   0.9199958               1          NA       -0.1939123</span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

@@ -99,6 +99,6 @@ beta_estimates_naive <- lss_naive(Y = Y, bdes = bdes)
 
 beta_estimates_fast <- lss(Y = Y, X = X, Z = Z)
 max(abs(beta_estimates_naive - beta_estimates_fast))
-#> [1] 4.440892e-16
+#> [1] 8.881784e-16
 # }
 ```

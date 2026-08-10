@@ -161,9 +161,22 @@ for baseline model creation
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
 library(fmridesign)
+#> 
+#> Attaching package: ‘fmridesign’
+#> The following objects are masked from ‘package:stats’:
+#> 
+#>     contrasts, convolve
 library(fmrihrf)
+#> 
+#> Attaching package: ‘fmrihrf’
+#> The following objects are masked from ‘package:fmridesign’:
+#> 
+#>     blockids, durations, nbasis, onsets
+#> The following object is masked from ‘package:stats’:
+#> 
+#>     deriv
 
 sframe <- sampling_frame(blocklens = c(150, 150), TR = 2)
 
@@ -193,7 +206,9 @@ bmodel <- baseline_model(
 
 Y <- matrix(rnorm(300 * 1000), 300, 1000)
 beta <- lss_design(Y, emod, bmodel, method = "oasis")
+#> Warning: High collinearity detected (condition number = 126.3). Consider ridge via oasis$ridge_*
 
 dim(beta)
-} # }
+#> [1]   12 1000
+# }
 ```

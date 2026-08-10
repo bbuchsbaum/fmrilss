@@ -85,12 +85,29 @@ optimized <code>mixed_solve_optimized</code> version.</p>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
 <span class="r-in"><span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">100</span> <span class="op">*</span> <span class="fl">2</span><span class="op">)</span>, <span class="fl">100</span>, <span class="fl">2</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">Z</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">100</span> <span class="op">*</span> <span class="fl">3</span><span class="op">)</span>, <span class="fl">100</span>, <span class="fl">3</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">Y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">100</span> <span class="op">*</span> <span class="fl">5</span><span class="op">)</span>, <span class="fl">100</span>, <span class="fl">5</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">benchmark_mixed_solve</span><span class="op">(</span><span class="va">X</span>, <span class="va">Z</span>, Y <span class="op">=</span> <span class="va">Y</span>, n_reps <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Benchmarking mixed model implementations...</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Data: n = 100 , p = 2 , q = 3 , voxels = 5 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Testing standard mixed_solve...</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Testing optimized mixed_solve...</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Results:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>      method   mean_time median_time    min_time    max_time      sd_time</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  standard 0.005742908 0.005742908 0.005315542 0.006170273 0.0006043858</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2 optimized 0.012535453 0.012535453 0.009130478 0.015940428 0.0048153617</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Per-voxel timing:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Standard: 0.0011 sec/voxel</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Optimized: 0.0025 sec/voxel</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Speedup: 0.46x </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>      method   mean_time median_time    min_time    max_time      sd_time</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  standard 0.005742908 0.005742908 0.005315542 0.006170273 0.0006043858</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2 optimized 0.012535453 0.012535453 0.009130478 0.015940428 0.0048153617</span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

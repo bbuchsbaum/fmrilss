@@ -96,7 +96,7 @@ Notes:
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
   library(fmrihrf)
   set.seed(1)
   Tlen <- 120; V <- 5; r <- 4
@@ -104,6 +104,7 @@ if (FALSE) { # \dontrun{
   H <- cbind(exp(-seq(0, 30, length.out = Tlen)/4),
              exp(-seq(0, 30, length.out = Tlen)/6))
   sbhm <- sbhm_build(library_H = H, r = r, sframe = sframe, normalize = TRUE)
+  r <- ncol(sbhm$B)
   onsets <- seq(5, 95, by = 10)
   design_spec <- list(sframe = sframe, cond = list(onsets = onsets, duration = 0, span = 30))
   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
@@ -114,6 +115,15 @@ if (FALSE) { # \dontrun{
   Y[,1] <- Y[,1] + X %*% betas_true
   pre <- sbhm_prepass(Y, sbhm, design_spec)
   str(pre)
-} # }
+#> List of 4
+#>  $ beta_bar: num [1:2, 1:5] -1.112 0.135 1.689 0.385 -3.239 ...
+#>  $ A_agg   : num [1:120, 1:2] -0.135 -0.135 -0.135 -0.135 -0.135 ...
+#>  $ G       : num [1:2, 1:2] 0.4 -0.889 -0.889 2.095
+#>  $ diag    :List of 4
+#>   ..$ K             : int 2
+#>   ..$ ntrials       : int 10
+#>   ..$ times         : num [1:120] 0.5 1.5 2.5 3.5 4.5 5.5 6.5 7.5 8.5 9.5 ...
+#>   ..$ used_prewhiten: logi FALSE
+# }
 
 ```

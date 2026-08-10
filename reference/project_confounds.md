@@ -30,12 +30,13 @@ Q can be applied to data to remove the influence of confound regressors.
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
 n <- 100
 X_confounds <- cbind(1, 1:n)
+Y_raw <- matrix(rnorm(n * 3), n, 3)
 
 Q <- project_confounds(X_confounds)
 
 Y_clean <- Q %*% Y_raw
-} # }
+# }
 ```

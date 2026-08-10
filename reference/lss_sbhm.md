@@ -159,7 +159,7 @@ to avoid manually assembling an OASIS `design_spec`.
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
   library(fmrihrf)
   set.seed(3)
   Tlen <- 180; V <- 4
@@ -180,5 +180,7 @@ if (FALSE) { # \dontrun{
                   match = list(topK = 3, soft_blend = TRUE),
                   return = "amplitude")
   names(out)
-} # }
+#> [1] "matched_idx"  "margin"       "alpha_coords" "diag"         "topK_idx"    
+#> [6] "weights"      "alpha_mode"   "amplitude"   
+# }
 ```

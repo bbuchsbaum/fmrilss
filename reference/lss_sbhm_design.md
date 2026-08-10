@@ -108,13 +108,17 @@ regressors for projection.
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
   library(fmridesign)
-  sframe <- fmrihrf::sampling_frame(blocklens = c(150, 150), TR = 2)
-  trials <- data.frame(onset = c(10,30,50, 10,30,50), run = rep(1:2, each=3))
+  sframe <- fmrihrf::sampling_frame(blocklens = 60, TR = 1)
+  trials <- data.frame(onset = c(5, 20, 35), run = 1)
   emod <- event_model(onset ~ trialwise(basis = "spmg1"), data = trials,
                       block = ~run, sampling_frame = sframe)
-  Y <- matrix(rnorm(300*100), 300, 100)
+  times <- fmrihrf::samples(sframe, global = TRUE)
+  H <- cbind(exp(-times / 5), exp(-times / 7))
+  sbhm <- sbhm_build(library_H = H, r = 2, sframe = sframe,
+                     normalize = TRUE, baseline = NULL)
+  Y <- matrix(rnorm(60 * 4), 60, 4)
   out <- lss_sbhm_design(Y, sbhm, emod)
-} # }
+# }
 ```

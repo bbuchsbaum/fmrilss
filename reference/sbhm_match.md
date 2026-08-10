@@ -92,7 +92,7 @@ A list with:
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
   set.seed(42)
   r <- 4; K <- 12; V <- 3
   A <- matrix(rnorm(r*K), r, K)
@@ -103,5 +103,6 @@ if (FALSE) { # \dontrun{
                     A[,10] + rnorm(r, sd = 0.1))
   m <- sbhm_match(beta_bar, S, A)
   m$idx
-} # }
+#> [1] 10  7 10
+# }
 ```

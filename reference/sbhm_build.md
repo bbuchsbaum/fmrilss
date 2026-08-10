@@ -115,7 +115,7 @@ A list with components:
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
   library(fmrihrf)
   param_grid <- expand.grid(shape = c(6, 8, 10), rate = c(0.9, 1.0, 1.1))
   gamma_fun  <- function(shape, rate) fmrihrf::as_hrf(
@@ -129,5 +129,5 @@ if (FALSE) { # \dontrun{
   )
 
   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
-} # }
+# }
 ```
