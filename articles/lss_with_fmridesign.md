@@ -1,6 +1,7 @@
 # Using fmridesign with fmrilss
 
 ``` r
+
 library(fmrilss)
 library(fmridesign)
 library(fmrihrf)
@@ -44,6 +45,7 @@ We’ll build a small two-run experiment from scratch so every piece of
 the workflow is visible. Start with the run-level parameters:
 
 ``` r
+
 set.seed(123)
 n_scans_per_run <- 150
 n_runs          <- 2
@@ -55,6 +57,7 @@ Next, a trial table with run-relative onsets — six trials per run — and
 the matching sampling frame:
 
 ``` r
+
 trials <- data.frame(
   onset = rep(c(10, 30, 50, 70, 90, 110), times = 2),
   run   = rep(1:2, each = 6)
@@ -66,6 +69,7 @@ Build a trial-wise event model, then extract the design matrix used to
 generate the signal:
 
 ``` r
+
 emod_sim <- event_model(
   onset ~ trialwise(basis = "spmg1"),
   data = trials, block = ~run, sampling_frame = sframe
@@ -76,6 +80,7 @@ X_trial <- as.matrix(design_matrix(emod_sim))
 A per-run intercept + linear drift serves as the baseline:
 
 ``` r
+
 bmodel_sim <- baseline_model(
   basis = "poly", degree = 1, sframe = sframe, intercept = "runwise"
 )
@@ -86,6 +91,7 @@ Finally, combine true trial effects, baseline drift, and noise to
 produce `Y`:
 
 ``` r
+
 true_betas <- matrix(rnorm(12 * n_voxels, mean = 1.5, sd = 0.8), 12, n_voxels)
 Y <- X_trial  %*% true_betas +
      Z_baseline %*% matrix(rnorm(ncol(Z_baseline) * n_voxels, sd = 2), ncol = n_voxels) +
@@ -100,6 +106,7 @@ Here’s a minimal example using
 [`lss_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_design.md):
 
 ``` r
+
 # Use the first run only for quick start
 trials_run1 <- trials[trials$run == 1, ]
 sframe_run1 <- sampling_frame(blocklens = n_scans_per_run, TR = TR)
@@ -134,6 +141,7 @@ is automatic handling of multi-run experiments with proper onset timing.
 standard convention for multi-run fMRI experiments.
 
 ``` r
+
 # Trial data with run-relative onsets (already defined above)
 print(trials)
 #>    onset run
@@ -181,6 +189,7 @@ The `baseline_model` allows you to specify drift correction, block
 intercepts, and nuisance regressors in a structured way.
 
 ``` r
+
 # Create baseline model with B-spline drift correction
 bmodel <- baseline_model(
   basis = "bs",
@@ -201,6 +210,7 @@ dim(beta_baseline)
 For demonstration, we’ll create synthetic motion regressors.
 
 ``` r
+
 # Simulate motion parameters (6 motion parameters per run)
 motion_run1 <- matrix(rnorm(n_scans_per_run * 6, sd = 0.5),
                       nrow = n_scans_per_run, ncol = 6)
@@ -222,6 +232,7 @@ dim(beta_motion)
 ```
 
 ``` r
+
 # In real analysis, load motion from files:
 motion_run1 <- as.matrix(read.table("motion_run1.txt"))
 motion_run2 <- as.matrix(read.table("motion_run2.txt"))
@@ -241,6 +252,7 @@ For multi-basis HRF models (e.g., canonical + temporal + dispersion
 derivatives), use `nbasis`:
 
 ``` r
+
 # Create event model with SPMG3 (3 basis functions)
 emod_3basis <- event_model(
   onset ~ trialwise(basis = "spmg3", nbasis = 3),
@@ -267,6 +279,7 @@ dim(beta_canonical)
 For designs with potential collinearity, use ridge regularization:
 
 ``` r
+
 beta_ridge <- lss_design(
   Y, emod_multi, bmodel,
   method = "oasis",
@@ -286,6 +299,7 @@ dim(beta_ridge)
 ### Using design_spec (old approach)
 
 ``` r
+
 # Manual design_spec construction requires global/absolute onsets
 # For run-relative onsets (10, 30, 50, 70, 90, 110) in each of 2 runs,
 # global onsets would be: 10, 30, 50, 70, 90, 110, 310, 330, 350, 370, 390, 410
@@ -314,6 +328,7 @@ support - No parametric modulators - Less validation
 ### Using lss_design() (new approach)
 
 ``` r
+
 # Formula-based design with run-relative onsets
 emod_new <- event_model(
   onset ~ trialwise(basis = "spmg1"),
@@ -337,6 +352,7 @@ Let’s visualize how well LSS recovers the true trial effects from our
 simulated data.
 
 ``` r
+
 # Compare estimated betas (with baseline correction) to true betas
 # Flatten matrices for plotting
 est_vec <- as.vector(beta_baseline)
@@ -374,6 +390,7 @@ amplitude modulation. This example demonstrates the syntax but requires
 special setup.
 
 ``` r
+
 # Trial data with reaction times
 trials_rt <- data.frame(
   onset = c(10, 30, 50, 70, 90, 110),
@@ -406,6 +423,7 @@ specification.
 **Solution:** Check that `sum(blocklens)` matches `nrow(Y)`:
 
 ``` r
+
 sframe_check <- sampling_frame(blocklens = c(150, 150), TR = 2)
 sum(fmrihrf::blocklens(sframe_check))
 #> [1] 300
@@ -421,6 +439,7 @@ objects.
 **Solution:** Use the same `sframe` object for both:
 
 ``` r
+
 sframe <- sampling_frame(blocklens = c(150, 150), TR = 2)
 
 emod <- event_model(..., sampling_frame = sframe)
@@ -434,6 +453,7 @@ bmodel <- baseline_model(..., sframe = sframe)
 **Solution:** Use ridge regularization:
 
 ``` r
+
 beta <- lss_design(
   Y, emod, bmodel,
   oasis = list(ridge_mode = "fractional", ridge_x = 0.02)

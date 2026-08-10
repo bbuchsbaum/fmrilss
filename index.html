@@ -7,12 +7,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Least Squares Separate (LSS) Analysis for fMRI Data • fmrilss</title>
 <script src="deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Least Squares Separate (LSS) Analysis for fMRI Data">
-<meta name="description" content="Implements efficient least squares separate (LSS) analysis for functional magnetic resonance imaging (fMRI) data. LSS is used to estimate trial-by-trial activation patterns in event-related fMRI designs. The package provides both R and C++ implementations for computational efficiency.">
-<meta property="og:description" content="Implements efficient least squares separate (LSS) analysis for functional magnetic resonance imaging (fMRI) data. LSS is used to estimate trial-by-trial activation patterns in event-related fMRI designs. The package provides both R and C++ implementations for computational efficiency.">
+<meta name="description" content="Implements efficient least squares separate (LSS) analysis for functional magnetic resonance imaging (fMRI) data, following Mumford et al. (2012) &lt;doi:10.1016/j.neuroimage.2011.08.076&gt;. LSS estimates trial-by-trial activation patterns in event-related designs. The package provides reference R implementations, optimized C++ backends, prewhitening, and methods for voxel-specific haemodynamic response functions.">
+<meta property="og:description" content="Implements efficient least squares separate (LSS) analysis for functional magnetic resonance imaging (fMRI) data, following Mumford et al. (2012) &lt;doi:10.1016/j.neuroimage.2011.08.076&gt;. LSS estimates trial-by-trial activation patterns in event-related designs. The package provides reference R implementations, optimized C++ backends, prewhitening, and methods for voxel-specific haemodynamic response functions.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="index.html">fmrilss</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -80,7 +80,7 @@
 <li>
 <strong>Nuisance Regression</strong>: Built-in support for projecting out nuisance regressors (e.g., motion parameters, physiological noise) before the LSS analysis.</li>
 <li>
-<strong>CRAN-Compliant</strong>: Built with portable configurations suitable for CRAN submission.</li>
+<strong>Portable build</strong>: Uses registered native routines and portable package configuration suitable for local and hosted R package checks.</li>
 </ul>
 </div>
 <div class="section level2">
@@ -106,7 +106,7 @@
 <span></span>
 <span><span class="co"># Trial design matrix (X): one column per trial</span></span>
 <span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fl">0</span>, <span class="va">n_timepoints</span>, <span class="va">n_trials</span><span class="op">)</span></span>
-<span><span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span>from <span class="op">=</span> <span class="fl">5</span>, to <span class="op">=</span> <span class="va">n_timepoints</span> <span class="op">-</span> <span class="fl">10</span>, length.out <span class="op">=</span> <span class="va">n_trials</span><span class="op">)</span></span>
+<span><span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span>from <span class="op">=</span> <span class="fl">5</span>, to <span class="op">=</span> <span class="va">n_timepoints</span> <span class="op">-</span> <span class="fl">10</span>, length.out <span class="op">=</span> <span class="va">n_trials</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="kw">for</span><span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_trials</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">X</span><span class="op">[</span><span class="va">onsets</span><span class="op">[</span><span class="va">i</span><span class="op">]</span><span class="op">:</span><span class="op">(</span><span class="va">onsets</span><span class="op">[</span><span class="va">i</span><span class="op">]</span> <span class="op">+</span> <span class="fl">4</span><span class="op">)</span>, <span class="va">i</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">1</span></span>
 <span><span class="op">}</span></span>
@@ -168,18 +168,12 @@
 <div class="section level2">
 <h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
 </h2>
-<p>Mumford, J. A., Turner, B. O., Ashby, F. G., &amp; Poldrack, R. A. (2012). Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses. <em>NeuroImage</em>, 59(3), 2636-2643.</p>
+<p>Mumford, J. A., Turner, B. O., Ashby, F. G., &amp; Poldrack, R. A. (2012). Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses. <em>NeuroImage</em>, 59(3), 2636-2643. <a href="https://doi.org/10.1016/j.neuroimage.2011.08.076" class="external-link uri">https://doi.org/10.1016/j.neuroimage.2011.08.076</a></p>
 </div>
 <div class="section level2">
 <h2 id="license">License<a class="anchor" aria-label="anchor" href="#license"></a>
 </h2>
 <p>GPL-3</p>
-<!-- albersdown:theme-note:start -->
-</div>
-<div class="section level2">
-<h2 id="albers-theme">Albers theme<a class="anchor" aria-label="anchor" href="#albers-theme"></a>
-</h2>
-<p>This package uses the albersdown theme. Existing vignette theme hooks are replaced so <code>albers.css</code> and local <code>albers.js</code> render consistently on CRAN and GitHub Pages. The defaults are configured via <code>params$family</code> and <code>params$preset</code> (family = ‘red’, preset = ‘homage’). The pkgdown site uses <code>template: { package: albersdown }</code> together with generated <code>pkgdown/extra.css</code> and <code>pkgdown/extra.js</code> so the theme is linked and activated on site pages. <!-- albersdown:theme-note:end --></p>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">
@@ -229,7 +223,7 @@
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

@@ -237,6 +237,7 @@ for a validated constructor):
 
 **Typical prewhiten recipes:**
 
+
       # Simple AR(1) — good default for most fMRI data
       prewhiten = list(method = "ar", p = 1)
 

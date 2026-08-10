@@ -29,7 +29,8 @@ Beta matrix (T x V) with LSS estimates for each trial and voxel
 This vectorized implementation computes all LSS betas simultaneously
 using matrix algebra. It's significantly faster than per-trial loops and
 automatically benefits from BLAS multithreading. The algorithm handles
-numerical edge cases by setting problematic denominators to NaN.
+numerical edge cases by applying finite lower bounds to degenerate
+denominators.
 
 For best performance on large datasets, ensure your R installation uses
 optimized BLAS (like OpenBLAS or Intel MKL).

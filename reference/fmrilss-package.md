@@ -22,9 +22,6 @@ designs.
 - [`lss_beta_cpp`](https://bbuchsbaum.github.io/fmrilss/reference/lss_beta_cpp.md):
   Vectorized C++ LSS beta computation
 
-- [`get_data_matrix`](https://bbuchsbaum.github.io/fmrilss/reference/get_data_matrix.md):
-  Helper function for data extraction
-
 ## Features
 
 - Optimized C++ implementation using vectorized matrix algebra

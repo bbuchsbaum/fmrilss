@@ -19,6 +19,7 @@ regularization, and the OASIS single-pass solver.
 ## Quick example
 
 ``` r
+
 library(fmrihrf)
 library(fmrilss)
 set.seed(42)
@@ -31,6 +32,7 @@ convolve with a canonical HRF to build one design-matrix column per
 trial.
 
 ``` r
+
 n_time <- 150
 n_trials <- 12
 n_vox <- 25
@@ -41,6 +43,7 @@ onsets <- sort(pmax(10, pmin(base + sample(-3:3, n_trials, TRUE), n_time - 24)))
 ```
 
 ``` r
+
 rset <- regressor_set(onsets, factor(seq_along(onsets)),
                       hrf = HRF_SPMG1, duration = 0, span = 24, summate = FALSE)
 X <- evaluate(rset, grid = samples(sframe, global = TRUE),
@@ -53,6 +56,7 @@ HRF-convolved impulse.
 ### Add baseline and nuisance regressors
 
 ``` r
+
 Z <- cbind(1, scale(seq_len(n_time)))       # intercept + linear trend
 Nuisance <- matrix(rnorm(n_time * 6), n_time, 6)  # e.g. motion
 ```
@@ -60,6 +64,7 @@ Nuisance <- matrix(rnorm(n_time * 6), n_time, 6)  # e.g. motion
 ### Simulate data with known ground truth
 
 ``` r
+
 true_betas <- matrix(rnorm(n_trials * n_vox, 0, 1.2), n_trials, n_vox)
 Y <- X %*% true_betas +
      Z %*% matrix(rnorm(2 * n_vox), 2) +
@@ -74,6 +79,7 @@ At its simplest,
 only the data and the trial design:
 
 ``` r
+
 beta <- lss(Y, X)
 dim(beta)
 #> [1] 12 25
@@ -82,6 +88,7 @@ dim(beta)
 Include `Z` and `Nuisance` for a more complete model:
 
 ``` r
+
 beta_full <- lss(Y, X, Z = Z, Nuisance = Nuisance)
 ```
 
@@ -93,10 +100,12 @@ The traditional approach (“Least Squares All”, LSA) estimates all trials
 in one model. Let’s compare:
 
 ``` r
+
 beta_lsa <- lsa(Y, X, Z = Z, Nuisance = Nuisance)
 ```
 
 ``` r
+
 comparison_summary <- data.frame(
   Method = c("LSS", "LSA"),
   CorrelationToTruth = c(
@@ -119,6 +128,7 @@ trial effects. A scatter plot shows how the two estimators relate to
 each other:
 
 ``` r
+
 plot(as.vector(beta_lsa), as.vector(beta_full),
      pch = 19, col = adjustcolor("steelblue", 0.3), cex = 0.6,
      xlab = "LSA beta", ylab = "LSS beta",
@@ -135,6 +145,7 @@ fMRI time series have temporal autocorrelation. Pass a `prewhiten` list
 to correct for it:
 
 ``` r
+
 beta_ar1 <- lss(Y, X, Z = Z, Nuisance = Nuisance,
                 prewhiten = list(method = "ar", p = 1))
 ```
@@ -142,6 +153,7 @@ beta_ar1 <- lss(Y, X, Z = Z, Nuisance = Nuisance,
 Automatic AR order selection:
 
 ``` r
+
 beta_auto <- lss(Y, X, Z = Z, Nuisance = Nuisance,
                  prewhiten = list(method = "ar", p = "auto", p_max = 4))
 ```
@@ -156,6 +168,7 @@ The default backend (`"r_optimized"`) is fast and readable. For large
 datasets, switch to the parallelized C++ engine:
 
 ``` r
+
 beta_cpp <- lss(Y, X, Z = Z, Nuisance = Nuisance, method = "cpp_optimized")
 all.equal(beta_full, beta_cpp, tolerance = 1e-8)
 #> [1] TRUE
@@ -170,6 +183,7 @@ OASIS can build the design matrix from event specifications, add ridge
 regularization, and fit multi-basis HRFs — all in one call:
 
 ``` r
+
 beta_oasis <- lss(
   Y, X = NULL, method = "oasis",
   oasis = list(
@@ -195,6 +209,7 @@ If you plan to re-run LSS with different settings, it can be faster to
 project out nuisance once up front:
 
 ``` r
+
 Q <- project_confounds(Nuisance)
 beta_pre <- lss(Q %*% Y, Q %*% X, Z = Z, method = "r_optimized")
 ```

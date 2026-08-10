@@ -1,6 +1,7 @@
 # The OASIS Method: Optimized Analytic Single-pass Inverse Solution
 
 ``` r
+
 library(fmrihrf)
 library(fmrilss)
 set.seed(42)
@@ -26,6 +27,7 @@ We generate a rapid event-related dataset with jittered ISIs and known
 ground-truth betas.
 
 ``` r
+
 n_time   <- 300
 n_voxels <- 100
 TR       <- 1.0
@@ -33,6 +35,7 @@ sframe   <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
 ```
 
 ``` r
+
 isi    <- runif(500, min = 3, max = 9)
 onsets <- cumsum(c(10, isi))
 onsets <- onsets[onsets < (n_time - 20)]
@@ -40,6 +43,7 @@ n_trials <- length(onsets)
 ```
 
 ``` r
+
 true_betas <- matrix(rnorm(n_trials * n_voxels, mean = 1, sd = 0.5),
                      n_trials, n_voxels)
 grid <- fmrihrf::samples(sframe, global = TRUE)
@@ -51,6 +55,7 @@ X_trials <- fmrihrf::evaluate(rset, grid = grid, precision = 0.1, method = "conv
 ```
 
 ``` r
+
 Y <- matrix(rnorm(n_time * n_voxels), n_time, n_voxels)
 Y <- Y + X_trials %*% true_betas
 ```
@@ -61,6 +66,7 @@ Pass a `design_spec` instead of a pre-built `X` and let OASIS construct
 the trial-wise design internally.
 
 ``` r
+
 beta_oasis <- lss(
   Y = Y, X = NULL, method = "oasis",
   oasis = list(design_spec = list(
@@ -84,6 +90,7 @@ coefficients as the optimized LSS path. You can verify this up to
 floating-point tolerance.
 
 ``` r
+
 Z <- cbind(1, scale(1:n_time))
 b_lss   <- lss(Y, X_trials, Z = Z, method = "cpp_optimized")
 b_oasis <- lss(Y, X_trials, Z = Z, method = "oasis",
@@ -108,6 +115,7 @@ You specify fixed penalty values added to the diagonal of the per-trial
 normal equations.
 
 ``` r
+
 beta_noridge <- lss(
   Y = Y, X = NULL, method = "oasis",
   oasis = list(
@@ -134,6 +142,7 @@ adapting automatically to your data. A 5% fractional ridge is also the
 package default when you do not override the ridge settings.
 
 ``` r
+
 beta_frac <- lss(
   Y = Y, X = NULL, method = "oasis",
   oasis = list(
@@ -147,6 +156,7 @@ beta_frac <- lss(
 Notice the variance reduction compared to the unregularized estimates:
 
 ``` r
+
 ridge_summary <- data.frame(
   Fit = c("No ridge", "Fractional 5%"),
   MeanTrialVariance = c(
@@ -172,6 +182,7 @@ Multi-basis models capture trial-to-trial variability in HRF shape.
 OASIS returns K rows per trial, interleaved by basis.
 
 ``` r
+
 beta_spmg3 <- lss(
   Y = Y, X = NULL, method = "oasis",
   oasis = list(design_spec = list(
@@ -188,6 +199,7 @@ the output has `K * n_trials` rows. Extract each component using the
 K-stride pattern.
 
 ``` r
+
 K <- 3
 canonical  <- beta_spmg3[seq(1, nrow(beta_spmg3), by = K), ]
 temporal   <- beta_spmg3[seq(2, nrow(beta_spmg3), by = K), ]
@@ -205,6 +217,7 @@ The Finite Impulse Response basis makes no parametric assumptions about
 HRF shape. Each trial contributes one coefficient per time bin.
 
 ``` r
+
 fir_hrf  <- fmrihrf::hrf_fir_generator(nbasis = 15, span = 30)
 beta_fir <- lss(
   Y = Y, X = NULL, method = "oasis",
@@ -223,6 +236,7 @@ You can average across trials and voxels to recover a smooth HRF
 estimate.
 
 ``` r
+
 n_bins    <- 15
 bin_width <- 30 / n_bins
 fir_array <- array(beta_fir, dim = c(n_bins, n_trials, n_voxels))
@@ -232,6 +246,7 @@ tp        <- seq(0, (n_bins - 1) * bin_width, by = bin_width)
 ```
 
 ``` r
+
 plot(tp, fir_mean, type = "l", col = "navy", lwd = 2,
      main = "FIR-derived HRF", xlab = "Time (s)", ylab = "Response")
 polygon(c(tp, rev(tp)), c(fir_mean + fir_se, rev(fir_mean - fir_se)),
@@ -248,6 +263,7 @@ When you are unsure which HRF shape fits best, pass a candidate grid via
 matched-filter score.
 
 ``` r
+
 hrf_grid <- create_lwu_grid(
   tau_range = c(4, 8), sigma_range = c(2, 3.5),
   rho_range = c(0.2, 0.5), n_tau = 3, n_sigma = 2, n_rho = 2
@@ -276,6 +292,7 @@ condition in `cond` and other conditions in `others` so their variance
 is accounted for as nuisance.
 
 ``` r
+
 onsets_a <- seq(10, 280, by = 30)
 onsets_b <- seq(25, 280, by = 30)
 
@@ -300,6 +317,7 @@ Request analytical standard errors with `return_se = TRUE`. You can then
 compute trial-level t-statistics directly.
 
 ``` r
+
 res_se <- lss(
   Y = Y[, 1:10], X = NULL, method = "oasis",
   oasis = list(
@@ -311,6 +329,7 @@ res_se <- lss(
 ```
 
 ``` r
+
 t_stats <- res_se$beta / res_se$se
 cat("Mean |t|:", round(mean(abs(t_stats)), 2), "\n")
 #> Mean |t|: 2.77
@@ -325,6 +344,7 @@ fMRI time series are temporally autocorrelated. You can apply AR(1)
 prewhitening so that standard errors and t-statistics are valid.
 
 ``` r
+
 beta_pw <- lss(
   Y = Y[, 1:10], X = NULL, method = "oasis",
   oasis = list(design_spec = list(sframe = sframe,

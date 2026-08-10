@@ -19,6 +19,7 @@ usually faster and more stable, see
 ## Setup
 
 ``` r
+
 library(fmrilss)
 library(fmrihrf)
 set.seed(123)
@@ -32,6 +33,7 @@ You need a sampling frame, jittered onsets, and a small set of voxels
 whose HRFs differ.
 
 ``` r
+
 n_time <- 200
 n_vox  <- 5
 TR     <- 1.0
@@ -40,6 +42,7 @@ grid   <- fmrihrf::samples(sframe, global = TRUE)
 ```
 
 ``` r
+
 isi    <- runif(200, min = 3, max = 9)
 onsets <- cumsum(c(10, isi))
 onsets <- onsets[onsets < (n_time - 20)]
@@ -55,6 +58,7 @@ We create each voxel’s HRF by wrapping the canonical shape with a peak
 shift and width scaling.
 
 ``` r
+
 voxel_hrfs <- lapply(1:n_vox, function(v) {
   peak_shift  <- (v - 3) * 0.5        # -1 to +1 s
   width_scale <- 1 + (v - 3) * 0.1    #  0.8 to 1.2
@@ -73,11 +77,13 @@ For each voxel, you convolve the trial onsets with that voxel’s HRF,
 scale by true betas, then add AR(1) noise.
 
 ``` r
+
 true_betas <- matrix(rnorm(n_trials * n_vox, mean = 1, sd = 0.3),
                      nrow = n_trials, ncol = n_vox)
 ```
 
 ``` r
+
 Y <- matrix(0, n_time, n_vox)
 for (v in 1:n_vox) {
   rset <- fmrihrf::regressor_set(
@@ -90,6 +96,7 @@ for (v in 1:n_vox) {
 ```
 
 ``` r
+
 noise_sd <- 0.5; ar_coef <- 0.3
 for (v in 1:n_vox) {
   e <- rnorm(n_time, sd = noise_sd)
@@ -102,6 +109,7 @@ colnames(Y) <- paste0("V", 1:n_vox)
 ### Visualise the design
 
 ``` r
+
 rset_vis <- fmrihrf::regressor_set(
   onsets = onsets, fac = factor(seq_len(n_trials)),
   hrf = HRF_SPMG1, duration = 0, span = 30, summate = FALSE)
@@ -120,6 +128,7 @@ Standard LSS assumes every voxel shares the same canonical HRF. When
 that assumption is wrong, you get biased betas.
 
 ``` r
+
 rset_can <- fmrihrf::regressor_set(
   onsets = onsets, fac = factor(seq_len(n_trials)),
   hrf = HRF_SPMG1, duration = 0, span = 30, summate = FALSE)
@@ -136,6 +145,7 @@ dispersion derivatives. Fitting a GLM with this basis set lets you
 estimate how each voxel’s HRF deviates from canonical.
 
 ``` r
+
 rset_mb <- fmrihrf::regressor_set(
   onsets = onsets, fac = factor(rep(1, n_trials)),
   hrf = HRF_SPMG3, duration = 0, span = 30, summate = TRUE)
@@ -143,6 +153,7 @@ X_mb <- as.matrix(fmrihrf::evaluate(rset_mb, grid = grid, precision = 0.1, metho
 ```
 
 ``` r
+
 hrf_weights <- sapply(1:n_vox, function(v) coef(lm(Y[, v] ~ X_mb - 1)))
 cat("Basis weights (3 x", n_vox, "voxels):\n")
 #> Basis weights (3 x 5 voxels):
@@ -163,6 +174,7 @@ weighting the three basis columns for each trial. Notice that this is a
 per-voxel loop: each voxel gets its own tailored design matrix.
 
 ``` r
+
 voxel_betas <- matrix(NA, n_trials, n_vox)
 ```
 
@@ -171,6 +183,7 @@ basis columns with that voxel’s estimated HRF coefficients, then run
 LSS.
 
 ``` r
+
 for (v in 1:n_vox) {
   Xv <- X_can * 0
   for (tr in 1:n_trials) {
@@ -195,6 +208,7 @@ OASIS handles multi-basis HRFs and LSS in a single call. You pass
 optional ridge regularization for stability.
 
 ``` r
+
 oasis_betas <- lss(
   Y, X = NULL, method = "oasis",
   oasis = list(
@@ -217,6 +231,7 @@ for ridge tuning and standard-error computation.
 ### Compute accuracy metrics
 
 ``` r
+
 cors  <- c(Standard  = cor(as.vector(standard_betas), as.vector(true_betas)),
            VoxelHRF  = cor(as.vector(voxel_betas),    as.vector(true_betas)),
            OASIS     = cor(as.vector(oasis_canonical), as.vector(true_betas)))
@@ -242,6 +257,7 @@ rather than relying on a visual impression alone.
 Points closer to the diagonal mean better recovery.
 
 ``` r
+
 rng <- range(true_betas)
 cls <- rep(1:n_vox, each = n_trials)
 ```
@@ -250,14 +266,18 @@ Each panel shows estimated versus true betas; colour distinguishes
 voxels.
 
 ``` r
-par(mfrow = c(1, 3), mar = c(4, 4, 3, 1))
-for (i in seq_along(cors)) {
-  est <- list(standard_betas, voxel_betas, oasis_canonical)[[i]]
-  plot(true_betas, est, pch = 19, col = cls, xlim = rng, ylim = rng,
-       xlab = "True", ylab = "Estimated",
-       main = paste0(names(cors)[i], " (r=", round(cors[i], 2), ")"))
-  abline(0, 1, lty = 2, col = "gray")
-}
+
+local({
+  oldpar <- par(mfrow = c(1, 3), mar = c(4, 4, 3, 1))
+  on.exit(par(oldpar), add = TRUE)
+  for (i in seq_along(cors)) {
+    est <- list(standard_betas, voxel_betas, oasis_canonical)[[i]]
+    plot(true_betas, est, pch = 19, col = cls, xlim = rng, ylim = rng,
+         xlab = "True", ylab = "Estimated",
+         main = paste0(names(cors)[i], " (r=", round(cors[i], 2), ")"))
+    abline(0, 1, lty = 2, col = "gray")
+  }
+})
 ```
 
 ![Scatter plots comparing true vs estimated betas for each

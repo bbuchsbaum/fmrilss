@@ -62,12 +62,7 @@ X <- matrix(1, 6, 1)
 Z <- diag(6)
 Y <- matrix(rnorm(12), 6, 2)
 ws <- mixed_precompute(X, Z)
-#> Workspace precomputed successfully:
-#>   - n=6, p=1, q=6
-#>   - Effective rank: 5
-#>   - Using identity K: yes
 fit <- mixed_solve_optimized(X, Z, Y, workspace = ws)
-#> Using 4 OpenMP threads
 names(fit)
 #> [1] "beta"   "u"      "Vu"     "Ve"     "lambda"
 ```

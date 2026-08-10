@@ -98,6 +98,7 @@ The `event_model` should typically use
 [`trialwise()`](https://bbuchsbaum.github.io/fmridesign/reference/trialwise.html)
 for LSS:
 
+
       emod <- event_model(onset ~ trialwise(basis = "spmg1"),
                           data = events,
                           block = ~run,
@@ -105,6 +106,7 @@ for LSS:
 
 For factorial designs (e.g., estimating condition-level betas
 separately):
+
 
       emod <- event_model(onset ~ hrf(condition),
                           data = events,
