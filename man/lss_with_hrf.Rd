@@ -12,31 +12,47 @@ lss_with_hrf(
   engine = "R",
   chunk_size = 5000,
   verbose = TRUE,
-  backing_dir = NULL
+  backing_dir = NULL,
+  sframe = NULL,
+  fixed_regs = NULL
 )
 }
 \arguments{
 \item{Y}{Numeric matrix of BOLD data (time x voxels).}
 
-\item{events}{Data frame with \code{onset}, \code{duration} and \code{condition} columns.}
+\item{events}{Data frame with \code{onset}, \code{duration} and
+\code{condition} columns. For a multi-run sampling frame, a \code{run}
+column is required and onsets are physical times relative to that run.}
 
 \item{hrf_estimates}{A \link{VoxelHRF} object returned by \code{estimate_voxel_hrf}.}
 
-\item{nuisance_regs}{Optional numeric matrix of nuisance regressors.}
+\item{nuisance_regs}{Optional finite numeric matrix of nuisance regressors.}
 
-\item{engine}{Computational engine: "R" for pure R implementation (default),
-"C++" for optimized C++ (experimental).}
+\item{engine}{Computational engine: "R" for the pure-R implementation
+(default), or "C++" to request the compiled backend. The returned metadata
+records the backend actually used after fallback.}
 
 \item{chunk_size}{Number of voxels to process per batch (C++ engine only).}
 
-\item{verbose}{Logical; display progress bar.}
+\item{verbose}{Logical; emit progress messages.}
 
 \item{backing_dir}{Directory for bigmemory backing files. If NULL, a
 temporary directory is used (C++ engine only).}
+
+\item{sframe}{Explicit sampling frame. Defaults to the frame stored in
+\code{hrf_estimates}; no unit-TR fallback is used.}
+
+\item{fixed_regs}{Optional finite numeric matrix of fixed/common regressors. An
+intercept is added when absent.}
 }
 \value{
-An object of class \link{LSSBeta} for C++ engine, or a numeric matrix
-(n_trials x n_vox) for R engine.
+An object of class \link{LSSBeta} for the C++ request, or a numeric
+matrix (n_trials x n_vox) for the R engine. Matrix outputs carry
+sampling-frame, normalization, coefficient-unit, event-amplitude,
+event-duration, requested-engine, realized-engine, and chunk-size metadata.
+With a positive-peak-normalized shape, a zero-duration unit-amplitude event
+has a peak-response-amplitude coefficient. Otherwise the result is a
+coefficient on the supplied duration- and amplitude-coded event design.
 }
 \description{
 Computes trial-wise beta estimates using voxel-specific HRFs.
@@ -57,7 +73,7 @@ rset <- fmrihrf::regressor_set(onsets = events$onset,
 X <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")
 coef <- matrix(rnorm(ncol(X) * ncol(Y)), ncol(X), ncol(Y))
 Y <- X \%*\% coef + Y * 0.1
-est <- estimate_voxel_hrf(Y, events, basis)
+est <- estimate_voxel_hrf(Y, events, basis, sframe = sframe)
 betas <- lss_with_hrf(Y, events, est, verbose = FALSE, engine = "R")
 dim(betas)
 }

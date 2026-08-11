@@ -12,3 +12,13 @@ home:
     - citation
     - authors
     - dev
+articles:
+- title: Learning path
+  navbar: Articles
+  contents:
+  - fmrilss
+  - oasis_method
+  - oasis_theory
+  - lss_with_fmridesign
+  - voxel-wise-hrf
+  - sbhm

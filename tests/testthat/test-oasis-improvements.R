@@ -52,7 +52,10 @@ test_that("OASIS multi-basis standard errors work", {
                     cond = list(onsets = c(10, 30, 50, 70),
                                hrf = fmrihrf::HRF_SPMG3)
                   ),
-                  return_se = TRUE
+                  return_se = TRUE,
+                  ridge_mode = "absolute",
+                  ridge_x = 0,
+                  ridge_b = 0
                 ))
   
   expect_true(is.list(result))
@@ -62,7 +65,7 @@ test_that("OASIS multi-basis standard errors work", {
   expect_true(all(result$se >= 0))
 })
 
-test_that("OASIS auto-detects K from user-provided X", {
+test_that("raw multi-basis OASIS requires an explicit contract", {
   skip_on_cran()
   
   set.seed(44)
@@ -86,13 +89,20 @@ test_that("OASIS auto-detects K from user-provided X", {
   
   Y <- X %*% matrix(rnorm(N*K * V, sd = 0.5), ncol = V) + 
        matrix(rnorm(T * V), T, V)
+  colnames(X) <- paste0("x", seq_len(ncol(X)))
+  identity_map <- data.frame(
+    column = colnames(X), trial = rep(seq_len(N), each = K),
+    basis = rep(seq_len(K), times = N)
+  )
   
-  # OASIS should auto-detect K=3
-  result <- lss(Y, X = X, method = "oasis")
-  
-  expect_true(is.matrix(result))
-  # Note: Detection heuristic may or may not find K=3, just check it runs
-  expect_equal(ncol(result), V)
+  expect_error(
+    lss(Y, X = X, method = "oasis",
+        oasis = list(infer_K_from_X = TRUE)),
+    "not a certified path"
+  )
+  result <- lss(Y, X = X, method = "oasis",
+                oasis = list(K = K, ntrials = N, trial_basis_map = identity_map))
+  expect_equal(dim(result), c(N * K, V))
 })
 
 test_that("OASIS AR(1) whitening works", {

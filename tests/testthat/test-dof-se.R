@@ -22,12 +22,12 @@ test_that("SEs respond to nuisance rank (QR residualization)", {
   out0 <- lss(Y = Y, X = X, Z = Z0,
               method = "oasis",
               oasis  = list(return_se = TRUE, ridge_mode = "absolute",
-                            ridge_x = 1e-8, ridge_b = 1e-8))
+                            ridge_x = 0, ridge_b = 0))
 
   out1 <- lss(Y = Y, X = X, Z = cbind(Z0, N_extra),
               method = "oasis",
               oasis  = list(return_se = TRUE, ridge_mode = "absolute",
-                            ridge_x = 1e-8, ridge_b = 1e-8))
+                            ridge_x = 0, ridge_b = 0))
 
   # Same dimensions
   expect_equal(dim(out0$beta), c(Tt, V))
@@ -40,4 +40,3 @@ test_that("SEs respond to nuisance rank (QR residualization)", {
   mean_se1 <- mean(out1$se, na.rm = TRUE)
   expect_gt(mean_se1, mean_se0)
 })
-

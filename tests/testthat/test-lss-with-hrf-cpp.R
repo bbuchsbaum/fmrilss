@@ -70,5 +70,7 @@ test_that("cpp backend matches R backend on a small problem", {
     verbose = FALSE
   )
 
-  expect_equal(beta_cpp, beta_r, tolerance = 1e-8)
+  expect_equal(beta_cpp, beta_r, tolerance = 1e-8, ignore_attr = TRUE)
+  expect_identical(attr(beta_cpp, "engine_used"), "cpp")
+  expect_identical(attr(beta_r, "engine_used"), "r")
 })

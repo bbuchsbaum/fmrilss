@@ -86,7 +86,14 @@ arma::mat oasis_betas_closed_form(const arma::mat& N_Y,
     const double dj = d[j] + ridge_x;
     const double ej = s[j] + ridge_b;
     const double cj = alpha[j];
-    const double denom = std::max(dj * ej - cj * cj, denom_eps);
+    const double de = dj * ej;
+    const double cc = cj * cj;
+    const double denom = de - cc;
+    const double denom_scale = std::max(std::abs(de), std::abs(cc));
+    if (!std::isfinite(denom) || denom <= 0.0 ||
+        (denom_scale > 0.0 && denom <= denom_eps * denom_scale)) {
+      Rcpp::stop("OASIS trial Gram matrix is singular or numerically rank deficient");
+    }
     B.row(j) = (N_Y.row(j) * ej - cj * (S_Y - N_Y.row(j))) / denom;
   }
   return B;
@@ -113,7 +120,14 @@ Rcpp::List oasis_betas_gammas(const arma::mat& N_Y,
     const double dj = d[j] + ridge_x;
     const double ej = s[j] + ridge_b;
     const double cj = alpha[j];
-    const double denom = std::max(dj * ej - cj * cj, denom_eps);
+    const double de = dj * ej;
+    const double cc = cj * cj;
+    const double denom = de - cc;
+    const double denom_scale = std::max(std::abs(de), std::abs(cc));
+    if (!std::isfinite(denom) || denom <= 0.0 ||
+        (denom_scale > 0.0 && denom <= denom_eps * denom_scale)) {
+      Rcpp::stop("OASIS trial Gram matrix is singular or numerically rank deficient");
+    }
 
     const arma::rowvec n1 = N_Y.row(j);
     const arma::rowvec n2 = S_Y - n1;
@@ -296,6 +310,7 @@ Rcpp::List oasisk_betas_se(const arma::cube& D,
                            const arma::mat& N1,
                            const arma::mat& SY,
                            const arma::vec& RY_norm2,
+                           const arma::ivec& dof,
                            double ridge_x = 0.0,
                            double ridge_b = 0.0) {
   
@@ -306,10 +321,9 @@ Rcpp::List oasisk_betas_se(const arma::cube& D,
   arma::mat B(N * K, V, arma::fill::zeros);
   arma::mat SE(N * K, V, arma::fill::zeros);
   
-  double diag_eps = 1e-10;
-  
-  // Precompute dof (simplified - could be refined)
-  int dof = std::max(1, (int)RY_norm2.n_elem - N*K - 2*K);
+  if (dof.n_elem != static_cast<arma::uword>(N)) {
+    stop("dof must have one entry per trial");
+  }
   
   for (int j = 0; j < N; ++j) {
     int r0 = j * K;
@@ -324,8 +338,7 @@ Rcpp::List oasisk_betas_se(const arma::cube& D,
     
     // Prepare many RHS - extract K rows for trial j
     arma::mat N1j = N1.rows(r0, r1);      // K x V
-    arma::mat sum_N1j = sum(N1j, 0);      // 1 x V (sum across K basis)
-    arma::mat N2j = SY - repmat(sum_N1j, K, 1);  // K x V
+    arma::mat N2j = SY - N1j;              // K x V
     arma::mat RHS(2*K, V);
     RHS.rows(0,   K-1) = N1j;
     RHS.rows(K, 2*K-1) = N2j;
@@ -334,8 +347,9 @@ Rcpp::List oasisk_betas_se(const arma::cube& D,
     arma::mat L;
     bool ok = chol(L, G, "lower");
     if (!ok) {
-      G.diag() += diag_eps;
-      chol(L, G, "lower");
+      B.rows(r0, r1).fill(arma::datum::nan);
+      SE.rows(r0, r1).fill(arma::datum::nan);
+      continue;
     }
     arma::mat Z = solve(trimatl(L), RHS);
     arma::mat X = solve(trimatu(L.t()), Z);
@@ -345,8 +359,17 @@ Rcpp::List oasisk_betas_se(const arma::cube& D,
     arma::mat gamma_j = X.rows(K, 2*K-1);
     B.rows(r0, r1) = beta_j;
     
+    arma::mat Ginv;
+    const bool have_inverse = inv_sympd(Ginv, G);
+
     // Compute SSE for each voxel
     for (int v = 0; v < V; ++v) {
+      if (dof(j) <= 0 || !have_inverse) {
+        for (int k = 0; k < K; ++k) {
+          SE(r0 + k, v) = arma::datum::nan;
+        }
+        continue;
+      }
       arma::vec bv = beta_j.col(v);
       arma::vec gv = gamma_j.col(v);
       arma::vec n1v = N1j.col(v);
@@ -358,10 +381,9 @@ Rcpp::List oasisk_betas_se(const arma::cube& D,
                    as_scalar(gv.t() * E.slice(j) * gv) +
                    2*as_scalar(bv.t() * C.slice(j) * gv);
       
-      double sigma2 = std::max(sse / dof, 0.0);
+      double sigma2 = std::max(sse / static_cast<double>(dof(j)), 0.0);
       
       // G^{-1} for variance (top-left K×K block)
-      arma::mat Ginv = inv_sympd(G);
       arma::mat var_beta = sigma2 * Ginv.submat(0, 0, K-1, K-1);
       
       // Extract diagonal for SEs

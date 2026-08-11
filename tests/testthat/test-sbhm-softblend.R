@@ -102,22 +102,22 @@ test_that("Blend margin controls whether blending occurs", {
     return = "both"
   )
 
-  # soft_blend TRUE, but blend_margin = -Inf forces no blending (identical to hard)
+  # soft_blend TRUE, but blend_margin = 0 forces no blending (identical to hard)
   soft_no <- lss_sbhm(
     Y, sbhm, design_spec,
     prepass = list(ridge = list(mode = "fractional", lambda = 0.01)),
-    match = list(topK = 3, soft_blend = TRUE, blend_margin = -Inf, whiten = FALSE),
+    match = list(topK = 3, soft_blend = TRUE, blend_margin = 0, whiten = FALSE),
     return = "both"
   )
 
   expect_equal(soft_no$alpha_coords[, 1], hard$alpha_coords[, 1], tolerance = 1e-12)
   expect_equal(as.numeric(soft_no$amplitude[, 1]), as.numeric(hard$amplitude[, 1]), tolerance = 1e-12)
 
-  # soft_blend TRUE, high blend_margin -> forces blending (may differ from hard)
+  # soft_blend TRUE, the largest valid margin threshold forces blending
   soft_yes <- lss_sbhm(
     Y, sbhm, design_spec,
     prepass = list(ridge = list(mode = "fractional", lambda = 0.01)),
-    match = list(topK = 3, soft_blend = TRUE, blend_margin = 1e6, whiten = FALSE),
+    match = list(topK = 3, soft_blend = TRUE, blend_margin = 2, whiten = FALSE),
     return = "both"
   )
   # Presence of topK outputs and mode flag

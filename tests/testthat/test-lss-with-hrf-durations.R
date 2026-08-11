@@ -25,11 +25,12 @@ test_that("lss_with_hrf C++ honors durations and matches R backend closely", {
   # HRF basis (K=1) and coefficients (all ones)
   basis <- fmrihrf::HRF_SPMG1
   coeffs <- matrix(1, nrow = 1L, ncol = n_vox)
-  vhrf <- list(coefficients = coeffs, basis = basis, conditions = "cond")
+  sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = 1)
+  vhrf <- list(coefficients = coeffs, basis = basis, conditions = "cond",
+               sframe = sframe)
   class(vhrf) <- "VoxelHRF"
 
   # Build synthetic data using the TR-level design (durations respected)
-  sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = 1)
   times  <- fmrihrf::samples(sframe, global = TRUE)
   rset   <- fmrihrf::regressor_set(onsets = onsets,
                                    fac = factor(seq_along(onsets)),

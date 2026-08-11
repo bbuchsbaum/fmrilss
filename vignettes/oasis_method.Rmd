@@ -1,5 +1,5 @@
 ---
-title: 'The OASIS Method: Optimized Analytic Single-pass Inverse Solution'
+title: 'Practical OASIS: Design, Regularization, and Diagnostics'
 output:
   rmarkdown::html_vignette:
     toc: yes
@@ -17,33 +17,33 @@ resource_files:
 - fonts
 
 vignette: |
-  %\VignetteIndexEntry{The OASIS Method: Optimized Analytic Single-pass Inverse Solution}
+  %\VignetteIndexEntry{Practical OASIS: Design, Regularization, and Diagnostics}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
 ```{r setup-opts, include = FALSE}
-if (requireNamespace("ragg", quietly = TRUE)) knitr::opts_chunk$set(dev = "ragg_png")
-if (requireNamespace("systemfonts", quietly = TRUE)) albersdown::albers_register_fonts()
-if (requireNamespace("ggplot2", quietly = TRUE) &&
+if (requireNamespace("ragg", quietly = TRUE)) {
+  knitr::opts_chunk$set(dev = "ragg_png")
+}
+if (requireNamespace("systemfonts", quietly = TRUE) &&
     requireNamespace("albersdown", quietly = TRUE)) {
-  ggplot2::theme_set(
-    albersdown::theme_albers(family = params$family, preset = params$preset)
-  )
+  albersdown::albers_register_fonts()
 }
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.width = 8,
   fig.height = 5,
-  dev = "png",
   dpi = 150,
-  warning = FALSE,
-  message = FALSE
+  warning = TRUE,
+  message = TRUE
 )
+library(fmrilss)
+library(fmrihrf)
 ```
 
-```{r albers-classes, echo=FALSE, results='asis'}
+```{r albers-classes, echo = FALSE, results = 'asis'}
 cat(sprintf(
   paste0(
     '<script>document.addEventListener("DOMContentLoaded",function(){',
@@ -56,312 +56,960 @@ cat(sprintf(
 ))
 ```
 
+OASIS is the `lss()` backend to use when trial-wise estimation needs more than
+a fixed one-basis design: event-based construction, multiple HRF bases, ridge
+regularization, blocked voxel products, or model-based standard errors. This
+guide follows `vignette("fmrilss")`, keeps the public workflow visible, and
+routes the derivation to `vignette("oasis_theory")`.
 
-```{r setup}
-library(fmrihrf)
-library(fmrilss)
-set.seed(42)
-```
+## Choose the contract before fitting
 
-## What OASIS Adds Over Plain LSS
-
-When you call `lss()` with a single-basis HRF and no ridge penalty, the optimized backends already factor the shared structure across trials into a single-pass solve. OASIS wraps that same estimator in a richer workflow.
-
-You get automatic design construction from event onsets via `fmrihrf`, multi-basis HRF support (K > 1), ridge regularization, analytical standard errors, and optional AR(1) prewhitening---all in one call. If you only need the leanest single-basis path, stick with `method = "cpp_optimized"`.
-
-## Synthetic Data
-
-We generate a rapid event-related dataset with jittered ISIs and known ground-truth betas.
-
-```{r sim-params}
-n_time   <- 300
-n_voxels <- 100
-TR       <- 1.0
-sframe   <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
-```
-
-```{r sim-onsets}
-isi    <- runif(500, min = 3, max = 9)
-onsets <- cumsum(c(10, isi))
-onsets <- onsets[onsets < (n_time - 20)]
-n_trials <- length(onsets)
-```
-
-```{r sim-signal}
-true_betas <- matrix(rnorm(n_trials * n_voxels, mean = 1, sd = 0.5),
-                     n_trials, n_voxels)
-grid <- fmrihrf::samples(sframe, global = TRUE)
-rset <- fmrihrf::regressor_set(
-  onsets = onsets, fac = factor(seq_len(n_trials)),
-  hrf = fmrihrf::HRF_SPMG1, duration = 0, span = 30, summate = FALSE
-)
-X_trials <- fmrihrf::evaluate(rset, grid = grid, precision = 0.1, method = "conv")
-```
-
-```{r sim-data}
-Y <- matrix(rnorm(n_time * n_voxels), n_time, n_voxels)
-Y <- Y + X_trials %*% true_betas
-```
-
-## Basic OASIS Call
-
-Pass a `design_spec` instead of a pre-built `X` and let OASIS construct the trial-wise design internally.
-
-```{r basic-oasis}
-beta_oasis <- lss(
-  Y = Y, X = NULL, method = "oasis",
-  oasis = list(design_spec = list(
-    sframe = sframe,
-    cond   = list(onsets = onsets, hrf = fmrihrf::HRF_SPMG1, span = 30)
-  ))
-)
-dim(beta_oasis)
-```
-
-The result is an `n_trials x n_voxels` matrix, exactly the same shape you get from the other LSS backends. By default, OASIS applies 5% fractional ridge regularization, which is worth keeping in mind when you compare it to unregularized LSS fits.
-
-## Equivalence to LSS
-
-With a single-basis HRF and no ridge penalty, OASIS returns the same coefficients as the optimized LSS path. You can verify this up to floating-point tolerance.
-
-```{r oasis-equiv, eval = Sys.getenv("IN_PKGDOWN") != "true"}
-Z <- cbind(1, scale(1:n_time))
-b_lss   <- lss(Y, X_trials, Z = Z, method = "cpp_optimized")
-b_oasis <- lss(Y, X_trials, Z = Z, method = "oasis",
-               oasis = list(ridge_mode = "absolute", ridge_x = 0, ridge_b = 0))
-equiv_err <- max(abs(b_lss - b_oasis))
-equiv_err
-```
-
-```{r oasis-equiv-check, include = FALSE, eval = Sys.getenv("IN_PKGDOWN") != "true"}
-stopifnot(equiv_err < 1e-10)
-```
-
-Use the plain LSS backends when you have a fixed single-basis `X` and want the leanest dependency surface. Prefer OASIS when you need built-in design construction, multi-basis HRFs, ridge, or standard errors.
-
-## Ridge Regularization
-
-In rapid designs, close trial spacing produces correlated regressors. Ridge regression trades a small bias for a large variance reduction. OASIS offers two modes.
-
-### Absolute Ridge
-
-You specify fixed penalty values added to the diagonal of the per-trial normal equations.
-
-```{r ridge-absolute}
-beta_noridge <- lss(
-  Y = Y, X = NULL, method = "oasis",
-  oasis = list(
-    design_spec = list(sframe = sframe,
-      cond = list(onsets = onsets, hrf = fmrihrf::HRF_SPMG1, span = 30)),
-    ridge_mode = "absolute", ridge_x = 0, ridge_b = 0
+```{r contract-table, echo = FALSE}
+contracts <- data.frame(
+  Goal = c(
+    "Exact ordinary LSS",
+    "Regularized coefficients",
+    "Model-based coefficient SEs",
+    "Multiple HRF bases"
+  ),
+  Required_choice = c(
+    "ridge_x = ridge_b = 0; absolute mode makes the zero scale explicit",
+    "absolute or fractional ridge; default is fractional 0.05",
+    "zero ridge, fixed full-rank design, no estimated prewhitening",
+    "interpret K coefficients per trial; do not call them one amplitude"
   )
 )
+knitr::kable(
+  contracts,
+  align = c("l", "l"),
+  caption = "OASIS choices that change the estimand or the available uncertainty."
+)
+```
 
-beta_abs <- lss(
-  Y = Y, X = NULL, method = "oasis",
-  oasis = list(
-    design_spec = list(sframe = sframe,
-      cond = list(onsets = onsets, hrf = fmrihrf::HRF_SPMG1, span = 30)),
-    ridge_mode = "absolute", ridge_x = 0.1, ridge_b = 0.1
+The bare call `oasis_options()` is penalized. It is not the configuration for
+an exact comparison with an unpenalized LSS backend. Likewise,
+`return_se = TRUE` is intentionally unavailable with ridge, estimated
+prewhitening, HRF-grid selection, or voxel-adaptive HRFs.
+
+## Build a two-condition example
+
+The example has one target condition, one explicitly modeled other condition,
+a shared intercept and drift, heterogeneous target-trial coefficients, and a
+fixed iid noise scale. Keeping the mean signal separate lets us calculate the
+ridge bias--variance trade-off exactly for this design.
+
+```{r event-spec}
+set.seed(20260811)
+
+n_time <- 180
+n_voxels <- 6
+TR <- 1
+sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
+times <- fmrihrf::samples(sframe, global = TRUE)
+
+onsets_a <- c(10, 20, 31, 43, 56, 68, 81, 95, 108, 121, 135, 149)
+onsets_b <- c(15, 37, 61, 86, 112, 141)
+n_trials <- length(onsets_a)
+
+design_spec <- list(
+  sframe = sframe,
+  cond = list(
+    onsets = onsets_a,
+    hrf = fmrihrf::HRF_SPMG1,
+    duration = 0,
+    amplitude = 1,
+    span = 30
+  ),
+  others = list(list(
+    onsets = onsets_b,
+    hrf = fmrihrf::HRF_SPMG1,
+    duration = 0,
+    amplitude = 1,
+    span = 30
+  )),
+  precision = 0.1,
+  method = "conv"
+)
+```
+
+For the simulation and independent oracles, the same trial and other-condition
+regressors are also evaluated explicitly. In an analysis, `Y` would normally
+be the observed time-by-voxel response rather than a simulated matrix.
+
+```{r design-evaluation, include = FALSE}
+
+trial_set <- fmrihrf::regressor_set(
+  onsets = onsets_a,
+  fac = factor(seq_len(n_trials)),
+  hrf = fmrihrf::HRF_SPMG1,
+  duration = 0,
+  amplitude = 1,
+  span = 30,
+  summate = TRUE
+)
+X_trials <- fmrihrf::evaluate(
+  trial_set, grid = times, precision = 0.1, method = "conv"
+)
+X_trials <- as.matrix(X_trials)
+colnames(X_trials) <- sprintf("trial_%02d", seq_len(n_trials))
+
+other_reg <- fmrihrf::regressor(
+  onsets = onsets_b,
+  hrf = fmrihrf::HRF_SPMG1,
+  duration = 0,
+  amplitude = 1,
+  span = 30,
+  summate = TRUE
+)
+X_other <- fmrihrf::evaluate(
+  other_reg, grid = times, precision = 0.1, method = "conv"
+)
+X_other <- matrix(as.numeric(X_other), n_time, 1L,
+                  dimnames = list(NULL, "condition_B"))
+
+Z <- cbind(
+  intercept = 1,
+  linear_trend = seq(-1, 1, length.out = n_time)
+)
+```
+
+```{r simulate-response}
+true_beta <- matrix(
+  rnorm(n_trials * n_voxels, mean = 1, sd = 0.35),
+  n_trials,
+  n_voxels
+)
+other_beta <- matrix(seq(0.4, 0.9, length.out = n_voxels), 1L)
+fixed_beta <- rbind(
+  seq(-0.3, 0.3, length.out = n_voxels),
+  seq(0.2, -0.2, length.out = n_voxels)
+)
+mean_signal <- X_trials %*% true_beta +
+  X_other %*% other_beta +
+  Z %*% fixed_beta
+noise_sd <- 1.5
+Y <- mean_signal + matrix(rnorm(n_time * n_voxels, sd = noise_sd),
+                          n_time, n_voxels)
+```
+
+```{r dimensions, echo = FALSE}
+dimensions <- data.frame(
+  Object = c("Y", "target trial design", "other-condition aggregate", "fixed design"),
+  Rows = c(nrow(Y), nrow(X_trials), nrow(X_other), nrow(Z)),
+  Columns = c(ncol(Y), ncol(X_trials), ncol(X_other), ncol(Z))
+)
+knitr::kable(dimensions, caption = "Objects used in the practical example.")
+```
+
+## Fit from events
+
+Put the condition whose trial coefficients you want in `cond`. Put modeled
+conditions that should not become trial targets in `others`; OASIS adds their
+aggregate basis columns to the common span.
+
+```{r basic-fit}
+fit_default <- lss(
+  Y = Y,
+  X = NULL,
+  Z = Z,
+  method = "oasis",
+  oasis = oasis_options(design_spec = design_spec)
+)
+dim(fit_default)
+fit_default[1:4, 1:3]
+```
+
+The default result is an `n_trials` by `n_voxels` matrix because this is a
+one-basis design. These are fractionally penalized coefficients. The simulation
+really contains condition B, so `others` is doing identifiable work rather than
+decorating the call.
+
+## Match ordinary LSS exactly when that is the target
+
+Use explicit zero ridge. The verification assembles every corresponding GLM
+independently as `[target trial, other target trials, Z, condition B]` and
+checks all trials and voxels.
+
+```{r unpenalized-fit}
+fit_unpenalized <- lss(
+  Y = Y,
+  X = NULL,
+  Z = Z,
+  method = "oasis",
+  oasis = oasis_options(
+    design_spec = design_spec,
+    ridge_mode = "absolute",
+    ridge_x = 0,
+    ridge_b = 0
   )
 )
 ```
 
-### Fractional Ridge
+```{r direct-oracle, include = FALSE}
+direct_lss <- matrix(NA_real_, n_trials, n_voxels)
+for (j in seq_len(n_trials)) {
+  direct_design <- cbind(
+    X_trials[, j],
+    rowSums(X_trials[, -j, drop = FALSE]),
+    Z,
+    X_other
+  )
+  direct_lss[j, ] <- qr.coef(qr(direct_design), Y)[1L, ]
+}
+direct_error <- max(abs(unname(fit_unpenalized) - direct_lss))
+stopifnot(direct_error < 1e-10)
+```
 
-The penalty scales relative to the mean diagonal energy in the design, adapting automatically to your data. A 5% fractional ridge is also the package default when you do not override the ridge settings.
+```{r direct-oracle-result, echo = FALSE}
+knitr::kable(
+  data.frame(Maximum_absolute_error = direct_error),
+  digits = 12,
+  caption = "Unpenalized OASIS versus independent trial-wise GLMs."
+)
+```
 
-```{r ridge-fractional}
-beta_frac <- lss(
-  Y = Y, X = NULL, method = "oasis",
-  oasis = list(
-    design_spec = list(sframe = sframe,
-      cond = list(onsets = onsets, hrf = fmrihrf::HRF_SPMG1, span = 30)),
-    ridge_mode = "fractional", ridge_x = 0.05, ridge_b = 0.05
+For a fixed one-basis `X`, this is the same estimand as the other unpenalized
+LSS backends. OASIS is useful here because the event and other-condition design
+can be constructed and checked in the same workflow.
+
+## Evaluate ridge on the scale you care about
+
+Ridge reduces sampling variance by accepting bias. A smaller spread of fitted
+trials is not, by itself, evidence of improvement. For this fixed design and
+truth, OASIS is linear in `Y`, so applying each fit to the noise-free signal and
+to the identity matrix gives exact conditional bias and variance under the iid
+noise model.
+
+```{r ridge-analysis, include = FALSE}
+ridge_levels <- c(0, 0.01, 0.05)
+
+fit_fractional <- function(response, eta) {
+  lss(
+    response,
+    X_trials,
+    Z = Z,
+    Nuisance = X_other,
+    method = "oasis",
+    oasis = oasis_options(
+      ridge_mode = "fractional",
+      ridge_x = eta,
+      ridge_b = eta
+    )
+  )
+}
+
+ridge_metrics <- lapply(ridge_levels, function(eta) {
+  expected_beta <- fit_fractional(mean_signal, eta)
+  operator <- fit_fractional(diag(n_time), eta)
+  bias <- unname(expected_beta) - true_beta
+  coefficient_variance <- noise_sd^2 * rowSums(operator^2)
+  mean_variance <- mean(coefficient_variance)
+  mean_squared_bias <- mean(bias^2)
+  data.frame(
+    Fractional_ridge = eta,
+    Mean_absolute_bias = mean(abs(bias)),
+    Mean_squared_bias = mean_squared_bias,
+    Mean_variance = mean_variance,
+    Mean_MSE = mean_squared_bias + mean_variance,
+    RMSE = sqrt(mean_squared_bias + mean_variance)
+  )
+})
+ridge_metrics <- do.call(rbind, ridge_metrics)
+
+set.seed(20260812)
+mc_repetitions <- 100
+mc_mse <- vapply(ridge_levels, function(eta) {
+  squared_error <- replicate(mc_repetitions, {
+    noisy_y <- mean_signal + matrix(
+      rnorm(n_time * n_voxels, sd = noise_sd), n_time, n_voxels
+    )
+    mean((unname(fit_fractional(noisy_y, eta)) - true_beta)^2)
+  })
+  mean(squared_error)
+}, numeric(1))
+ridge_metrics$Monte_Carlo_MSE <- mc_mse
+```
+
+```{r ridge-table, echo = FALSE}
+knitr::kable(
+  ridge_metrics,
+  digits = 4,
+  caption = paste0(
+    "Exact conditional ridge metrics and a ", mc_repetitions,
+    "-repetition check for this design, truth, and noise scale."
   )
 )
 ```
 
-Notice the variance reduction compared to the unregularized estimates:
+```{r ridge-plot, echo = FALSE, fig.cap="Exact squared bias, variance, and MSE for three fractional-ridge settings in the fixed simulation; all bars use squared-beta units.", fig.alt="Grouped bars show mean MSE falling from about 0.210 at zero ridge to 0.194 at fractional ridge 0.05 as variance falls and squared bias rises."}
+plot_values <- t(as.matrix(ridge_metrics[, c(
+  "Mean_squared_bias", "Mean_variance", "Mean_MSE"
+)]))
+colnames(plot_values) <- format(ridge_levels, trim = TRUE)
+old_par <- par(bg = "white")
+barplot(
+  plot_values,
+  beside = TRUE,
+  col = c("#9ecae1", "#3182bd", "#de2d26"),
+  border = NA,
+  xlab = "Fractional ridge",
+  ylab = "Mean squared beta units",
+  legend.text = c("Squared bias", "Variance", "MSE"),
+  args.legend = list(bty = "n", x = "topleft")
+)
+par(old_par)
+```
 
-```{r ridge-compare}
-ridge_summary <- data.frame(
-  Fit = c("No ridge", "Fractional 5%"),
-  MeanTrialVariance = c(
-    mean(apply(beta_noridge, 2, var)),
-    mean(apply(beta_frac, 2, var))
+```{r ridge-contract, include = FALSE}
+stopifnot(
+  all(is.finite(as.matrix(ridge_metrics[, -1]))),
+  all(ridge_metrics$Mean_MSE >= ridge_metrics$Mean_squared_bias),
+  all(ridge_metrics$Mean_MSE >= ridge_metrics$Mean_variance),
+  max(abs(ridge_metrics$Mean_MSE - ridge_metrics$Monte_Carlo_MSE)) < 0.03
+)
+```
+
+This is one scenario, not a universal ranking. Choose a ridge policy using a
+simulation that matches the planned timing, basis, nuisance structure, signal
+scale, and downstream loss. The package does not justify generic penalty
+cutoffs from inter-stimulus interval alone. Even the zero-penalty row has a
+small bias against the generating trial effects: ordinary LSS gives all other
+target trials one shared coefficient, while this simulation gives them
+heterogeneous coefficients. The table therefore evaluates the full LSS
+estimator against the generating effects, not merely ridge against an
+unpenalized LSS reference.
+
+## Inspect design diagnostics
+
+`return_diag = TRUE` changes the return to a list. For a one-basis fit, `d`,
+`alpha`, and `s` are the target energy, target--other cross-product, and
+other-trial energy after projection.
+
+```{r diagnostics}
+fit_diag <- lss(
+  Y,
+  X_trials,
+  Z = Z,
+  Nuisance = X_other,
+  method = "oasis",
+  oasis = oasis_options(return_diag = TRUE)
+)
+diagnostics <- with(fit_diag$diag, data.frame(
+  target_energy = d,
+  other_energy = s,
+  target_other_correlation = alpha / sqrt(d * s)
+))
+head(diagnostics, 4)
+```
+
+These are unpenalized cross-products on the residualized design scale. They are
+useful for finding low-energy or highly correlated trials, but they are not a
+condition number, a ridge calibration, or an inferential test.
+
+## Multi-basis output is not one amplitude
+
+An event-built SPMG3 design has three rows per trial: canonical, temporal
+derivative, and dispersion-derivative coefficients in that basis. Their scale
+depends on the basis definition.
+
+```{r multi-basis}
+spec_spmg3 <- design_spec
+spec_spmg3$cond$hrf <- fmrihrf::HRF_SPMG3
+spec_spmg3$others[[1]]$hrf <- fmrihrf::HRF_SPMG3
+
+fit_spmg3 <- lss(
+  Y,
+  X = NULL,
+  Z = Z,
+  method = "oasis",
+  oasis = oasis_options(design_spec = spec_spmg3, return_diag = TRUE)
+)
+K_spmg3 <- 3L
+c(rows = nrow(fit_spmg3$beta), trials = n_trials, basis_dimension = K_spmg3)
+rownames(fit_spmg3$beta)[1:6]
+```
+
+The `NK` by `V` output is in canonical trial-major, basis-minor order. Keep the
+row names or reshape explicitly; do not infer a scalar response amplitude from
+the canonical row alone unless a separate normalization and estimand justify
+that operation.
+
+If you already have a raw multi-basis matrix, identity is part of the input
+contract. `X_multi` must have unique, non-empty column names, and the map must
+identify every column with one exact-integer trial and basis pair. OASIS
+canonicalizes the matrix to trial-major, basis-minor order and attaches the
+canonical map to the returned beta matrix.
+
+```{r raw-multi-basis-design, include = FALSE}
+raw_spmg3_set <- fmrihrf::regressor_set(
+  onsets = onsets_a,
+  fac = factor(seq_len(n_trials)),
+  hrf = fmrihrf::HRF_SPMG3,
+  duration = 0,
+  amplitude = 1,
+  span = 30,
+  summate = TRUE
+)
+X_spmg3_source <- as.matrix(fmrihrf::evaluate(
+  raw_spmg3_set, grid = times, precision = 0.1, method = "conv"
+))
+raw_spmg3_other <- fmrihrf::regressor(
+  onsets = onsets_b,
+  hrf = fmrihrf::HRF_SPMG3,
+  duration = 0,
+  amplitude = 1,
+  span = 30,
+  summate = TRUE
+)
+X_other_spmg3 <- as.matrix(fmrihrf::evaluate(
+  raw_spmg3_other, grid = times, precision = 0.1, method = "conv"
+))
+```
+
+For this controlled source construction, we know the trial-major, basis-minor
+order and capture those identities *before* deliberately permuting its columns.
+For a different upstream design, use that producer's metadata; never infer
+identity from the order in which an arbitrary matrix happens to arrive.
+
+```{r raw-multi-basis-contract}
+K <- K_spmg3
+source_map <- data.frame(
+  column = sprintf("source_%02d", seq_len(ncol(X_spmg3_source))),
+  trial = rep(seq_len(n_trials), each = K),
+  basis = rep(seq_len(K), times = n_trials)
+)
+colnames(X_spmg3_source) <- source_map$column
+
+column_order <- rev(seq_len(ncol(X_spmg3_source)))
+X_multi <- X_spmg3_source[, column_order, drop = FALSE]
+
+fit_raw_multi <- lss(
+  Y,
+  X_multi,
+  Z = Z,
+  Nuisance = X_other_spmg3,
+  method = "oasis",
+  oasis = oasis_options(
+    K = K,
+    ntrials = n_trials,
+    trial_basis_map = source_map,
+    return_diag = TRUE
   )
 )
-ridge_summary
+raw_permutation_error <- max(abs(fit_raw_multi$beta - fit_spmg3$beta))
+c(maximum_beta_error = raw_permutation_error)
+head(attr(fit_raw_multi$beta, "trial_basis_map"), 3)
 ```
 
-```{r ridge-compare-check, include = FALSE}
-stopifnot(ridge_summary$MeanTrialVariance[2] < ridge_summary$MeanTrialVariance[1])
-```
+Without optional returns, OASIS returns the `NK` by `V` beta matrix. Setting
+`return_diag = TRUE` or `return_se = TRUE` returns a list containing `beta`,
+then `diag` when requested, then `se` when requested. `beta` and `se` are both
+`NK` by `V`. For `K = 1`, `diag` contains vectors `d`, `alpha`, and `s`, each of
+length `N`. For `K > 1`, it contains `D`, `C`, and `E` arrays of shape
+`K` by `K` by `N`. Diagnostics describe the residualized design, or the
+whitened-and-residualized design when whitening is active.
 
-Practical starting points for fractional ridge: 0.005 for well-separated trials (ISI >= 6 s), 0.01 for typical rapid designs, and 0.02--0.05 for very dense events or multi-basis models. See `?lss` for details.
-
-## Multi-Basis HRFs
-
-Multi-basis models capture trial-to-trial variability in HRF shape. OASIS returns K rows per trial, interleaved by basis.
-
-```{r multi-basis-fit}
-beta_spmg3 <- lss(
-  Y = Y, X = NULL, method = "oasis",
-  oasis = list(design_spec = list(
-    sframe = sframe,
-    cond = list(onsets = onsets, hrf = fmrihrf::HRF_SPMG3, span = 30)
-  ))
+```{r multi-basis-contract, include = FALSE}
+stopifnot(
+  raw_permutation_error < 1e-10,
+  all(dim(fit_spmg3$beta) == c(n_trials * K_spmg3, n_voxels)),
+  all(dim(fit_spmg3$diag$D) == c(K_spmg3, K_spmg3, n_trials)),
+  all(dim(fit_spmg3$diag$C) == c(K_spmg3, K_spmg3, n_trials)),
+  all(dim(fit_spmg3$diag$E) == c(K_spmg3, K_spmg3, n_trials))
 )
-dim(beta_spmg3)
 ```
 
-With K = 3 (canonical + temporal derivative + dispersion derivative), the output has `K * n_trials` rows. Extract each component using the K-stride pattern.
+## Standard errors require the unpenalized fixed-design model
 
-```{r multi-basis-extract}
-K <- 3
-canonical  <- beta_spmg3[seq(1, nrow(beta_spmg3), by = K), ]
-temporal   <- beta_spmg3[seq(2, nrow(beta_spmg3), by = K), ]
-dispersion <- beta_spmg3[seq(3, nrow(beta_spmg3), by = K), ]
-cat("Each component:", nrow(canonical), "trials x", ncol(canonical), "voxels\n")
+For a judgeable SE example, generate data that exactly satisfy each LSS model:
+all target trials share a common coefficient vector, condition B and `Z` are in
+the fitted common span, and the temporal errors are iid Gaussian.
+
+```{r se-data, include = FALSE}
+set.seed(20260813)
+common_trial_beta <- matrix(seq(0.6, 1.1, length.out = n_voxels), 1L)
+Y_se <- matrix(rowSums(X_trials), n_time, 1L) %*% common_trial_beta +
+  X_other %*% other_beta +
+  Z %*% fixed_beta +
+  matrix(rnorm(n_time * n_voxels, sd = 1), n_time, n_voxels)
 ```
 
-Large temporal-derivative weights suggest timing variability across trials; dispersion-derivative weights indicate width changes.
-
-## FIR Basis
-
-The Finite Impulse Response basis makes no parametric assumptions about HRF shape. Each trial contributes one coefficient per time bin.
-
-```{r fir-fit}
-fir_hrf  <- fmrihrf::hrf_fir_generator(nbasis = 15, span = 30)
-beta_fir <- lss(
-  Y = Y, X = NULL, method = "oasis",
-  oasis = list(
-    design_spec = list(sframe = sframe,
-      cond = list(onsets = onsets, hrf = fir_hrf, span = 30)),
-    ridge_mode = "fractional", ridge_x = 0.2, ridge_b = 0.2
-  )
-)
-dim(beta_fir)
-```
-
-Moderate ridge is important here because FIR fits are high-dimensional. You can average across trials and voxels to recover a smooth HRF estimate.
-
-```{r fir-summary}
-n_bins    <- 15
-bin_width <- 30 / n_bins
-fir_array <- array(beta_fir, dim = c(n_bins, n_trials, n_voxels))
-fir_mean  <- apply(fir_array, 1, mean)
-fir_se    <- apply(fir_array, 1, sd) / sqrt(n_trials * n_voxels)
-tp        <- seq(0, (n_bins - 1) * bin_width, by = bin_width)
-```
-
-```{r fir-plot, fig.alt="FIR-derived mean HRF with SE ribbon."}
-plot(tp, fir_mean, type = "l", col = "navy", lwd = 2,
-     main = "FIR-derived HRF", xlab = "Time (s)", ylab = "Response")
-polygon(c(tp, rev(tp)), c(fir_mean + fir_se, rev(fir_mean - fir_se)),
-        col = grDevices::adjustcolor("navy", 0.2), border = NA)
-```
-
-## HRF Grid Search
-
-When you are unsure which HRF shape fits best, pass a candidate grid via `hrf_grid` and let OASIS pick a single global winner using a matched-filter score.
-
-```{r hrf-grid, eval=Sys.getenv("IN_PKGDOWN") != "true"}
-hrf_grid <- create_lwu_grid(
-  tau_range = c(4, 8), sigma_range = c(2, 3.5),
-  rho_range = c(0.2, 0.5), n_tau = 3, n_sigma = 2, n_rho = 2
-)
-
-beta_grid <- lss(
-  Y = Y, X = NULL, method = "oasis",
-  oasis = list(
-    design_spec = list(sframe = sframe,
-      cond = list(onsets = onsets, span = 30),
-      hrf_grid = hrf_grid$hrfs),
-    ridge_mode = "fractional", ridge_x = 0.01, ridge_b = 0.01
-  )
-)
-dim(beta_grid)
-```
-
-This selects a single HRF shared across all voxels, then refits with it. For voxel-specific HRF estimation, see `vignette("voxel-wise-hrf")`.
-
-## Multiple Conditions
-
-Real experiments often have multiple conditions. Place your target condition in `cond` and other conditions in `others` so their variance is accounted for as nuisance.
-
-```{r multi-cond}
-onsets_a <- seq(10, 280, by = 30)
-onsets_b <- seq(25, 280, by = 30)
-
-beta_multi <- lss(
-  Y = Y, X = NULL, method = "oasis",
-  oasis = list(design_spec = list(
-    sframe = sframe,
-    cond   = list(onsets = onsets_a, hrf = fmrihrf::HRF_SPMG1, span = 30),
-    others = list(list(onsets = onsets_b))
-  ))
-)
-dim(beta_multi)
-```
-
-The `others` list ensures that condition B's variance is accounted for when estimating condition A betas, preventing omitted-variable bias.
-
-## Standard Errors
-
-Request analytical standard errors with `return_se = TRUE`. You can then compute trial-level t-statistics directly.
-
-```{r se-request}
-res_se <- lss(
-  Y = Y[, 1:10], X = NULL, method = "oasis",
-  oasis = list(
-    design_spec = list(sframe = sframe,
-      cond = list(onsets = onsets, hrf = fmrihrf::HRF_SPMG1, span = 30)),
+```{r se-fit}
+fit_se <- lss(
+  Y_se,
+  X_trials,
+  Z = Z,
+  Nuisance = X_other,
+  method = "oasis",
+  oasis = oasis_options(
+    ridge_mode = "absolute",
+    ridge_x = 0,
+    ridge_b = 0,
     return_se = TRUE
   )
 )
+dim(fit_se$beta)
+dim(fit_se$se)
 ```
 
-```{r se-tstats}
-t_stats <- res_se$beta / res_se$se
-cat("Mean |t|:", round(mean(abs(t_stats)), 2), "\n")
-```
-
-```{r se-tstats-check, include = FALSE}
-stopifnot(
-  all(dim(res_se$beta) == dim(res_se$se)),
-  all(is.finite(res_se$se))
+```{r se-oracle, include = FALSE}
+direct_beta <- direct_se <- matrix(NA_real_, n_trials, n_voxels)
+for (j in seq_len(n_trials)) {
+  D <- cbind(
+    X_trials[, j],
+    rowSums(X_trials[, -j, drop = FALSE]),
+    Z,
+    X_other
+  )
+  gram_inv <- solve(crossprod(D))
+  coef_j <- gram_inv %*% crossprod(D, Y_se)
+  residual_j <- Y_se - D %*% coef_j
+  sigma2_j <- colSums(residual_j^2) / (n_time - ncol(D))
+  direct_beta[j, ] <- coef_j[1L, ]
+  direct_se[j, ] <- sqrt(gram_inv[1L, 1L] * sigma2_j)
+}
+se_oracle <- data.frame(
+  Maximum_beta_error = max(abs(unname(fit_se$beta) - direct_beta)),
+  Maximum_SE_error = max(abs(unname(fit_se$se) - direct_se))
 )
 ```
 
-Trials with larger standard errors typically have more overlapping neighbours or occur during noisier periods.
+```{r se-result, echo = FALSE}
+knitr::kable(
+  se_oracle,
+  digits = 12,
+  caption = "OASIS beta and SE agreement with independent full GLMs."
+)
+```
 
-## Prewhitening
+```{r se-contract, include = FALSE}
+stopifnot(
+  all(dim(fit_se$beta) == c(n_trials, n_voxels)),
+  all(dim(fit_se$se) == c(n_trials, n_voxels)),
+  max(as.matrix(se_oracle)) < 1e-10
+)
+```
 
-fMRI time series are temporally autocorrelated. You can apply AR(1) prewhitening so that standard errors and t-statistics are valid.
+These are conditional, coefficient-scale model SEs under spherical temporal
+errors. They are not robust to autocorrelation or heteroskedasticity. The
+result does not carry a ready-made multiple-testing or population-inference
+procedure, and estimated whitening cannot be combined with `return_se = TRUE`.
+
+## FIR coefficients and their uncertainty
+
+FIR output also has one row per basis coefficient, trial, and voxel. To keep
+the uncertainty unit honest, the next plot shows one trial and one voxel with
+its coefficient-wise model SE. It is not an across-voxel or across-trial SE for
+an average HRF. The data generator uses a correctly specified FIR
+target-plus-other-trials model with iid Gaussian errors, and the verification
+assembles every corresponding GLM independently.
+
+```{r fir-data, include = FALSE}
+K_fir <- 6L
+fir_hrf <- fmrihrf::hrf_fir_generator(nbasis = K_fir, span = 24)
+spec_fir <- design_spec
+spec_fir$cond$hrf <- fir_hrf
+spec_fir$cond$span <- 24
+spec_fir$others[[1]]$hrf <- fir_hrf
+spec_fir$others[[1]]$span <- 24
+
+# Generate the oracle design independently through fmrihrf's public API.
+fir_trial_set <- fmrihrf::regressor_set(
+  onsets = onsets_a,
+  fac = factor(seq_len(n_trials)),
+  hrf = fir_hrf,
+  duration = 0,
+  amplitude = 1,
+  span = 24,
+  summate = TRUE
+)
+X_fir <- as.matrix(fmrihrf::evaluate(
+  fir_trial_set, grid = times, precision = 0.1, method = "conv"
+))
+fir_other_reg <- fmrihrf::regressor(
+  onsets = onsets_b,
+  hrf = fir_hrf,
+  duration = 0,
+  amplitude = 1,
+  span = 24,
+  summate = TRUE
+)
+X_other_fir <- as.matrix(fmrihrf::evaluate(
+  fir_other_reg, grid = times, precision = 0.1, method = "conv"
+))
+summed_fir <- vapply(seq_len(K_fir), function(k) {
+  rowSums(X_fir[, seq(k, ncol(X_fir), by = K_fir), drop = FALSE])
+}, numeric(n_time))
+theta_fir <- outer(
+  seq(0.8, -0.2, length.out = K_fir),
+  seq(0.8, 1.2, length.out = n_voxels)
+)
+other_theta_fir <- outer(
+  seq(0.3, -0.1, length.out = ncol(X_other_fir)),
+  seq(0.9, 1.1, length.out = n_voxels)
+)
+set.seed(20260815)
+Y_fir <- summed_fir %*% theta_fir +
+  X_other_fir %*% other_theta_fir +
+  Z %*% fixed_beta +
+  matrix(rnorm(n_time * n_voxels), n_time, n_voxels)
+```
+
+```{r fir-fit}
+fit_fir <- lss(
+  Y_fir,
+  X = NULL,
+  Z = Z,
+  method = "oasis",
+  oasis = oasis_options(
+    design_spec = spec_fir,
+    ridge_mode = "absolute",
+    ridge_x = 0,
+    ridge_b = 0,
+    return_se = TRUE
+  )
+)
+dim(fit_fir$beta)
+dim(fit_fir$se)
+```
+
+```{r fir-oracle, include = FALSE}
+# Assemble every corresponding full GLM independently.
+direct_fir_beta <- direct_fir_se <- matrix(
+  NA_real_, n_trials * K_fir, n_voxels
+)
+for (j in seq_len(n_trials)) {
+  target_rows <- ((j - 1L) * K_fir + 1L):(j * K_fir)
+  other_trial_ids <- setdiff(seq_len(n_trials), j)
+  other_trials <- vapply(seq_len(K_fir), function(k) {
+    columns <- (other_trial_ids - 1L) * K_fir + k
+    rowSums(X_fir[, columns, drop = FALSE])
+  }, numeric(n_time))
+  D <- cbind(
+    X_fir[, target_rows, drop = FALSE], other_trials, Z, X_other_fir
+  )
+  gram_inv <- solve(crossprod(D))
+  coef_j <- gram_inv %*% crossprod(D, Y_fir)
+  residual_j <- Y_fir - D %*% coef_j
+  sigma2_j <- colSums(residual_j^2) / (n_time - ncol(D))
+  direct_fir_beta[target_rows, ] <- coef_j[seq_len(K_fir), , drop = FALSE]
+  direct_fir_se[target_rows, ] <- sqrt(
+    outer(diag(gram_inv)[seq_len(K_fir)], sigma2_j)
+  )
+}
+
+fir_oracle <- data.frame(
+  Maximum_beta_error = max(abs(unname(fit_fir$beta) - direct_fir_beta)),
+  Maximum_SE_error = max(abs(unname(fit_fir$se) - direct_fir_se))
+)
+
+fir_rows <- seq_len(K_fir)
+fir_example <- data.frame(
+  basis = fir_rows,
+  coefficient = fit_fir$beta[fir_rows, 1L],
+  se = fit_fir$se[fir_rows, 1L]
+)
+```
+
+```{r fir-oracle-result, echo = FALSE}
+knitr::kable(
+  fir_oracle,
+  digits = 12,
+  caption = "FIR beta and SE agreement with independent full GLMs."
+)
+```
+
+```{r fir-plot, echo = FALSE, fig.cap="FIR basis coefficients plus or minus one conditional model SE for trial 1, voxel 1; the y-axis is coefficient scale, not a normalized HRF amplitude.", fig.alt="Six FIR estimates for one trial and voxel: the first is positive, the second is near zero, and the remaining four are negative; one-SE intervals are wide, with the second crossing zero."}
+old_par <- par(bg = "white")
+plot(
+  fir_example$basis,
+  fir_example$coefficient,
+  type = "b",
+  pch = 19,
+  xlab = "FIR basis index",
+  ylab = "FIR basis coefficient",
+  ylim = range(
+    fir_example$coefficient - fir_example$se,
+    fir_example$coefficient + fir_example$se
+  )
+)
+arrows(
+  fir_example$basis,
+  fir_example$coefficient - fir_example$se,
+  fir_example$basis,
+  fir_example$coefficient + fir_example$se,
+  angle = 90,
+  code = 3,
+  length = 0.04
+)
+abline(h = 0, col = "grey70", lty = 2)
+par(old_par)
+```
+
+```{r fir-contract, include = FALSE}
+stopifnot(
+  all(dim(fit_fir$beta) == c(n_trials * K_fir, n_voxels)),
+  all(dim(fit_fir$se) == c(n_trials * K_fir, n_voxels)),
+  all(is.finite(fir_example$se)),
+  all(fir_example$se >= 0),
+  max(as.matrix(fir_oracle)) < 1e-10
+)
+```
+
+FIR models can be poorly conditioned because each trial contributes many
+columns. Ridge may be scientifically useful, but ridge and `return_se = TRUE`
+are different contracts; the package does not report inferential FIR SEs for a
+penalized fit.
+
+## HRF-grid selection is exploratory
+
+`hrf_grid` chooses one candidate from the observed `Y` using a matched-filter
+score after residualizing both the response and candidate against the full
+common span (`Z`, `Nuisance`, and modeled `others`), then fits that design. The
+call shown returns the beta matrix. Even when design diagnostics are requested,
+the public `lss()` route does not expose the winning candidate or candidate
+scores, and it does not return selection-adjusted uncertainty.
+
+```{r hrf-grid}
+grid_spec <- design_spec
+grid_spec$hrf_grid <- list(fmrihrf::HRF_SPMG1, fmrihrf::HRF_GAMMA)
+
+fit_grid <- lss(
+  Y,
+  X = NULL,
+  Z = Z,
+  method = "oasis",
+  oasis = oasis_options(
+    design_spec = grid_spec,
+    ridge_mode = "fractional",
+    ridge_x = 0.01,
+    ridge_b = 0.01
+  )
+)
+dim(fit_grid)
+```
+
+The following known-truth check makes that conditioning rule judgeable. Its
+target signal is Gaussian, while a much stronger other-condition signal uses
+SPMG1. The grid fit must match the otherwise identical fit with the Gaussian
+target fixed in advance.
+
+```{r hrf-grid-contract, include = FALSE}
+grid_target_onsets <- c(10, 40, 70, 100, 130)
+grid_other_onsets <- c(20, 50, 80, 110, 140)
+grid_aggregate <- function(onsets, hrf) {
+  reg <- fmrihrf::regressor(
+    onsets = onsets,
+    hrf = hrf,
+    duration = 0,
+    amplitude = 1,
+    span = 30,
+    summate = TRUE
+  )
+  value <- fmrihrf::evaluate(
+    reg, times, precision = 0.1, method = "conv"
+  )
+  if (is.matrix(value)) rowSums(value) else as.numeric(value)
+}
+Y_grid_contract <- matrix(
+  grid_aggregate(grid_target_onsets, fmrihrf::HRF_GAUSSIAN) +
+    8 * grid_aggregate(grid_other_onsets, fmrihrf::HRF_SPMG1),
+  n_time,
+  1L
+)
+grid_contract_spec <- list(
+  sframe = sframe,
+  cond = list(
+    onsets = grid_target_onsets,
+    duration = 0,
+    amplitude = 1,
+    span = 30
+  ),
+  others = list(list(
+    onsets = grid_other_onsets,
+    hrf = fmrihrf::HRF_SPMG1,
+    duration = 0,
+    amplitude = 1,
+    span = 30
+  )),
+  precision = 0.1,
+  method = "conv"
+)
+selected_spec <- grid_contract_spec
+selected_spec$hrf_grid <- list(
+  fmrihrf::HRF_SPMG1,
+  fmrihrf::HRF_GAUSSIAN
+)
+gaussian_spec <- grid_contract_spec
+gaussian_spec$cond$hrf <- fmrihrf::HRF_GAUSSIAN
+grid_contract_options <- list(
+  ridge_mode = "absolute",
+  ridge_x = 0,
+  ridge_b = 0
+)
+fit_selected_contract <- lss(
+  Y_grid_contract,
+  X = NULL,
+  Z = matrix(1, n_time, 1L),
+  method = "oasis",
+  oasis = utils::modifyList(
+    grid_contract_options,
+    list(design_spec = selected_spec)
+  )
+)
+fit_gaussian_contract <- lss(
+  Y_grid_contract,
+  X = NULL,
+  Z = matrix(1, n_time, 1L),
+  method = "oasis",
+  oasis = utils::modifyList(
+    grid_contract_options,
+    list(design_spec = gaussian_spec)
+  )
+)
+grid_contract_error <- max(abs(
+  unname(fit_selected_contract) - unname(fit_gaussian_contract)
+))
+stopifnot(grid_contract_error < 1e-10)
+```
+
+```{r hrf-grid-contract-result, echo = FALSE}
+knitr::kable(
+  data.frame(Maximum_Gaussian_reference_error = grid_contract_error),
+  digits = 12,
+  caption = paste(
+    "Grid fit versus the fixed-Gaussian reference after conditioning on a",
+    "strong SPMG1 other condition."
+  )
+)
+```
+
+Because selection and estimation use the same data, treat this as exploratory
+or validate the selection out of sample. `return_se = TRUE` fails closed on
+this route. For explicitly normalized voxel-specific shapes, continue to
+`vignette("voxel-wise-hrf")`.
+
+## Prewhitening changes the fitted space
+
+Use the top-level `prewhiten` argument. The same estimated operator is applied
+to the response, target design, and common design before OASIS fits
+coefficients.
 
 ```{r prewhiten}
-beta_pw <- lss(
-  Y = Y[, 1:10], X = NULL, method = "oasis",
-  oasis = list(design_spec = list(sframe = sframe,
-    cond = list(onsets = onsets, hrf = fmrihrf::HRF_SPMG1, span = 30))),
-  prewhiten = list(method = "ar", p = 1)
+set.seed(20260814)
+ar_error <- apply(matrix(rnorm(n_time * n_voxels), n_time), 2, function(x) {
+  as.numeric(stats::filter(x, filter = 0.6, method = "recursive"))
+})
+Y_ar <- mean_signal + ar_error
+
+pw_ar <- prewhiten_options(method = "ar", p = 1, pooling = "global")
+
+fit_ar <- lss(
+  Y_ar,
+  X_trials,
+  Z = Z,
+  Nuisance = X_other,
+  method = "oasis",
+  oasis = oasis_options(
+    ridge_mode = "absolute",
+    ridge_x = 0,
+    ridge_b = 0
+  ),
+  prewhiten = pw_ar
 )
-dim(beta_pw)
+dim(fit_ar)
 ```
 
-OASIS applies the whitening transform consistently to data, trial design, and nuisance regressors. For advanced options (auto AR order selection, voxel-wise or parcel-based pooling, ARMA models), see `?lss`.
+```{r prewhiten-contract, include = FALSE}
+fit_ar_naive <- lss(
+  Y_ar,
+  X_trials,
+  Z = Z,
+  Nuisance = X_other,
+  method = "naive",
+  prewhiten = pw_ar
+)
+prewhiten_backend_error <- max(abs(unname(fit_ar) - unname(fit_ar_naive)))
 
-## When to Use OASIS
+se_after_whitening <- try(lss(
+  Y_ar,
+  X_trials,
+  Z = Z,
+  Nuisance = X_other,
+  method = "oasis",
+  oasis = oasis_options(
+    ridge_mode = "absolute",
+    ridge_x = 0,
+    ridge_b = 0,
+    return_se = TRUE
+  ),
+  prewhiten = pw_ar
+), silent = TRUE)
 
-**Prefer OASIS when** you want HRF-aware design construction, multi-basis HRFs (K > 1), ridge regularization, or standard errors in one call. It is especially useful for rapid event-related designs with hundreds of trials.
+stopifnot(
+  prewhiten_backend_error < 1e-10,
+  inherits(se_after_whitening, "try-error"),
+  grepl(
+    "not calibrated for estimated prewhitening",
+    as.character(se_after_whitening),
+    fixed = TRUE
+  )
+)
+```
 
-**Prefer standard LSS backends when** you already have a single-basis design matrix `X` and want the leanest, most transparent code path.
+```{r prewhiten-result, echo = FALSE}
+knitr::kable(
+  data.frame(Maximum_backend_error = prewhiten_backend_error),
+  digits = 12,
+  caption = "Unpenalized OASIS versus the naive backend after the same estimated whitening."
+)
+```
 
-## Next Steps
+This demonstrates the coefficient path, not that AR(1) is adequate for every
+dataset. Choose the order and pooling from residual diagnostics and the study
+design. A shared OASIS design supports global or run-level operators; voxel-
+and parcel-specific operators are rejected because they cannot be applied to
+one shared design matrix.
 
-- `vignette("fmrilss")` --- foundational LSS concepts
-- `vignette("voxel-wise-hrf")` --- spatial HRF modeling
+```{r run-aware-whitening}
+run_lengths <- c(90L, 90L)
+run_id <- rep(seq_along(run_lengths), times = run_lengths)
+runwise <- prewhiten_options(
+  method = "ar",
+  p = 1,
+  pooling = "run",
+  runs = run_id
+)
+length(run_id)
+```
+
+Always provide run labels when data span multiple runs so filtering does not
+cross run boundaries. `pooling = "global"` with `runs` uses one shared set of
+noise coefficients while still respecting those boundaries; `pooling = "run"`
+estimates a separate set for each run. Estimated-prewhitening uncertainty is
+not calibrated, so this coefficient route cannot also request OASIS model SEs.
+
+## A compact decision guide
+
+- Use a standard LSS backend for a fixed one-basis `X` when you want the
+  leanest unpenalized path.
+- Use OASIS for event construction, modeled other conditions, multiple bases,
+  ridge, blocked products, or fixed-design model SEs.
+- Treat ridge, HRF selection, and estimated whitening as changes to the
+  estimation contract, not harmless speed options.
+- Preserve row names and trial/basis identity whenever $K>1$.
+
+## Next steps
+
+- `vignette("oasis_theory")` --- derivation, complexity, memory, and inference
+  boundaries
+- `vignette("lss_with_fmridesign")` --- run-aware event-table construction
+- `vignette("voxel-wise-hrf")` --- normalized voxel-specific HRF shapes
 - `vignette("sbhm")` --- library-constrained voxel-specific HRFs
-- `vignette("oasis_theory")` --- mathematical details
+
+## Reference
+
+Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
+Deconvolving BOLD activation in event-related designs for multivoxel pattern
+classification analyses. *NeuroImage*, 59(3), 2636--2643.
+[https://doi.org/10.1016/j.neuroimage.2011.08.076](https://doi.org/10.1016/j.neuroimage.2011.08.076)

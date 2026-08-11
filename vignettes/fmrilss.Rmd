@@ -23,9 +23,12 @@ vignette: |
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r setup-opts, include = FALSE}
-if (requireNamespace("ragg", quietly = TRUE)) knitr::opts_chunk$set(dev = "ragg_png")
-if (requireNamespace("systemfonts", quietly = TRUE)) albersdown::albers_register_fonts()
+```{r setup-options, include=FALSE}
+plot_device <- if (requireNamespace("ragg", quietly = TRUE)) "ragg_png" else "png"
+if (requireNamespace("systemfonts", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  albersdown::albers_register_fonts()
+}
 if (requireNamespace("ggplot2", quietly = TRUE) &&
     requireNamespace("albersdown", quietly = TRUE)) {
   ggplot2::theme_set(
@@ -35,12 +38,13 @@ if (requireNamespace("ggplot2", quietly = TRUE) &&
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  fig.width = 7,
-  fig.height = 5,
-  dev = "png",
+  message = TRUE,
+  warning = TRUE,
+  dev = plot_device,
   dpi = 150,
-  warning = FALSE,
-  message = FALSE
+  fig.width = 7,
+  fig.height = 4.5,
+  fig.bg = "white"
 )
 ```
 
@@ -57,197 +61,524 @@ cat(sprintf(
 ))
 ```
 
+You have a preprocessed fMRI run and an event design with one regressor per
+trial. Your goal is a beta estimate for every trial and voxel, even though
+nearby haemodynamic responses overlap. `fmrilss` fits each trial in a separate
+model and returns the estimates as a trial-by-voxel matrix that can feed an
+MVPA, RSA, connectivity, or reliability analysis.
 
-## Why fmrilss?
+This article follows one complete workflow: build a trial design, fit LSS,
+check the result, handle nuisance regressors correctly, and compare LSS with a
+simultaneous trial-wise GLM. The example is synthetic so that the truth is
+known; in a real analysis, `Y` and the design matrices come from your
+preprocessing and design pipeline.
 
-In rapid event-related fMRI, hemodynamic responses from consecutive trials overlap, making trial-by-trial beta estimates unstable. This is a problem for MVPA, RSA, and connectivity analyses that need reliable single-trial activation patterns.
+## What are the inputs?
 
-Least Squares Separate (LSS; Mumford et al., 2012) solves this by fitting a separate GLM for each trial: one regressor for the trial of interest, one aggregating all other trials, plus nuisance regressors. This reduces collinearity and stabilizes estimates.
+`lss()` uses matrices with time along the rows:
 
-`fmrilss` provides optimized LSS implementations (R and C++ with OpenMP), plus extensions for automatic HRF estimation, ridge regularization, and the OASIS single-pass solver.
+- `Y` contains the observed data: time points by voxels.
+- `X` contains one HRF-convolved column per trial: time points by trials.
+- `Z` contains regressors retained in every trial-wise model, such as run
+  intercepts or trends.
+- `Nuisance` contains regressors to project out, such as motion or
+  physiological traces.
 
-## Quick example
+The function returns one row per trial and one column per voxel. Trial and
+voxel names are preserved when `X` and `Y` have column names.
 
-```{r setup}
-library(fmrihrf)
-library(fmrilss)
-set.seed(42)
+```{r attach}
+suppressPackageStartupMessages({
+  library(fmrilss)
+  library(fmrihrf)
+})
 ```
 
-### Create a rapid event design
+The following code constructs the trial design used throughout the article.
+Each event is an impulse convolved with the same canonical HRF.
 
-We'll simulate 12 trials in a 150-TR run with jittered onsets, then convolve with a canonical HRF to build one design-matrix column per trial.
-
-```{r onsets}
-n_time <- 150
-n_trials <- 12
-n_vox <- 25
+```{r build-trial-design}
+n_time <- 160
+n_trials <- 24
+n_voxels <- 8
 sframe <- sampling_frame(blocklens = n_time, TR = 1)
-
-base <- round(seq(10, n_time - 24, length.out = n_trials))
-onsets <- sort(pmax(10, pmin(base + sample(-3:3, n_trials, TRUE), n_time - 24)))
+onsets <- round(seq(8, 112, length.out = n_trials))
+rset <- regressor_set(
+  onsets,
+  factor(seq_len(n_trials)),
+  hrf = HRF_SPMG1,
+  duration = 0,
+  span = 30,
+  summate = FALSE
+)
+X <- evaluate(
+  rset,
+  grid = samples(sframe, global = TRUE),
+  precision = 0.1,
+  method = "conv"
+)
+X <- as.matrix(X)
+colnames(X) <- sprintf("trial_%02d", seq_len(n_trials))
 ```
 
-```{r design-matrix}
-rset <- regressor_set(onsets, factor(seq_along(onsets)),
-                      hrf = HRF_SPMG1, duration = 0, span = 24, summate = FALSE)
-X <- evaluate(rset, grid = samples(sframe, global = TRUE),
-              precision = 0.1, method = "conv")
+We add an intercept, a trend, and two centred nuisance traces. The final lines
+create one synthetic `Y` with known trial effects. Replace this simulation with
+your own preprocessed time-by-voxel matrix.
+
+```{r simulate-data}
+set.seed(2401)
+noise_sd <- 2.5
+Z <- cbind(
+  Intercept = 1,
+  Linear_trend = as.numeric(scale(seq_len(n_time), scale = FALSE))
+)
+Nuisance <- scale(cbind(
+  Motion_x = sin(seq_len(n_time) / 9),
+  Motion_y = cos(seq_len(n_time) / 13)
+), center = TRUE, scale = FALSE)
+
+true_betas <- matrix(
+  rnorm(n_trials * n_voxels),
+  n_trials,
+  n_voxels,
+  dimnames = list(colnames(X), sprintf("voxel_%02d", seq_len(n_voxels)))
+)
+fixed_coef <- matrix(rnorm(ncol(Z) * n_voxels), ncol(Z), n_voxels)
+nuisance_coef <- matrix(
+  rnorm(ncol(Nuisance) * n_voxels, sd = 1.2),
+  ncol(Nuisance),
+  n_voxels
+)
+mean_signal <- X %*% true_betas +
+  Z %*% fixed_coef +
+  Nuisance %*% nuisance_coef
+Y <- mean_signal + matrix(
+  rnorm(n_time * n_voxels, sd = noise_sd),
+  n_time,
+  n_voxels,
+  dimnames = list(NULL, colnames(true_betas))
+)
 ```
 
-`X` is a `r nrow(X)` x `r ncol(X)` matrix --- one column per trial, each containing the HRF-convolved impulse.
-
-### Add baseline and nuisance regressors
-
-```{r nuisance}
-Z <- cbind(1, scale(seq_len(n_time)))       # intercept + linear trend
-Nuisance <- matrix(rnorm(n_time * 6), n_time, 6)  # e.g. motion
-```
-
-### Simulate data with known ground truth
-
-```{r simulate}
-true_betas <- matrix(rnorm(n_trials * n_vox, 0, 1.2), n_trials, n_vox)
-Y <- X %*% true_betas +
-     Z %*% matrix(rnorm(2 * n_vox), 2) +
-     Nuisance %*% matrix(rnorm(6 * n_vox), 6) +
-     matrix(rnorm(n_time * n_vox), n_time, n_vox)
-```
-
-```{r simulate-check, include = FALSE}
+```{r simulate-check, include=FALSE}
 stopifnot(
-  all(dim(Y) == c(n_time, n_vox)),
-  all(is.finite(Y))
+  all(dim(Y) == c(n_time, n_voxels)),
+  all(dim(X) == c(n_time, n_trials)),
+  all(is.finite(Y)),
+  all(is.finite(X))
 )
 ```
 
-### Run LSS
-
-At its simplest, `lss()` needs only the data and the trial design:
-
-```{r lss-basic}
-beta <- lss(Y, X)
-dim(beta)
-```
-
-Include `Z` and `Nuisance` for a more complete model:
-
-```{r lss-full}
-beta_full <- lss(Y, X, Z = Z, Nuisance = Nuisance)
-```
-
-```{r lss-full-check, include = FALSE}
-stopifnot(
-  all(dim(beta_full) == c(n_trials, n_vox)),
-  all(is.finite(beta_full))
-)
-```
-
-That's it --- `beta_full` is a `r nrow(beta_full)` x `r ncol(beta_full)` matrix of trial-by-voxel estimates.
-
-## LSS vs standard GLM
-
-The traditional approach ("Least Squares All", LSA) estimates all trials in one model. Let's compare:
-
-```{r lsa}
-beta_lsa <- lsa(Y, X, Z = Z, Nuisance = Nuisance)
-```
-
-```{r compare-variance}
-comparison_summary <- data.frame(
-  Method = c("LSS", "LSA"),
-  CorrelationToTruth = c(
-    cor(as.vector(beta_full), as.vector(true_betas)),
-    cor(as.vector(beta_lsa), as.vector(true_betas))
-  ),
-  MeanTrialVariance = c(
-    mean(apply(beta_full, 2, var)),
-    mean(apply(beta_lsa, 2, var))
-  )
-)
-comparison_summary
-```
-
-```{r compare-variance-check, include = FALSE}
-stopifnot(all(is.finite(as.matrix(comparison_summary[, -1]))))
-```
-
-In this simulation, LSS is both less variable and closer to the known trial effects. A scatter plot shows how the two estimators relate to each other:
-
-```{r lss-lsa-scatter, fig.width=5.5, fig.height=5, fig.alt="Scatter plot of LSA vs LSS trial-wise betas showing shrinkage."}
-plot(as.vector(beta_lsa), as.vector(beta_full),
-     pch = 19, col = adjustcolor("steelblue", 0.3), cex = 0.6,
-     xlab = "LSA beta", ylab = "LSS beta",
-     main = "Trial-wise betas: LSS vs LSA")
-abline(0, 1, lty = 2, col = "gray40")
-```
-
-## Prewhitening
-
-fMRI time series have temporal autocorrelation. Pass a `prewhiten` list to correct for it:
-
-```{r prewhiten}
-beta_ar1 <- lss(Y, X, Z = Z, Nuisance = Nuisance,
-                prewhiten = list(method = "ar", p = 1))
-```
-
-Automatic AR order selection:
-
-```{r prewhiten-auto}
-beta_auto <- lss(Y, X, Z = Z, Nuisance = Nuisance,
-                 prewhiten = list(method = "ar", p = "auto", p_max = 4))
-```
-
-See `?lss` for additional pooling strategies (`"voxel"`, `"run"`, `"parcel"`) and ARMA models.
-
-## Computational backends
-
-The default backend (`"r_optimized"`) is fast and readable. For large datasets, switch to the parallelized C++ engine:
-
-```{r cpp-backend, eval = requireNamespace("Rcpp", quietly = TRUE) && requireNamespace("RcppArmadillo", quietly = TRUE)}
-beta_cpp <- lss(Y, X, Z = Z, Nuisance = Nuisance, method = "cpp_optimized")
-all.equal(beta_full, beta_cpp, tolerance = 1e-8)
-```
-
-Available methods: `"naive"`, `"r_vectorized"`, `"r_optimized"` (default), `"cpp_optimized"`, `"oasis"`.
-
-## OASIS: single-pass LSS with extras
-
-OASIS can build the design matrix from event specifications, add ridge regularization, and fit multi-basis HRFs --- all in one call:
-
-```{r oasis}
-beta_oasis <- lss(
-  Y, X = NULL, method = "oasis",
-  oasis = list(
-    design_spec = list(
-      sframe = sframe,
-      cond = list(onsets = onsets, hrf = HRF_SPMG1, span = 24)
+```{r input-shapes, echo=FALSE}
+knitr::kable(
+  data.frame(
+    Object = c("Y", "X", "Z", "Nuisance", "LSS result"),
+    Rows = c(nrow(Y), nrow(X), nrow(Z), nrow(Nuisance), ncol(X)),
+    Columns = c(ncol(Y), ncol(X), ncol(Z), ncol(Nuisance), ncol(Y)),
+    Role = c(
+      "observed voxel time series",
+      "one HRF-convolved column per trial",
+      "shared modeled regressors",
+      "projected nuisance regressors",
+      "one estimate per trial and voxel"
     )
+  ),
+  caption = "Matrix shapes in the example workflow."
+)
+```
+
+## How do I estimate the trial betas?
+
+The default optimized R backend is the clearest first path. Supply all parts of
+the model in the same call:
+
+```{r fit-lss}
+beta_lss <- lss(Y, X, Z = Z, Nuisance = Nuisance)
+dim(beta_lss)
+```
+
+`beta_lss` is the promised `r nrow(beta_lss)` by `r ncol(beta_lss)`
+trial-by-voxel matrix. A small preview is usually more useful than printing the
+whole object:
+
+```{r beta-preview}
+round(beta_lss[1:4, 1:4], 2)
+```
+
+```{r beta-contract-check, include=FALSE}
+direct_betas <- t(vapply(seq_len(n_trials), function(trial_id) {
+  direct_design <- cbind(
+    target = X[, trial_id],
+    other_trials = rowSums(X) - X[, trial_id],
+    Z,
+    Nuisance
+  )
+  lm.fit(direct_design, Y)$coefficients[1L, ]
+}, numeric(n_voxels)))
+stopifnot(
+  all(dim(beta_lss) == c(n_trials, n_voxels)),
+  identical(rownames(beta_lss), colnames(X)),
+  identical(colnames(beta_lss), colnames(Y)),
+  all(is.finite(beta_lss)),
+  max(abs(beta_lss - direct_betas)) < 1e-8
+)
+```
+
+Each row comes from a model with three parts: the target trial, the sum of all
+other trials, and the shared regressors. The target coefficient becomes the
+reported beta. Repeating that model for every trial reduces competition among
+individual trial columns, but it does not make a poor or rank-deficient design
+informative.
+
+```{r beta-heatmap, echo=FALSE, fig.cap="Estimated single-trial responses for the eight simulated voxels. Red is negative and blue is positive; deeper colour indicates larger magnitude, not statistical significance.", fig.alt="Heatmap with 24 trial rows and 8 voxel columns. Dark red cells are strongly negative and dark blue cells are strongly positive."}
+op <- par(mar = c(4, 4, 1, 1), bg = "white")
+image(
+  x = seq_len(ncol(beta_lss)),
+  y = seq_len(nrow(beta_lss)),
+  z = t(beta_lss),
+  axes = FALSE,
+  xlab = "Voxel",
+  ylab = "Trial",
+  col = hcl.colors(31, "Blue-Red 3", rev = TRUE)
+)
+axis(1, at = seq_len(ncol(beta_lss)), labels = colnames(beta_lss), las = 2, cex.axis = 0.7)
+axis(2, at = c(1, 6, 12, 18, 24), labels = c(1, 6, 12, 18, 24), las = 1)
+box()
+par(op)
+```
+
+## How should I handle nuisance regressors?
+
+The safest route is to pass `Nuisance` directly to `lss()`, as above. The
+package applies a rank-aware Frisch--Waugh--Lovell step for the shared `Z` and
+`Nuisance` span before fitting the trial models.
+
+If you deliberately cache a projection for repeated analyses, apply it to
+every matrix that remains in the model. Here we project only `Nuisance`, so
+the same projection must transform `Y`, `X`, and `Z`:
+
+```{r projection-equivalence}
+Q_nuisance <- project_confounds(Nuisance)
+beta_projected <- lss(
+  Q_nuisance %*% Y,
+  Q_nuisance %*% X,
+  Z = Q_nuisance %*% Z
+)
+c(maximum_absolute_difference = max(abs(beta_lss - beta_projected)))
+```
+
+```{r projection-equivalence-check, include=FALSE}
+projection_error <- max(abs(beta_lss - beta_projected))
+Nuisance_redundant <- cbind(
+  Nuisance,
+  Duplicate_motion_x = 2 * Nuisance[, "Motion_x"]
+)
+beta_redundant <- lss(Y, X, Z = Z, Nuisance = Nuisance_redundant)
+Q_redundant <- project_confounds(Nuisance_redundant)
+beta_redundant_projected <- lss(
+  Q_redundant %*% Y,
+  Q_redundant %*% X,
+  Z = Q_redundant %*% Z
+)
+redundant_projection_error <- max(abs(
+  beta_redundant - beta_redundant_projected
+))
+stopifnot(
+  is.finite(projection_error),
+  projection_error < 1e-8,
+  is.finite(redundant_projection_error),
+  redundant_projection_error < 1e-8
+)
+```
+
+Leaving `Z` unprojected changes the model and can change the trial estimates.
+Also note that `project_confounds()` materializes an \(n \times n\) matrix;
+passing `Nuisance` to `lss()` avoids that storage and should be your default.
+
+## When does LSS differ from LSA?
+
+Least Squares All (LSA) estimates every trial column simultaneously. LSS
+replaces the non-target columns with their sum in each trial-specific model.
+That creates a bias--variance trade-off rather than a universal winner.
+
+To make the comparison reproducible, the next experiment holds `X`,
+`true_betas`, and all nuisance effects fixed. Because both estimators are
+linear here, we can calculate conditional squared bias and noise variance
+directly. We also generate 100 independent noise realizations as a check on
+that calculation.
+
+```{r repeated-comparison, include=FALSE}
+shared_projection <- project_confounds(cbind(Z, Nuisance))
+X_residual <- shared_projection %*% X
+X_norm <- sweep(X_residual, 2, sqrt(colSums(X_residual^2)), "/")
+X_cor <- cor(X_residual)
+design_diagnostics <- data.frame(
+  Diagnostic = c(
+    "Residualized trial-design rank",
+    "Largest absolute trial correlation",
+    "Scaled condition number"
+  ),
+  Value = c(
+    qr(X_residual)$rank,
+    max(abs(X_cor[upper.tri(X_cor)])),
+    kappa(X_norm, exact = TRUE)
   )
 )
-dim(beta_oasis)
+
+# Exact conditional means and unit-noise linear operators.
+lss_mean <- lss(mean_signal, X, Z = Z, Nuisance = Nuisance)
+lsa_mean <- lsa(mean_signal, X, Z = cbind(Z, Nuisance))
+lss_operator <- lss(diag(n_time), X, Z = Z, Nuisance = Nuisance)
+lsa_operator <- lsa(diag(n_time), X, Z = cbind(Z, Nuisance))
+
+squared_bias <- c(
+  LSS = mean((lss_mean - true_betas)^2),
+  LSA = mean((lsa_mean - true_betas)^2)
+)
+variance_factor <- c(
+  LSS = mean(rowSums(lss_operator^2)),
+  LSA = mean(rowSums(lsa_operator^2))
+)
+variance_at_example <- noise_sd^2 * variance_factor
+exact_mse <- squared_bias + variance_at_example
+
+set.seed(2402)
+n_repetitions <- 100L
+lss_repetitions <- array(
+  NA_real_,
+  dim = c(n_trials, n_voxels, n_repetitions)
+)
+lsa_repetitions <- array(
+  NA_real_,
+  dim = c(n_trials, n_voxels, n_repetitions)
+)
+
+for (iteration in seq_len(n_repetitions)) {
+  Y_iteration <- mean_signal + matrix(
+    rnorm(n_time * n_voxels, sd = noise_sd),
+    n_time,
+    n_voxels
+  )
+  lss_repetitions[, , iteration] <- lss(
+    Y_iteration,
+    X,
+    Z = Z,
+    Nuisance = Nuisance
+  )
+  lsa_repetitions[, , iteration] <- lsa(
+    Y_iteration,
+    X,
+    Z = cbind(Z, Nuisance)
+  )
+}
+
+monte_carlo_mse <- function(estimates, truth) {
+  errors <- sweep(estimates, c(1, 2), truth, "-")
+  mean(errors^2)
+}
+
+comparison <- data.frame(
+  Estimator = c("LSS", "LSA"),
+  `Squared bias` = squared_bias,
+  Variance = variance_at_example,
+  MSE = exact_mse,
+  `Monte Carlo MSE` = c(
+    monte_carlo_mse(lss_repetitions, true_betas),
+    monte_carlo_mse(lsa_repetitions, true_betas)
+  ),
+  RMSE = sqrt(exact_mse),
+  check.names = FALSE,
+  row.names = NULL
+)
+monte_carlo_lss <- comparison$`Monte Carlo MSE`[comparison$Estimator == "LSS"]
+monte_carlo_lsa <- comparison$`Monte Carlo MSE`[comparison$Estimator == "LSA"]
+
+crossover_sd <- sqrt(
+  (squared_bias["LSS"] - squared_bias["LSA"]) /
+    (variance_factor["LSA"] - variance_factor["LSS"])
+)
+noise_grid <- c(1, crossover_sd, noise_sd)
+sensitivity <- data.frame(
+  `Noise SD` = noise_grid,
+  `LSS RMSE` = sqrt(squared_bias["LSS"] + noise_grid^2 * variance_factor["LSS"]),
+  `LSA RMSE` = sqrt(squared_bias["LSA"] + noise_grid^2 * variance_factor["LSA"]),
+  check.names = FALSE
+)
+
+stopifnot(
+  qr(X_residual)$rank == n_trials,
+  all(is.finite(as.matrix(comparison[, -1]))),
+  all(comparison$Variance > 0),
+  max(abs(comparison$MSE - comparison$`Monte Carlo MSE`) / comparison$MSE) < 0.1,
+  sensitivity$`LSA RMSE`[1] < sensitivity$`LSS RMSE`[1],
+  tail(sensitivity$`LSS RMSE`, 1) < tail(sensitivity$`LSA RMSE`, 1)
+)
 ```
 
-Setting `X = NULL` lets OASIS construct the design internally from `design_spec`. Fractional ridge regularization (5%) is applied by default to stabilize overlapping designs. See `vignette("oasis_method")` for ridge tuning, multi-basis HRFs, standard errors, and diagnostics.
-
-## Nuisance pre-projection
-
-If you plan to re-run LSS with different settings, it can be faster to project out nuisance once up front:
-
-```{r preprojection}
-Q <- project_confounds(Nuisance)
-beta_pre <- lss(Q %*% Y, Q %*% X, Z = Z, method = "r_optimized")
+```{r design-diagnostics, echo=FALSE}
+display_diagnostics <- design_diagnostics
+display_diagnostics$Value <- round(display_diagnostics$Value, 3)
+knitr::kable(
+  display_diagnostics,
+  caption = "Diagnostics for the residualized trial design used in the comparison."
+)
 ```
 
-This is useful when sweeping over hyperparameters (e.g., ridge values) without re-projecting nuisance regressors each time.
+```{r comparison-table, echo=FALSE}
+display_comparison <- comparison
+display_comparison <- display_comparison[, c(
+  "Estimator", "Squared bias", "Variance", "MSE", "RMSE"
+)]
+display_comparison[, -1] <- round(display_comparison[, -1], 3)
+knitr::kable(
+  display_comparison,
+  col.names = c(
+    "Estimator",
+    "Squared bias (beta^2)",
+    "Variance (beta^2)",
+    "MSE (beta^2)",
+    "RMSE (beta)"
+  ),
+  caption = paste0("Exact conditional decomposition at noise SD = ", noise_sd, ".")
+)
+```
 
-## Next steps
+The 100-repetition check gave MSE =
+`r round(monte_carlo_lss, 3)`
+for LSS and
+`r round(monte_carlo_lsa, 3)`
+for LSA, close to the exact values in the table.
 
-- `vignette("oasis_method")` --- OASIS solver with ridge, multi-basis HRFs, and standard errors
-- `vignette("voxel-wise-hrf")` --- per-voxel HRF estimation before LSS
-- `vignette("sbhm")` --- library-constrained voxel-specific HRFs
-- `vignette("lss_with_fmridesign")` --- formula-based design interface for multi-run experiments
+```{r comparison-plot, echo=FALSE, fig.width=7, fig.height=3.8, fig.cap="At noise SD 2.5, LSS has more squared bias but sufficiently lower variance to produce lower mean squared error than LSA.", fig.alt="Grouped bar chart comparing LSS and LSA squared bias, variance, and mean squared error on a common beta-squared scale. LSS has higher squared bias and lower variance and mean squared error."}
+plot_values <- t(as.matrix(comparison[, c("Squared bias", "Variance", "MSE")]))
+colnames(plot_values) <- comparison$Estimator
+op <- par(mar = c(4, 4, 1, 1), bg = "white")
+barplot(
+  plot_values,
+  beside = TRUE,
+  col = c("#9ecae1", "#3182bd", "#de2d26"),
+  border = NA,
+  ylab = expression("Mean squared beta units"),
+  legend.text = rownames(plot_values),
+  args.legend = list(x = "topleft", bty = "n", cex = 0.8)
+)
+par(op)
+```
 
-## References
+The noise scale matters. The calculated crossover for this fixed design and
+truth is SD = `r round(crossover_sd, 3)`:
 
-Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012). Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses. *NeuroImage*, 59(3), 2636--2643.
+```{r sensitivity-table, echo=FALSE}
+display_sensitivity <- sensitivity
+display_sensitivity[] <- lapply(display_sensitivity, round, digits = 3)
+knitr::kable(
+  display_sensitivity,
+  caption = "Conditional RMSE on both sides of the design-specific crossover."
+)
+```
+
+At noise SD 1, LSA has lower RMSE; at the illustrated SD 2.5, LSS has lower
+RMSE. The example therefore demonstrates both sides of the trade-off rather
+than supplying a general estimator-selection rule. Event spacing, noise, HRF
+mismatch, and the distribution of true trial effects can all move the
+crossover. Simulate conditions that resemble your own acquisition.
+
+## What should I change for real data?
+
+Real fMRI errors are temporally correlated. Once the design is correct, pass a
+validated prewhitening specification so the response and every design matrix
+receive the same filter. This call also selects the optimized C++ backend;
+prewhitening has the same model meaning across backends:
+
+```{r prewhitening}
+beta_ar1 <- lss(
+  Y,
+  X,
+  Z = Z,
+  Nuisance = Nuisance,
+  method = "cpp_optimized",
+  prewhiten = prewhiten_options(method = "ar", p = 1)
+)
+```
+
+```{r prewhitening-check, include=FALSE}
+beta_ar1_reference <- lss(
+  Y,
+  X,
+  Z = Z,
+  Nuisance = Nuisance,
+  method = "naive",
+  prewhiten = prewhiten_options(method = "ar", p = 1)
+)
+stopifnot(
+  identical(dim(beta_ar1), dim(beta_lss)),
+  all(is.finite(beta_ar1)),
+  max(abs(beta_ar1 - beta_ar1_reference)) < 1e-8
+)
+```
+
+The simulated errors above are independent, so this call demonstrates the API
+and backend agreement, not a benefit from whitening. Treat AR(1) as an example
+starting model: choose an order and pooling strategy using residual diagnostics
+and acquisition-aware validation.
+
+For multiple runs, use run-aware intercepts and supply run labels to
+`prewhiten_options(method = "ar", p = 1, pooling = "run", runs = ...)`. Do not
+concatenate runs and let filtering cross a run boundary.
+
+For a large voxel matrix, the optimized C++ backend changes computation, not
+the estimand:
+
+```{r backend-equivalence}
+beta_cpp <- lss(
+  Y,
+  X,
+  Z = Z,
+  Nuisance = Nuisance,
+  method = "cpp_optimized"
+)
+c(maximum_absolute_difference = max(abs(beta_lss - beta_cpp)))
+```
+
+```{r backend-equivalence-check, include=FALSE}
+backend_error <- max(abs(beta_lss - beta_cpp))
+stopifnot(is.finite(backend_error), backend_error < 1e-8)
+```
+
+Start with the default backend while developing the analysis, then switch when
+runtime or memory justifies it. Backend agreement is a useful regression check,
+but agreement alone does not validate the scientific model.
+
+## What are the important limits?
+
+- `X` must already encode the HRF-convolved response for each trial. Use a
+  design-aware workflow if you begin from event tables.
+- LSS reduces competition among individual trial columns; it cannot recover
+  information absent from the acquisition or rescue a singular design.
+- The output contains trial coefficients, not significance tests or an
+  automatic decision about whether a trial is usable.
+- Nuisance projection and prewhitening change the model. Apply them
+  consistently to the response and every relevant design matrix.
+- LSS versus LSA is a design- and noise-dependent choice. Validate it with
+  repeated simulations, not a single attractive plot.
+
+## Where should I go next?
+
+- Read `?lss` and `?prewhiten_options` for the complete core interface.
+- Continue to `vignette("oasis_method")` for the OASIS solver, explicit ridge
+  regularization, diagnostics, and multi-basis designs.
+- Then read `vignette("oasis_theory")` for the derivation and computational
+  contract behind that practical guide.
+- Next, use `vignette("lss_with_fmridesign")` when your inputs are event tables,
+  formulas, and multiple runs.
+- Continue to `vignette("voxel-wise-hrf")` for estimated voxel-wise HRF shapes
+  and trial coefficients.
+- Finish with `vignette("sbhm")` for library-constrained voxel-specific shapes,
+  score margins, and trial coefficients.
+
+## Reference
+
+Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
+Deconvolving BOLD activation in event-related designs for multivoxel pattern
+classification analyses. *NeuroImage*, 59(3), 2636--2643.
+<https://doi.org/10.1016/j.neuroimage.2011.08.076>

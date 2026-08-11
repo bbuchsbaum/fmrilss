@@ -13,7 +13,7 @@ sbhm_amplitude_oasis_k1(
   Nuisance = NULL,
   ridge_frac = list(x = 0.02, b = 0.02),
   prewhiten = NULL,
-  return_se = TRUE
+  return_se = FALSE
 )
 }
 \description{

@@ -27,9 +27,11 @@ prewhiten_options(
 
 \item{pooling}{\code{"global"}, \code{"voxel"}, \code{"run"}, or \code{"parcel"}.}
 
-\item{runs}{Optional run identifiers.}
+\item{runs}{Optional complete exact-integer run identifiers. Required for
+\code{pooling = "run"}; execution requires one value per timepoint.}
 
-\item{parcels}{Optional parcel ids.}
+\item{parcels}{Optional complete exact-integer parcel identifiers. Required
+for \code{pooling = "parcel"}; execution requires one value per voxel.}
 
 \item{exact_first}{\code{"ar1"} or \code{"none"}.}
 
@@ -42,5 +44,6 @@ A list with class \code{"fmrilss_prewhiten_options"}.
 Convenience constructor for the \verb{prewhiten=} list accepted by \code{lss()}.
 }
 \examples{
-prewhiten_options(method = "ar", p = 1, pooling = "run")
+prewhiten_options(method = "ar", p = 1, pooling = "run",
+                  runs = rep(1:2, each = 50))
 }

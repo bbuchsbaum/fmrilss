@@ -73,7 +73,7 @@ Rcpp::NumericMatrix lss_engine_vox_hrf_arma(
     const Rcpp::NumericMatrix& Y,       // n_time x n_vox
     const Rcpp::NumericMatrix& coeffs,  // K x n_vox
     const Rcpp::List& basis_convolved,  // length K; each n_time x n_trials
-    const Rcpp::NumericMatrix& Z        // n_time x pz (>=1; intercept allowed)
+    const Rcpp::NumericMatrix& Z        // n_time x pz (pz may be zero)
 ) {
   const int n_time   = Y.nrow();
   const int n_vox    = Y.ncol();
@@ -82,12 +82,16 @@ Rcpp::NumericMatrix lss_engine_vox_hrf_arma(
   const int pz       = Z.ncol();
 
   if (coeffs.ncol() != n_vox) stop("coeffs must be [K x n_vox] with n_vox matching Y");
-  if (pz < 1) stop("Z must have at least one column (e.g., intercept).");
 
   // Armadillo views (no copies)
   arma::Mat<double> Ya(const_cast<double*>(Y.begin()), n_time, n_vox, false, true);
   arma::Mat<double> Ca(const_cast<double*>(coeffs.begin()), K, n_vox, false, true);
-  arma::Mat<double> Za(const_cast<double*>(Z.begin()), n_time, pz, false, true);
+  arma::mat Za;
+  if (pz > 0) {
+    Za = arma::Mat<double>(const_cast<double*>(Z.begin()), n_time, pz, false, true);
+  } else {
+    Za.set_size(n_time, 0);
+  }
   std::vector<arma::Mat<double>> Dk = as_arma_list(basis_convolved, n_time, n_trials);
 
   Rcpp::NumericMatrix betas(n_trials, n_vox);
@@ -109,7 +113,7 @@ Rcpp::NumericMatrix lss_engine_vox_hrf_arma(
       const int p = pz + 1 + (have_other ? 1 : 0);
       arma::mat Xd(n_time, p);
       // Z
-      Xd.cols(0, pz - 1) = Za;
+      if (pz > 0) Xd.cols(0, pz - 1) = Za;
       // Xi
       Xd.col(pz) = Xv.col(i);
       // Xother
@@ -129,7 +133,7 @@ Rcpp::NumericMatrix lss_engine_vox_hrf_omp(
     const Rcpp::NumericMatrix& Y,       // n_time x n_vox
     const Rcpp::NumericMatrix& coeffs,  // K x n_vox
     const Rcpp::List& basis_convolved,  // length K; each n_time x n_trials
-    const Rcpp::NumericMatrix& Z        // n_time x pz (>=1; intercept allowed)
+    const Rcpp::NumericMatrix& Z        // n_time x pz (pz may be zero)
 ) {
   const int n_time   = Y.nrow();
   const int n_vox    = Y.ncol();
@@ -138,11 +142,15 @@ Rcpp::NumericMatrix lss_engine_vox_hrf_omp(
   const int pz       = Z.ncol();
 
   if (coeffs.ncol() != n_vox) stop("coeffs must be [K x n_vox] with n_vox matching Y");
-  if (pz < 1) stop("Z must have at least one column (e.g., intercept).");
 
   arma::Mat<double> Ya(const_cast<double*>(Y.begin()), n_time, n_vox, false, true);
   arma::Mat<double> Ca(const_cast<double*>(coeffs.begin()), K, n_vox, false, true);
-  arma::Mat<double> Za(const_cast<double*>(Z.begin()), n_time, pz, false, true);
+  arma::mat Za;
+  if (pz > 0) {
+    Za = arma::Mat<double>(const_cast<double*>(Z.begin()), n_time, pz, false, true);
+  } else {
+    Za.set_size(n_time, 0);
+  }
   std::vector<arma::Mat<double>> Dk = as_arma_list(basis_convolved, n_time, n_trials);
 
   Rcpp::NumericMatrix betas(n_trials, n_vox);
@@ -166,7 +174,7 @@ Rcpp::NumericMatrix lss_engine_vox_hrf_omp(
       const bool have_other = (n_trials > 1);
       const int p = pz + 1 + (have_other ? 1 : 0);
       arma::mat Xd(n_time, p);
-      Xd.cols(0, pz - 1) = Za;
+      if (pz > 0) Xd.cols(0, pz - 1) = Za;
       Xd.col(pz) = Xv.col(i);
       if (have_other) Xd.col(pz + 1) = xall - Xv.col(i);
 

@@ -1,26 +1,45 @@
+# Merge nested override lists without discarding unspecified defaults.
+.sbhm_deep_merge <- function(defaults, supplied) {
+  if (is.null(supplied)) return(defaults)
+  if (!is.list(supplied)) stop("SBHM option overrides must be lists", call. = FALSE)
+  out <- defaults
+  for (nm in names(supplied)) {
+    value <- supplied[[nm]]
+    if (is.list(value) && is.list(out[[nm]])) {
+      out[[nm]] <- .sbhm_deep_merge(out[[nm]], value)
+    } else {
+      out[[nm]] <- value
+    }
+  }
+  out
+}
+
 #' End-to-End LSS with Shared-Basis HRF Matching (SBHM)
 #'
-#' Orchestrates the SBHM pipeline: (1) prepass aggregate fit in the learned
-#' shared basis, (2) cosine matching to a library of HRFs represented in the
-#' same basis, (3) Least Squares Separate (OASIS) with the SBHM basis to obtain
-#' trial-wise r-dimensional coefficients, and (4) projection of those
-#' coefficients onto the matched coordinates to produce scalar amplitudes.
+#' Orchestrates the SBHM pipeline: (1) run-safe trial design and OASIS fit in the
+#' shared basis, (2) a voxel shape summary from the requested source, (3) hard
+#' library matching or explicit blending, and (4) a separate scalar-coefficient
+#' refit using the selected voxel shape.
 #'
 #' @details
 #' Most users should treat the `prepass`, `match`, `oasis`, and `amplitude` inputs
-#' as optional *override lists*: you can provide only the fields you want to
-#' change, and rely on defaults for everything else.
+#' as optional nested *override lists*: you can provide only the fields you want
+#' to change. Unspecified nested defaults are preserved.
 #'
 #' If you already use `fmridesign`, prefer [lss_sbhm_design()] to avoid manually
 #' assembling an OASIS `design_spec`.
 #'
 #' @param Y Numeric matrix T×V of fMRI time series.
 #' @param sbhm SBHM object from `sbhm_build()`.
-#' @param design_spec List for design construction (same as `oasis$design_spec`):
+#' @param design_spec List for design construction:
 #'   `list(sframe=..., cond=list(onsets=..., duration=0, span=...), others=list(...))`.
-#'   The HRF in `cond$hrf` is ignored and replaced with the SBHM basis HRF.
+#'   The target HRF is replaced by the SBHM basis. Multi-run inputs use
+#'   run-relative onsets and an explicit `cond$run` vector; other conditions use
+#'   the same event fields and may supply their own HRF.
 #' @param Nuisance Optional T×P nuisance regressors.
-#' @param prewhiten Optional prewhitening options (see `?lss`).
+#' @param prewhiten Optional prewhitening options (see `?lss`). Run labels are
+#'   inferred from `design_spec$sframe` when omitted; supplied labels must match
+#'   those sampling-frame boundaries.
 #' @param prepass Optional list forwarded to `sbhm_prepass()` (e.g., ridge, data_fac).
 #' @param match Optional list forwarded to `sbhm_match()` (e.g., shrink, topK, whiten, orient_ref).
 #'   Additional fields handled here:
@@ -44,8 +63,9 @@
 #'     matching. Voxels below threshold fall back to `fallback_ref`.
 #'   - `fallback_ref` optional r-vector fallback coordinate (default
 #'     `sbhm$ref$alpha_ref`).
-#' @param oasis Optional list forwarded to `lss(..., method="oasis")`. `K` is set to
-#'   `ncol(sbhm$B)` if not provided, and `design_spec` is injected automatically.
+#' @param oasis Optional list forwarded to `lss(..., method="oasis")`. The basis
+#'   dimension, trial count, run-specific intercept span, and trial/basis map
+#'   are supplied from the run-safe SBHM design.
 #' @param amplitude List controlling the scalar amplitude stage. Fields:
 #'   - `method`: one of "lss1" (default), "global_ls", "oasis_voxel".
 #'   - `ridge`: for `global_ls`, either numeric (absolute) or list(mode, lambda).
@@ -56,10 +76,23 @@
 #' @return A list with components:
 #'   - `amplitude` ntrials×V matrix (when requested)
 #'   - `coeffs_r` r×ntrials×V array of trial-wise coefficients (when requested)
-#'   - `matched_idx` length-V integer indices into the library
-#'   - `margin` length-V confidence margins (top1 - top2 cosine)
+#'   - `matched_name` and `matched_idx`: named top-scoring library identities
+#'   - `margin` named length-V score differences (top1 - top2 cosine); these are
+#'     not calibrated confidence measures
 #'   - `alpha_coords` r×V matched coordinates per voxel
+#'   - `shape_mode` and `fallback_low_conf`: named vectors recording the shape
+#'     policy actually used
+#'   - `prepass_fallback`: named logical vector identifying voxels whose requested
+#'     shape source fell back to the aggregate prepass
+#'   - `trial_basis_map`: complete trial/basis output identity
+#'   - `event_amplitude`, `event_duration`, and `event_run`: named event-design
+#'     metadata
 #'   - `diag` list with `r`, `ntrials`, and `times`
+#'
+#' Scalar amplitudes are coefficients on the supplied event design using the
+#' selected rank-truncated library shape. They are not automatically peak BOLD
+#' responses. SBHM standard errors are not calibrated and `return_se=TRUE`
+#' fails explicitly for every amplitude method.
 #'
 #' @examples
 #' \donttest{
@@ -92,39 +125,208 @@ lss_sbhm <- function(Y, sbhm, design_spec,
                      Nuisance = NULL,
                      prewhiten = NULL,
                      prepass = list(),
-                     match = list(shrink = list(tau = 0, ref = NULL, snr = NULL),
-                                  topK = 3, soft_blend = TRUE, blend_margin = 0.08,
-                                  whiten = FALSE, sv_floor_rel = 0.05, whiten_power = 0.5,
-                                  min_margin = NULL, min_beta_norm = NULL, fallback_ref = NULL,
-                                  orient_ref = TRUE,
-                                  alpha_source = "prepass", rank1_min = 0),
+                     match = list(),
                      oasis = list(),
-                     amplitude = list(method = "lss1",
-                                      ridge = list(mode = "fractional", lambda = 0.02),
-                                      ridge_frac = list(x = 0.02, b = 0.02),
-                                      cond_gate = NULL,
-                                      adaptive = list(enable = FALSE, base = 0.02, k0 = 1000, max = 0.08),
-                                      return_se = FALSE),
+                     amplitude = list(),
                      return = c("amplitude", "coefficients", "both")) {
 
   return <- match.arg(return)
-  stopifnot(is.matrix(Y), is.list(sbhm), is.list(design_spec))
+  reject_unknown <- function(x, allowed, label) {
+    if (!is.list(x)) stop(label, " must be a list", call. = FALSE)
+    unknown <- setdiff(names(x), allowed)
+    if (length(unknown)) {
+      stop(label, " contains unknown option", if (length(unknown) > 1L) "s" else "",
+           ": ", paste(unknown, collapse = ", "), call. = FALSE)
+    }
+  }
+  reject_unknown(prepass, c("ridge", "data_fac"), "prepass")
+  if (is.list(prepass[["ridge", exact = TRUE]])) {
+    reject_unknown(prepass[["ridge", exact = TRUE]],
+                   c("mode", "lambda", "alpha_ref"), "prepass$ridge")
+  }
+  if (is.list(prepass[["data_fac", exact = TRUE]])) {
+    reject_unknown(prepass[["data_fac", exact = TRUE]],
+                   c("scores", "loadings"), "prepass$data_fac")
+  }
+  reject_unknown(
+    match,
+    c("shrink", "topK", "soft_blend", "blend_margin", "whiten",
+      "sv_floor_rel", "whiten_power", "min_margin", "min_beta_norm",
+      "fallback_ref", "orient_ref", "alpha_source", "rank1_min",
+      "proj_ridge_rel"),
+    "match"
+  )
+  if (is.list(match[["shrink", exact = TRUE]])) {
+    reject_unknown(match[["shrink", exact = TRUE]],
+                   c("tau", "ref", "snr"), "match$shrink")
+  }
+  reject_unknown(
+    amplitude,
+    c("method", "ridge", "ridge_frac", "cond_gate", "adaptive", "return_se"),
+    "amplitude"
+  )
+  if (is.list(amplitude[["ridge", exact = TRUE]])) {
+    reject_unknown(amplitude[["ridge", exact = TRUE]],
+                   c("mode", "lambda"), "amplitude$ridge")
+  }
+  if (is.list(amplitude[["ridge_frac", exact = TRUE]])) {
+    reject_unknown(amplitude[["ridge_frac", exact = TRUE]],
+                   c("x", "b"), "amplitude$ridge_frac")
+  }
+  if (is.list(amplitude[["cond_gate", exact = TRUE]])) {
+    reject_unknown(amplitude[["cond_gate", exact = TRUE]],
+                   c("metric", "thr", "fallback"),
+                   "amplitude$cond_gate")
+  }
+  if (is.list(amplitude[["adaptive", exact = TRUE]])) {
+    reject_unknown(amplitude[["adaptive", exact = TRUE]],
+                   c("enable", "base", "k0", "max"),
+                   "amplitude$adaptive")
+  }
+  reject_unknown(
+    oasis,
+    c("ridge_mode", "ridge_x", "ridge_b", "block_cols", "return_se", "return_diag"),
+    "oasis"
+  )
+  validate_logical <- function(x, name) {
+    if (!is.logical(x) || length(x) != 1L || is.na(x)) {
+      stop(name, " must be TRUE or FALSE", call. = FALSE)
+    }
+    x
+  }
+  if (!is.null(oasis[["return_se", exact = TRUE]])) {
+    validate_logical(oasis[["return_se", exact = TRUE]], "oasis$return_se")
+    if (isTRUE(oasis[["return_se", exact = TRUE]])) {
+      stop("lss_sbhm does not support OASIS standard errors", call. = FALSE)
+    }
+  }
+  if (!is.null(oasis[["return_diag", exact = TRUE]])) {
+    validate_logical(oasis[["return_diag", exact = TRUE]], "oasis$return_diag")
+    if (isTRUE(oasis[["return_diag", exact = TRUE]])) {
+      stop("lss_sbhm does not expose OASIS design diagnostics", call. = FALSE)
+    }
+  }
+  if (!is.matrix(Y) || !is.numeric(Y) || nrow(Y) < 1L || ncol(Y) < 1L ||
+      any(!is.finite(Y))) {
+    stop("Y must be a non-empty finite numeric matrix", call. = FALSE)
+  }
+  voxel_names <- colnames(Y)
+  if (is.null(voxel_names)) voxel_names <- paste0("voxel_", seq_len(ncol(Y)))
+  if (anyNA(voxel_names) || any(!nzchar(voxel_names)) || anyDuplicated(voxel_names)) {
+    stop("Y voxel names must be complete and unique", call. = FALSE)
+  }
+  if (!is.list(sbhm) || !is.list(design_spec)) {
+    stop("sbhm and design_spec must be lists", call. = FALSE)
+  }
+  topK_supplied <- "topK" %in% names(match)
+  match <- .sbhm_deep_merge(
+    list(
+      shrink = list(tau = 0, ref = NULL, snr = NULL),
+      topK = 3L, soft_blend = TRUE, blend_margin = 0.08,
+      whiten = FALSE, sv_floor_rel = 0.05, whiten_power = 0.5,
+      min_margin = NULL, min_beta_norm = NULL, fallback_ref = NULL,
+      orient_ref = TRUE, alpha_source = "prepass", rank1_min = 0
+    ),
+    match
+  )
+  amplitude <- .sbhm_deep_merge(
+    list(
+      method = "lss1",
+      ridge = list(mode = "fractional", lambda = 0.02),
+      ridge_frac = list(x = 0.02, b = 0.02),
+      cond_gate = NULL,
+      adaptive = list(enable = FALSE, base = 0.02, k0 = 1000, max = 0.08),
+      return_se = FALSE
+    ),
+    amplitude
+  )
+  if (!is.null(Nuisance) &&
+      (!is.matrix(Nuisance) || !is.numeric(Nuisance) || nrow(Nuisance) != nrow(Y) ||
+       any(!is.finite(Nuisance)))) {
+    stop("Nuisance must be a finite numeric matrix with one row per scan", call. = FALSE)
+  }
+  match$soft_blend <- validate_logical(match$soft_blend, "match$soft_blend")
+  match$whiten <- validate_logical(match$whiten, "match$whiten")
+  match$orient_ref <- validate_logical(match$orient_ref, "match$orient_ref")
+  amplitude$return_se <- validate_logical(amplitude$return_se, "amplitude$return_se")
+  amplitude$adaptive$enable <- validate_logical(
+    amplitude$adaptive$enable, "amplitude$adaptive$enable"
+  )
+  validate_threshold <- function(x, name, nonnegative = FALSE, upper = Inf) {
+    if (is.null(x)) return(NULL)
+    value <- suppressWarnings(as.numeric(x))
+    invalid <- length(value) != 1L || !is.finite(value) ||
+      (nonnegative && value < 0) || value > upper
+    if (invalid) stop(name, " is outside its documented domain", call. = FALSE)
+    value
+  }
+  match$blend_margin <- validate_threshold(
+    match$blend_margin, "match$blend_margin", nonnegative = TRUE, upper = 2
+  )
+  match$min_margin <- validate_threshold(
+    match$min_margin, "match$min_margin", nonnegative = TRUE, upper = 2
+  )
+  match$min_beta_norm <- validate_threshold(
+    match$min_beta_norm, "match$min_beta_norm", nonnegative = TRUE
+  )
+  match$rank1_min <- validate_threshold(
+    match$rank1_min, "match$rank1_min", nonnegative = TRUE, upper = 1
+  )
+  if (!is.list(amplitude$ridge_frac)) {
+    stop("amplitude$ridge_frac must be a list", call. = FALSE)
+  }
+  amplitude$ridge_frac$x <- .as_nonnegative_scalar(
+    amplitude$ridge_frac$x %||% 0.02, "amplitude$ridge_frac$x"
+  )
+  amplitude$ridge_frac$b <- .as_nonnegative_scalar(
+    amplitude$ridge_frac$b %||% 0.02, "amplitude$ridge_frac$b"
+  )
   r <- ncol(sbhm$B)
+  if (!topK_supplied) match$topK <- min(match$topK, ncol(sbhm$A))
 
   # 1) OASIS LSS with the SBHM basis (K=r) -----------------------------------
-  hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
-  spec  <- design_spec
-  spec$cond <- spec$cond %||% list()
-  spec$cond$hrf <- hrf_B
+  built <- .sbhm_build_design(sbhm, design_spec)
+  if (nrow(built$X_trials) != nrow(Y)) stop("SBHM design rows must match Y", call. = FALSE)
+  prewhiten <- .sbhm_run_safe_prewhiten(prewhiten, design_spec$sframe)
+  if (!is.null(prewhiten)) {
+    prewhiten <- .resolve_prewhiten_options(prewhiten, internal = FALSE)
+  }
   os   <- oasis
-  os$design_spec <- spec
-  os$K <- os$K %||% r
+  if (!is.null(os$K)) {
+    K_input <- suppressWarnings(as.numeric(os$K))
+    if (length(K_input) != 1L || !is.finite(K_input) ||
+        K_input != round(K_input) || as.integer(K_input) != r) {
+      stop("oasis$K must equal the SBHM basis rank", call. = FALSE)
+    }
+  }
+  os$design_spec <- NULL
+  os$K <- r
+  os$ntrials <- built$ntrials
+  os$add_intercept <- FALSE
+  os$trial_basis_map <- built$map[, c("column", "trial", "basis"), drop = FALSE]
+  nuisance_all <- cbind(built$intercepts, Nuisance, built$X_other)
+  if (is.null(nuisance_all) || ncol(nuisance_all) == 0L) nuisance_all <- NULL
+
+  # Estimate one whitening operator from the complete fitted design and reuse
+  # it in OASIS, shape matching, diagnostics, and scalar-amplitude stages.
+  if (!is.null(prewhiten) &&
+      !identical(prewhiten$method %||% "none", "none")) {
+    if (!is.null(prepass$data_fac)) {
+      stop("factorized SBHM prepass does not support active prewhitening",
+           call. = FALSE)
+    }
+    master_whitening <- .prewhiten_data(
+      Y, built$X_trials, NULL, nuisance_all, prewhiten
+    )
+    prewhiten$.whiten_plan <- master_whitening$whiten_plan
+    class(prewhiten) <- c("fmrilss_internal_prewhiten", "list")
+  }
 
   BetaMat <- lss(
     Y = Y,
-    X = NULL,
+    X = built$X_trials,
     Z = NULL,
-    Nuisance = Nuisance,
+    Nuisance = nuisance_all,
     method = "oasis",
     oasis = os,
     prewhiten = prewhiten
@@ -219,6 +421,7 @@ lss_sbhm <- function(Y, sbhm, design_spec,
 
   # Hard assignment by default; optional soft blending across top-K
   alpha_hat <- m$alpha_hat
+  blended <- rep(FALSE, V)
   if ((match$topK %||% 1) > 1 && isTRUE(match$soft_blend %||% FALSE)) {
     V <- ncol(Y)
     r <- ncol(sbhm$B)
@@ -231,6 +434,7 @@ lss_sbhm <- function(Y, sbhm, design_spec,
         idx <- m$topK_idx[, v]
         w   <- m$weights[, v]
         alpha_soft[, v] <- as.numeric(sbhm$A[, idx, drop = FALSE] %*% w)
+        blended[v] <- TRUE
       }
     }
     alpha_hat <- alpha_soft
@@ -257,21 +461,37 @@ lss_sbhm <- function(Y, sbhm, design_spec,
     ref <- match$fallback_ref %||% sbhm$ref$alpha_ref
     ref <- as.numeric(ref)
     if (length(ref) == 1L) ref <- rep(ref, r)
-    if (length(ref) != r) stop("match$fallback_ref must have length r", call. = FALSE)
+    if (length(ref) != r || any(!is.finite(ref)) ||
+        sqrt(sum(ref^2)) <= .Machine$double.eps) {
+      stop("match$fallback_ref must be a finite non-zero vector of length r",
+           call. = FALSE)
+    }
     alpha_hat[, fallback_low_conf] <- matrix(ref, nrow = r, ncol = sum(fallback_low_conf))
+    blended[fallback_low_conf] <- FALSE
   }
 
   # 4) Scalar amplitudes with method + optional auto-fallback -----------------
   # Conditioning diagnostics in (optionally) whitened space
-  regs_diag <- .sbhm_build_trial_regs(sbhm, design_spec)
-  Zint_diag <- matrix(1, nrow(Y), 1)
+  regs_diag <- built$regs
+  X_other_diag <- built$X_other
+  Zint_diag <- built$intercepts
   if (!is.null(prewhiten)) {
-    pw <- .sbhm_prewhiten(Y, regs_diag, Zint_diag, Nuisance, prewhiten)
-    Y_diag <- pw$Yw; regs_diag <- pw$regs_w; Zint_diag <- pw$Zw; Nuis_diag <- pw$Nw
+    pw <- .sbhm_prewhiten(
+      Y, regs_diag, Zint_diag, Nuisance, prewhiten,
+      X_other = X_other_diag
+    )
+    Y_diag <- pw$Yw
+    regs_diag <- pw$regs_w
+    Zint_diag <- pw$Zw
+    Nuis_diag <- pw$Nw
+    X_other_diag <- pw$X_other_w
   } else {
     Y_diag <- Y; Nuis_diag <- Nuisance
   }
-  N_mat_diag <- cbind(Zint_diag, if (!is.null(Nuis_diag)) Nuis_diag)
+  N_mat_diag <- cbind(
+    Zint_diag, if (!is.null(Nuis_diag)) Nuis_diag,
+    if (!is.null(X_other_diag)) X_other_diag
+  )
   V <- ncol(Y)
   diag_rho <- rep(NA_real_, V); diag_kappa <- rep(NA_real_, V)
   .cond_metrics <- function(regs, alpha_v, Nmat) {
@@ -312,14 +532,22 @@ lss_sbhm <- function(Y, sbhm, design_spec,
   ridge_gls  <- amplitude$ridge %||% list(mode = "fractional", lambda = 0.02)
   ridge_frac <- amplitude$ridge_frac %||% list(x = 0.02, b = 0.02)
   return_se  <- isTRUE(amplitude$return_se %||% FALSE)
+  if (return_se) {
+    stop("SBHM amplitude standard errors are not calibrated; request amplitudes only", call. = FALSE)
+  }
 
   method_used <- rep(amp_method, V)
   if (!is.null(amplitude$cond_gate)) {
     gate <- amplitude$cond_gate
-    metric <- gate$metric %||% "rho"
+    metric <- match.arg(gate$metric %||% "rho", c("rho", "kappa"))
     thr    <- as.numeric(gate$thr %||% 0.999)
-    fallback <- match.arg(gate$fallback %||% "lss1", c("lss1","oasis_voxel"))
-    trig <- if (metric == "kappa") (diag_kappa > (gate$kappa_thr %||% 1e3)) else (diag_rho > thr)
+    if (length(thr) != 1L || !is.finite(thr)) {
+      stop("amplitude$cond_gate$thr must be one finite value", call. = FALSE)
+    }
+    fallback <- match.arg(
+      gate$fallback %||% "lss1", c("global_ls", "lss1", "oasis_voxel")
+    )
+    trig <- if (metric == "kappa") (diag_kappa > thr) else (diag_rho > thr)
     method_used[which(trig)] <- fallback
   }
 
@@ -363,16 +591,44 @@ lss_sbhm <- function(Y, sbhm, design_spec,
     }
   }
 
+  basis_names <- rownames(sbhm$A) %||% paste0("basis_", seq_len(r))
+  trial_names <- built$trial_names
+  dimnames(beta_rt) <- list(basis_names, trial_names, voxel_names)
+  dimnames(amps) <- list(trial_names, voxel_names)
+  colnames(alpha_hat) <- voxel_names
+  rownames(alpha_hat) <- basis_names
+  names(m$idx) <- names(m$margin) <- voxel_names
+  candidate_names <- colnames(sbhm$A) %||% paste0("candidate_", seq_len(ncol(sbhm$A)))
+  matched_name <- candidate_names[m$idx]
+  names(matched_name) <- voxel_names
+  shape_mode <- ifelse(fallback_low_conf, "fallback", ifelse(blended, "soft", "hard"))
+  names(shape_mode) <- names(fallback_low_conf) <- names(blended) <- voxel_names
+  names(prepass_fallback) <- voxel_names
+  names(method_used) <- names(diag_rho) <- names(diag_kappa) <- voxel_names
+
   out <- list(
     matched_idx = m$idx,
+    matched_name= matched_name,
     margin      = m$margin,
     alpha_coords= alpha_hat,
+    shape_mode  = shape_mode,
+    prepass_fallback = prepass_fallback,
+    fallback_low_conf = fallback_low_conf,
+    trial_basis_map = built$map,
+    event_amplitude = stats::setNames(built$events$amplitude, trial_names),
+    event_duration = stats::setNames(built$events$duration, trial_names),
+    event_run = stats::setNames(
+      built$events$run %||% rep.int(1L, ntrials), trial_names
+    ),
     diag        = list(r = r, ntrials = ntrials, times = sbhm$tgrid,
                        alpha_source = alpha_source,
                        prepass_fallback_n = sum(prepass_fallback),
                        fallback_low_conf_n = sum(fallback_low_conf),
                        method_used = method_used, rho_max = diag_rho, kappa = diag_kappa,
                        rank1_frac = if (!is.null(rank1)) rank1$rank1_frac else NULL,
+                       library_normalization = sbhm$meta$normalization %||%
+                         if (isTRUE(sbhm$meta$normalize)) "discrete-l2" else "none",
+                       amplitude_units = "coefficient on the supplied event design using the selected rank-truncated library shape",
                        ridge_gls = if (is.list(ridge_gls)) ridge_gls else as.list(ridge_gls),
                        ridge_frac = ridge_frac,
                        se = if (return_se) {
@@ -386,7 +642,8 @@ lss_sbhm <- function(Y, sbhm, design_spec,
   if ((match$topK %||% 1) > 1) {
     out$topK_idx <- m$topK_idx
     out$weights  <- m$weights
-    out$alpha_mode <- if (isTRUE(match$soft_blend %||% FALSE)) "soft" else "hard"
+    colnames(out$topK_idx) <- colnames(out$weights) <- voxel_names
+    out$alpha_mode <- if (all(blended)) "soft" else if (any(blended)) "mixed hard/soft" else "hard"
   }
   if (return %in% c("amplitude", "both")) out$amplitude <- amps
   if (return %in% c("coefficients", "both")) out$coeffs_r <- beta_rt
@@ -434,20 +691,29 @@ lss_sbhm <- function(Y, sbhm, design_spec,
 .sbhm_alpha_from_trial_projections <- function(Y, sbhm, design_spec,
                                                Nuisance = NULL,
                                                prewhiten = NULL,
-                                               ridge_rel = 1e-4) {
+  ridge_rel = 1e-4) {
   stopifnot(is.matrix(Y), is.list(sbhm), is.list(design_spec))
-  regs <- .sbhm_build_trial_regs(sbhm, design_spec)
-  Zint <- matrix(1, nrow(Y), 1)
+  built <- .sbhm_build_design(sbhm, design_spec)
+  regs <- built$regs
+  X_other <- built$X_other
+  Zint <- built$intercepts
 
   if (!is.null(prewhiten)) {
-    pw <- .sbhm_prewhiten(Y, regs, Zint, Nuisance, prewhiten)
+    pw <- .sbhm_prewhiten(Y, regs, Zint, Nuisance, prewhiten, X_other)
     Y_use <- pw$Yw
     regs_use <- pw$regs_w
-    N_use <- cbind(pw$Zw, if (!is.null(pw$Nw)) pw$Nw)
+    X_other <- pw$X_other_w
+    N_use <- cbind(
+      pw$Zw, if (!is.null(pw$Nw)) pw$Nw,
+      if (!is.null(X_other)) X_other
+    )
   } else {
     Y_use <- Y
     regs_use <- regs
-    N_use <- cbind(Zint, if (!is.null(Nuisance)) Nuisance)
+    N_use <- cbind(
+      Zint, if (!is.null(Nuisance)) Nuisance,
+      if (!is.null(X_other)) X_other
+    )
   }
   if (is.null(N_use)) N_use <- matrix(0, nrow(Y_use), 0)
 

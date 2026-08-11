@@ -25,8 +25,9 @@ test_that("estimate_voxel_hrf recovers known coefficients", {
   n_vox <- 3
   true_coef <- matrix(rnorm(ncol(X_basis) * n_vox), ncol(X_basis), n_vox)
   Y <- X_basis %*% true_coef
-  est <- estimate_voxel_hrf(Y, events, basis)
-  rmse <- sqrt(mean((est$coefficients - true_coef)^2))
+  est <- estimate_voxel_hrf(Y, events, basis, sframe = sframe)
+  recovered_raw <- sweep(est$coefficients, 2, est$amplitude_scale, "*")
+  rmse <- sqrt(mean((recovered_raw - true_coef)^2))
   expect_lt(rmse, 1e-6)
 })
 
@@ -48,6 +49,250 @@ test_that("estimate_voxel_hrf input validation", {
   bad_nuis <- matrix(1, 5, 1)
   expect_error(estimate_voxel_hrf(Y, events, basis, nuisance_regs = bad_nuis),
                "nuisance_regs")
+})
+
+test_that("voxel-HRF public inputs fail closed with semantic errors", {
+  skip_if_not_installed("fmrihrf")
+
+  sframe <- fmrihrf::sampling_frame(blocklens = 60, TR = 1)
+  events <- data.frame(
+    onset = c(5, 25, 45), duration = 0, condition = "A"
+  )
+  basis <- fmrihrf::HRF_SPMG1
+  design <- fmrilss:::.voxhrf_trial_basis(events, basis, sframe)$X
+  Y <- design %*% matrix(c(1, 1, 1, 2, 2, 2), 3, 2)
+  colnames(Y) <- c("voxel_a", "voxel_b")
+  estimate <- estimate_voxel_hrf(Y, events, basis, sframe = sframe)
+
+  duplicated_y <- Y
+  colnames(duplicated_y) <- c("voxel_a", "voxel_a")
+  expect_error(
+    estimate_voxel_hrf(duplicated_y, events, basis, sframe = sframe),
+    "voxel names must be complete and unique"
+  )
+  nonfinite_y <- Y
+  nonfinite_y[1, 1] <- NA_real_
+  expect_error(
+    estimate_voxel_hrf(nonfinite_y, events, basis, sframe = sframe),
+    "finite values"
+  )
+
+  empty <- events[0, , drop = FALSE]
+  missing_onset <- events
+  missing_onset$onset[1] <- NA_real_
+  late_onset <- events
+  late_onset$onset[1] <- 1000
+  negative_duration <- events
+  negative_duration$duration[1] <- -1
+  for (bad in list(empty, missing_onset, late_onset, negative_duration)) {
+    expect_error(estimate_voxel_hrf(Y, bad, basis, sframe = sframe))
+    expect_error(lss_with_hrf(Y, bad, estimate, sframe = sframe, verbose = FALSE))
+  }
+
+  character_coefficients <- estimate
+  character_coefficients$coefficients <- matrix("x", 1, 2)
+  expect_error(
+    lss_with_hrf(Y, events, character_coefficients, verbose = FALSE),
+    "numeric coefficient matrix"
+  )
+  missing_coefficients <- estimate
+  missing_coefficients$coefficients[1, 1] <- NA_real_
+  expect_error(
+    lss_with_hrf(Y, events, missing_coefficients, verbose = FALSE),
+    "coefficients must be finite"
+  )
+})
+
+test_that("voxel-HRF condition pooling and engine metadata are explicit", {
+  skip_if_not_installed("fmrihrf")
+  skip_if_not_installed("bigmemory")
+
+  sframe <- fmrihrf::sampling_frame(blocklens = 70, TR = 1)
+  events <- data.frame(
+    onset = c(5, 25, 45), duration = 0, condition = "A"
+  )
+  basis <- fmrihrf::HRF_SPMG1
+  X <- fmrilss:::.voxhrf_trial_basis(events, basis, sframe)$X
+  Y <- X %*% matrix(rep(c(2, 3, 4), each = nrow(events)), nrow(events), 3)
+  colnames(Y) <- c("voxel_a", "voxel_b", "voxel_c")
+
+  one_condition <- estimate_voxel_hrf(Y, events, basis, sframe = sframe)
+  relabeled <- events
+  relabeled$condition <- c("A", "B", "B")
+  two_conditions <- estimate_voxel_hrf(Y, relabeled, basis, sframe = sframe)
+  expect_identical(one_condition$condition_pooling, "all-events")
+  expect_identical(two_conditions$condition_pooling, "all-events")
+  expect_equal(one_condition$coefficients, two_conditions$coefficients)
+
+  fit_r <- lss_with_hrf(Y, events, one_condition, engine = "R", verbose = FALSE)
+  fit_cpp <- lss_with_hrf(
+    Y, events, one_condition, engine = "C++", chunk_size = 1,
+    verbose = FALSE
+  )
+  dense_cpp <- as.matrix(fit_cpp)
+  expect_lte(max(abs(fit_r - dense_cpp)), 1e-10)
+  expect_identical(attr(fit_r, "engine_requested"), "R")
+  expect_identical(attr(fit_r, "engine_used"), "r")
+  expect_identical(fit_cpp$engine_requested, "C++")
+  expect_true(fit_cpp$engine_used %in% c("cpp_arma", "cpp", "r"))
+  expect_identical(fit_cpp$chunk_size, 1L)
+  expect_identical(attr(dense_cpp, "engine_used"), fit_cpp$engine_used)
+  expect_identical(attr(dense_cpp, "chunk_size"), 1L)
+  expect_identical(attr(dense_cpp, "event_amplitude"), rep(1, nrow(events)))
+  expect_identical(attr(dense_cpp, "event_duration"), rep(0, nrow(events)))
+})
+
+test_that("non-unit event amplitudes have explicit per-unit coefficient semantics", {
+  skip_if_not_installed("fmrihrf")
+  skip_if_not_installed("bigmemory")
+
+  sframe <- fmrihrf::sampling_frame(blocklens = 80, TR = 1)
+  events <- data.frame(
+    onset = c(5, 25, 50), duration = 0, condition = "A",
+    amplitude = c(2, 3, 4)
+  )
+  basis <- fmrihrf::HRF_SPMG1
+  built <- fmrilss:::.voxhrf_trial_basis(events, basis, sframe)
+  Y <- built$X %*% rep(3, nrow(events))
+  colnames(Y) <- "voxel_a"
+  estimate <- structure(
+    list(
+      coefficients = matrix(1, 1, 1, dimnames = list(NULL, "voxel_a")),
+      basis = basis, sframe = sframe, normalization = "positive-peak"
+    ),
+    class = "VoxelHRF"
+  )
+
+  fit <- lss_with_hrf(Y, events, estimate, engine = "R", verbose = FALSE)
+  fit_cpp <- as.matrix(lss_with_hrf(
+    Y, events, estimate, engine = "C++", chunk_size = 1, verbose = FALSE
+  ))
+  doubled_events <- events
+  doubled_events$amplitude <- 2 * doubled_events$amplitude
+  doubled_fit <- lss_with_hrf(
+    Y, doubled_events, estimate, engine = "R", verbose = FALSE
+  )
+
+  expect_equal(unname(fit), matrix(3, nrow(events), 1), tolerance = 1e-10,
+               ignore_attr = TRUE)
+  expect_equal(fit_cpp, fit, tolerance = 1e-10, ignore_attr = TRUE)
+  expect_equal(unname(doubled_fit), matrix(1.5, nrow(events), 1),
+               tolerance = 1e-10, ignore_attr = TRUE)
+  expect_equal(2 * unname(doubled_fit), unname(fit), tolerance = 1e-10,
+               ignore_attr = TRUE)
+  expect_identical(
+    attr(fit, "units"),
+    "coefficient on supplied event design with unit-peak HRF shape"
+  )
+  expect_identical(attr(fit, "event_amplitude"), events$amplitude)
+  expect_identical(attr(fit_cpp, "event_amplitude"), events$amplitude)
+  expect_identical(attr(fit, "event_duration"), events$duration)
+  expect_identical(attr(fit_cpp, "event_duration"), events$duration)
+
+  zero_events <- events
+  zero_events$amplitude[1] <- 0
+  expect_error(
+    lss_with_hrf(Y, zero_events, estimate, engine = "R", verbose = FALSE),
+    "must be nonzero"
+  )
+})
+
+test_that("nonzero durations return event-design coefficients, not peak amplitudes", {
+  skip_if_not_installed("fmrihrf")
+
+  sframe <- fmrihrf::sampling_frame(blocklens = 100, TR = 1)
+  events <- data.frame(
+    onset = c(5, 25, 50, 75), duration = c(0, 2, 4, 8), condition = "A"
+  )
+  basis <- fmrihrf::HRF_SPMG1
+  built <- fmrilss:::.voxhrf_trial_basis(events, basis, sframe)
+  Y <- built$X %*% rep(3, nrow(events))
+  colnames(Y) <- "voxel_a"
+  estimate <- structure(
+    list(
+      coefficients = matrix(1, 1, 1, dimnames = list(NULL, "voxel_a")),
+      basis = basis, sframe = sframe, normalization = "positive-peak"
+    ),
+    class = "VoxelHRF"
+  )
+
+  fit <- lss_with_hrf(Y, events, estimate, engine = "R", verbose = FALSE)
+  modeled_peaks <- 3 * apply(built$X, 2L, max)
+
+  expect_equal(unname(fit), matrix(3, nrow(events), 1), tolerance = 1e-10,
+               ignore_attr = TRUE)
+  expect_gt(max(abs(modeled_peaks - 3)), 0.1)
+  expect_identical(
+    attr(fit, "units"),
+    "coefficient on supplied event design with unit-peak HRF shape"
+  )
+  expect_identical(attr(fit, "event_duration"), events$duration)
+})
+
+test_that("voxel-HRF estimation fails closed when the common span identifies the HRF", {
+  skip_if_not_installed("fmrihrf")
+
+  sframe <- fmrihrf::sampling_frame(blocklens = 120, TR = 0.8)
+  events <- data.frame(
+    onset = seq(8, 72, length.out = 8), duration = 0, condition = "A"
+  )
+  basis <- fmrihrf::HRF_SPMG3
+  built <- fmrilss:::.voxhrf_trial_basis(events, basis, sframe)
+  pooled_basis <- do.call(cbind, lapply(built$basis_convolved, rowSums))
+  raw_coefficients <- matrix(c(1, 0.15, -0.08, 0.8, -0.1, 0.05), 3, 2)
+  Y <- pooled_basis %*% raw_coefficients
+
+  expect_error(
+    estimate_voxel_hrf(
+      Y, events, basis, sframe = sframe, nuisance_regs = pooled_basis
+    ),
+    "not identifiable after projecting the common design"
+  )
+})
+
+test_that("voxel-HRF estimation is invariant to redundant rescaled nuisance bases", {
+  skip_if_not_installed("fmrihrf")
+
+  sframe <- fmrihrf::sampling_frame(blocklens = 140, TR = 1)
+  events <- data.frame(
+    onset = seq(8, 108, length.out = 9), duration = 0, condition = "A"
+  )
+  basis <- fmrihrf::HRF_SPMG3
+  built <- fmrilss:::.voxhrf_trial_basis(events, basis, sframe)
+  pooled_basis <- do.call(cbind, lapply(built$basis_convolved, rowSums))
+  raw_coefficients <- matrix(c(1, 0.12, -0.05, 0.7, -0.08, 0.04), 3, 2)
+  time <- seq_len(nrow(pooled_basis))
+  nuisance <- cbind(sin(time / 13), cos(time / 17))
+  Y <- pooled_basis %*% raw_coefficients + nuisance %*% matrix(c(2, -1, -3, 0.5), 2, 2)
+
+  reference <- estimate_voxel_hrf(
+    Y, events, basis, sframe = sframe, nuisance_regs = nuisance
+  )
+  equivalent <- cbind(
+    nuisance[, 1] * 1e-8,
+    nuisance[, 1] * 2e8,
+    nuisance[, 2] * 1e8,
+    nuisance[, 2] * -3e-8
+  )
+  mutated <- estimate_voxel_hrf(
+    Y, events, basis, sframe = sframe, nuisance_regs = equivalent
+  )
+  fit_reference <- lss_with_hrf(
+    Y, events, reference, sframe = sframe,
+    nuisance_regs = nuisance, engine = "R", verbose = FALSE
+  )
+  fit_mutated <- lss_with_hrf(
+    Y, events, reference, sframe = sframe,
+    nuisance_regs = equivalent, engine = "R", verbose = FALSE
+  )
+  recovered_raw <- sweep(
+    reference$coefficients, 2L, reference$amplitude_scale, "*"
+  )
+
+  expect_equal(mutated$coefficients, reference$coefficients, tolerance = 1e-10)
+  expect_equal(mutated$amplitude_scale, reference$amplitude_scale, tolerance = 1e-10)
+  expect_equal(recovered_raw, raw_coefficients, tolerance = 1e-10)
+  expect_equal(fit_mutated, fit_reference, tolerance = 1e-10)
 })
 
 test_that("lss_with_hrf recovers trial betas", {
@@ -294,11 +539,19 @@ test_that("lss_with_hrf handles multi-basis HRF correctly", {
   expect_true(var(trial_means) > 0)  # Should have variation across trials
 
   # Alternative test using OASIS with multi-basis
+  if (is.null(colnames(X_multi))) colnames(X_multi) <- paste0("x", seq_len(ncol(X_multi)))
   oasis_result <- lss(
     Y = Y,
     X = X_multi,
     method = "oasis",
-    oasis = list(K = K)
+    oasis = list(
+      K = K, ntrials = n_trials,
+      trial_basis_map = data.frame(
+        column = colnames(X_multi),
+        trial = rep(seq_len(n_trials), each = K),
+        basis = rep(seq_len(K), times = n_trials)
+      )
+    )
   )
 
   # OASIS should return K*n_trials rows for multi-basis

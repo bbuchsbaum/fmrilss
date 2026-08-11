@@ -6,9 +6,8 @@
 #' **Design & nuisance handling match `lss()`**:
 #'   - The trial-of-interest (Xi) and the sum of all other trials (Xother) are
 #'     included in each per-trial GLM.
-#'   - If `Nuisance` is supplied, it is projected out of **Y** and the trial
-#'     regressors before LSS (standard residualization). Experimental regressors
-#'     `Z` are *not* residualized, matching `lss()` documentation.
+#'   - `Y` and the trial regressors are residualized against the complete
+#'     `cbind(Z, Nuisance)` span, matching the full-model/FWL contract in `lss()`.
 #'   - If `Z` is `NULL`, an intercept-only design is used.
 #'
 #' @param Y numeric matrix (n_time x n_vox)
@@ -24,6 +23,8 @@
 #' @param method character: "r" (default, pure R), "cpp" (C++ backend), 
 #'   "cpp_arma" (Armadillo backend), or "cpp_omp" (OpenMP parallel backend).
 #'   Falls back automatically: cpp_omp -> cpp_arma -> cpp -> r.
+#' @param basis_convolved Optional precomputed list of K matrices, each
+#'   n_time x n_trials. When supplied, the onset-index construction is bypassed.
 #'
 #' @return numeric matrix (n_trials x n_vox) of trial-wise beta estimates
 #' @examples
@@ -52,26 +53,29 @@ lss_with_hrf_pure_r <- function(
   Z = NULL,
   Nuisance = NULL,
   verbose = FALSE,
-  method = c("r", "cpp", "cpp_arma", "cpp_omp")
+  method = c("r", "cpp", "cpp_arma", "cpp_omp"),
+  basis_convolved = NULL
 ) {
   method <- match.arg(method)
   # ---- basic checks ----
   if (!is.matrix(Y)) stop("Y must be a matrix [n_time x n_vox].")
-  if (!is.matrix(hrf_basis_kernels)) stop("hrf_basis_kernels must be a matrix [L x K].")
+  if (is.null(basis_convolved) && !is.matrix(hrf_basis_kernels)) {
+    stop("hrf_basis_kernels must be a matrix [L x K].")
+  }
   if (!is.matrix(coefficients)) stop("coefficients must be a matrix [K x n_vox].")
 
   n_time <- nrow(Y)
   n_vox  <- ncol(Y)
 
   if (!is.integer(onset_idx)) onset_idx <- as.integer(onset_idx)
-  n_trials <- length(onset_idx)
+  n_trials <- if (is.null(basis_convolved)) length(onset_idx) else ncol(basis_convolved[[1L]])
   if (n_trials < 1L) stop("Need at least one trial (length(onset_idx) >= 1).")
 
   if (is.null(durations)) durations <- rep(0L, n_trials)
   if (length(durations) != n_trials) stop("durations must match length(onset_idx).")
   durations <- as.integer(round(pmax(0, durations)))
 
-  K <- ncol(hrf_basis_kernels)
+  K <- if (is.null(basis_convolved)) ncol(hrf_basis_kernels) else length(basis_convolved)
   if (nrow(coefficients) != K) stop("nrow(coefficients) must equal ncol(hrf_basis_kernels).")
   if (ncol(coefficients) != n_vox) stop("ncol(coefficients) must equal ncol(Y).")
 
@@ -84,47 +88,59 @@ lss_with_hrf_pure_r <- function(
     as.numeric(stats::convolve(x, rev(as.numeric(k)), type = "open"))[seq_len(length(x))]
   }
 
-  # ---- 1) Event "stick" design on TR grid: n_time x n_trials ----
-  Xev <- matrix(0, n_time, n_trials)
-  for (i in seq_len(n_trials)) {
-    o <- onset_idx[i]
-    if (is.na(o) || o < 1L || o > n_time) next
-    d <- durations[i]
-    i1 <- o
-    i2 <- min(n_time, o + d)
-    Xev[i1:i2, i] <- 1
-  }
-
-  # ---- 2) Convolve events with each basis kernel -> list of n_time x n_trials ----
-  basis_convolved <- vector("list", K)
-  for (k in seq_len(K)) {
-    bk <- as.numeric(hrf_basis_kernels[, k])
-    out <- vapply(seq_len(n_trials), function(j) conv_open_trim(Xev[, j], bk),
-                  numeric(n_time))
-    storage.mode(out) <- "double"
-    basis_convolved[[k]] <- out
-  }
-
-  # ---- 3) Residualize Y and trial designs by Nuisance (match lss()) ----
-  # Use QR-based residualization without forming a dense projection matrix.
-  if (!is.null(Nuisance)) {
-    qrN <- qr(Nuisance)
-    # residualize Y
-    Y <- Y - Nuisance %*% qr.coef(qrN, Y)
-    # residualize each basis-convolved design
-    for (k in seq_len(K)) {
-      Dk <- basis_convolved[[k]]
-      basis_convolved[[k]] <- Dk - Nuisance %*% qr.coef(qrN, Dk)
+  if (is.null(basis_convolved)) {
+    # ---- 1) Event "stick" design on TR grid: n_time x n_trials ----
+    Xev <- matrix(0, n_time, n_trials)
+    for (i in seq_len(n_trials)) {
+      o <- onset_idx[i]
+      if (is.na(o) || o < 1L || o > n_time) next
+      d <- durations[i]
+      i1 <- o
+      i2 <- min(n_time, o + d)
+      Xev[i1:i2, i] <- 1
     }
-    # NOTE: Do NOT residualize Z (matches lss() semantics).
+
+    # ---- 2) Convolve events with each basis kernel ----
+    basis_convolved <- vector("list", K)
+    for (k in seq_len(K)) {
+      bk <- as.numeric(hrf_basis_kernels[, k])
+      out <- vapply(seq_len(n_trials), function(j) conv_open_trim(Xev[, j], bk),
+                    numeric(n_time))
+      storage.mode(out) <- "double"
+      basis_convolved[[k]] <- out
+    }
+  } else {
+    if (any(vapply(basis_convolved, nrow, integer(1)) != n_time) ||
+        any(vapply(basis_convolved, ncol, integer(1)) != n_trials)) {
+      stop("basis_convolved matrices must share n_time x n_trials dimensions", call. = FALSE)
+    }
   }
 
-  # ---- 4) Prepare Z (experimental regressors); default intercept-only ----
+  # ---- 3) Prepare fixed design and residualize by the complete common span ----
   if (is.null(Z)) {
     Z_use <- matrix(1, n_time, 1L)
   } else {
     Z_use <- as.matrix(Z)
   }
+  projection_design <- cbind(Z_use, Nuisance)
+  if (ncol(projection_design) > 0L) {
+    projection_span <- .voxhrf_orthonormal_span(projection_design)
+    residualize <- function(value) {
+      if (!ncol(projection_span)) return(value)
+      value - projection_span %*% crossprod(projection_span, value)
+    }
+    # residualize Y
+    Y <- residualize(Y)
+    # residualize each basis-convolved design
+    for (k in seq_len(K)) {
+      basis_convolved[[k]] <- residualize(basis_convolved[[k]])
+    }
+    Z_use <- projection_span
+  }
+
+  # Keep only an orthonormal basis for the projected common span in the final
+  # solve. This preserves backend coefficient locations without exposing the
+  # C++ solvers to duplicated or rank-deficient fixed columns.
   pz <- ncol(Z_use)
 
   # ---- output ----
@@ -176,6 +192,7 @@ lss_with_hrf_pure_r <- function(
         )
         
         dimnames(betas_cpp) <- dimnames(betas)
+        attr(betas_cpp, "engine_used") <- try_method
         return(betas_cpp)
       }
     }
@@ -228,5 +245,6 @@ lss_with_hrf_pure_r <- function(
     if (verbose && (v %% 1000L == 0L)) message("Processed voxel ", v, " / ", n_vox)
   }
 
+  attr(betas, "engine_used") <- "r"
   betas
 }

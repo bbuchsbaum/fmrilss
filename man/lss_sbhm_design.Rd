@@ -11,14 +11,9 @@ lss_sbhm_design(
   baseline_model = NULL,
   prewhiten = NULL,
   prepass = list(),
-  match = list(shrink = list(tau = 0, ref = NULL, snr = NULL), topK = 3, soft_blend =
-    TRUE, blend_margin = 0.08, whiten = FALSE, sv_floor_rel = 0.05, whiten_power = 0.5,
-    min_margin = NULL, min_beta_norm = NULL, fallback_ref = NULL, orient_ref = TRUE,
-    alpha_source = "prepass", rank1_min = 0),
+  match = list(),
   oasis = list(),
-  amplitude = list(method = "lss1", ridge = list(mode = "fractional", lambda = 0.02),
-    ridge_frac = list(x = 0.02, b = 0.02), cond_gate = NULL, adaptive = list(enable =
-    FALSE, base = 0.02, k0 = 1000, max = 0.08), return_se = FALSE),
+  amplitude = list(),
   return = c("amplitude", "coefficients", "both"),
   validate = TRUE,
   ...
@@ -42,8 +37,12 @@ projected out as confounds.}
 
 \item{match}{Optional list forwarded to \code{sbhm_match()}.}
 
-\item{oasis}{Optional list forwarded to \code{lss(..., method = "oasis")}. \code{K}
-defaults to \code{ncol(sbhm$B)}.}
+\item{oasis}{Optional SBHM OASIS override list. Supported fields are
+\code{ridge_mode}, \code{ridge_x}, \code{ridge_b}, and \code{block_cols}; false-valued
+\code{return_se} and \code{return_diag} are accepted, while true values fail because
+SBHM uncertainty/design diagnostics are not exposed. The basis rank,
+trial count, intercept policy, and trial/basis map are fixed internally
+from \code{sbhm} and the event model.}
 
 \item{amplitude}{Amplitude options (see \code{?lss_sbhm}).}
 
@@ -60,12 +59,15 @@ Same return contract as \code{lss_sbhm()}.
 \description{
 Run the SBHM end-to-end pipeline using fmridesign's \code{event_model} and
 optional \code{baseline_model}, mirroring the convenience of \code{lss_design()} but
-producing SBHM coefficients and (optionally) scalar amplitudes.
+producing SBHM shape coefficients and (optionally) scalar event-design trial
+coefficients in the component named \code{amplitude}.
 }
 \details{
-This function wraps \code{lss_sbhm()} by converting the \code{event_model} into an
-OASIS \code{design_spec} that uses the SBHM basis HRF, and by mapping
-\code{baseline_model} terms to nuisance regressors for projection.
+This function wraps \code{lss_sbhm()} by locating the unique trialwise event term,
+rebuilding it with the SBHM basis, and retaining run identities and
+heterogeneous durations. Non-trial event terms and \code{baseline_model} columns
+enter the fixed nuisance span. Multi-run regressors are constructed within
+runs so HRF tails cannot cross run boundaries.
 }
 \examples{
 \dontshow{if (requireNamespace("fmridesign", quietly = TRUE)) withAutoprint(\{ # examplesIf}

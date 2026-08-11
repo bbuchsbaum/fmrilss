@@ -36,6 +36,25 @@ test_that("fmriAR integration works with basic AR(1) whitening", {
   expect_true(all(is.finite(result)))
 })
 
+test_that("omitted prewhitening method resolves to documented AR default", {
+  skip_if_not_installed("fmriAR")
+  set.seed(771)
+  n <- 80
+  X <- matrix(rnorm(n * 4), n, 4)
+  Y <- matrix(rnorm(n * 3), n, 3)
+
+  implicit <- lss(Y, X, prewhiten = list(p = 1))
+  explicit <- lss(Y, X, prewhiten = list(method = "ar", p = 1))
+  expect_equal(implicit, explicit, tolerance = 0)
+
+  implicit_oasis <- lss(Y, X, method = "oasis", prewhiten = list(p = 1))
+  explicit_oasis <- lss(
+    Y, X, method = "oasis",
+    prewhiten = list(method = "ar", p = 1)
+  )
+  expect_equal(implicit_oasis, explicit_oasis, tolerance = 0)
+})
+
 test_that("fmriAR integration with auto AR order selection", {
   skip_if_not_installed("fmriAR")
 
@@ -100,11 +119,11 @@ test_that("fmriAR integration with voxel-specific AR parameters", {
     }
   }
 
-  # Test with voxel-specific pooling
-  result <- lss(Y, X, prewhiten = list(method = "ar", p = 1, pooling = "voxel"))
-  expect_true(is.matrix(result))
-  expect_equal(nrow(result), n_trials)
-  expect_equal(ncol(result), n_voxels)
+  # A shared design cannot be paired with voxel-specific whitening operators.
+  expect_error(
+    lss(Y, X, prewhiten = list(method = "ar", p = 1, pooling = "voxel")),
+    "cannot be applied to a shared design matrix"
+  )
 })
 
 test_that("fmriAR integration with run-aware estimation", {

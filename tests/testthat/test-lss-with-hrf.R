@@ -54,7 +54,11 @@ test_that("lss_with_hrf reduces to lss() when K=1 and weights=1", {
   beta_lss <- fmrilss::lss(Y, X_hrf, method = "r_optimized")
 
   # Compare values (ignoring row names difference)
-  expect_equal(unname(beta_hrf), unname(beta_lss), tolerance = 1e-8)
+  expect_equal(
+    unname(beta_hrf), unname(beta_lss), tolerance = 1e-8,
+    ignore_attr = TRUE
+  )
+  expect_identical(attr(beta_hrf, "engine_used"), "r")
 })
 
 test_that("lss_with_hrf runs with nuisance and non-null Z", {

@@ -117,7 +117,7 @@ test_that("Including design_spec$others as nuisances reduces bias", {
   idx_by_basis <- lapply(seq_len(r), function(k) seq.int(k, ncol(X_trials), by = r))
   A <- do.call(cbind, lapply(idx_by_basis, function(idx) rowSums(X_trials[, idx, drop = FALSE])))
 
-  # Build X_other for nuisance condition (aggregated to single column)
+  # Build the complete nuisance-condition basis span.
   spec_both <- list(
     sframe = sframe,
     cond   = list(onsets = on_main, duration = 0, span = 30, hrf = hrf_B),
@@ -128,9 +128,9 @@ test_that("Including design_spec$others as nuisances reduces bias", {
 
   # Simulate signal: main basis coefficients + nuisance condition leak + small noise
   alpha_true <- rnorm(r)
-  gamma <- 2.0
+  gamma <- seq(0.5, 2, length.out = ncol(X_other))
   Y <- matrix(rnorm(Tlen*V, sd = 0.15), Tlen, V)
-  Y[,1] <- Y[,1] + A %*% alpha_true + as.numeric(X_other) * gamma
+  Y[,1] <- Y[,1] + A %*% alpha_true + X_other %*% gamma
 
   # Prepass without others as nuisance
   pre_no_oth <- sbhm_prepass(Y, sbhm, design_spec = spec_main, ridge = list(mode = "absolute", lambda = 0.1))

@@ -138,13 +138,16 @@ test_that("all backends produce equivalent results", {
   if (length(available_methods) > 1) {
     for (method in available_methods[-1]) {  # Skip "r" since it's the reference
       expect_equal(results[[method]], results$r, tolerance = 1e-8,
+                   ignore_attr = TRUE,
                    info = paste("Backend", method, "should match R backend"))
+      expect_identical(attr(results[[method]], "engine_used"), method)
     }
   }
   
   # Verify at least R backend works
   expect_equal(dim(results$r), c(n_trials, n_vox))
   expect_false(any(is.na(results$r)))
+  expect_identical(attr(results$r, "engine_used"), "r")
 })
 
 test_that("fallback chain works correctly", {

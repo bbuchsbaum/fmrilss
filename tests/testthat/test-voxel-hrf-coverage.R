@@ -62,8 +62,9 @@ test_that("estimate_voxel_hrf returns VoxelHRF object", {
   Y <- matrix(rnorm(n_time * n_vox), n_time, n_vox)
   events <- data.frame(onset = c(5, 15, 30), duration = 1, condition = "A")
   basis <- fmrihrf::HRF_SPMG1
+  sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = 1)
 
-  result <- estimate_voxel_hrf(Y, events, basis)
+  result <- estimate_voxel_hrf(Y, events, basis, sframe = sframe)
 
   expect_s3_class(result, "VoxelHRF")
   expect_true("coefficients" %in% names(result))
@@ -82,8 +83,10 @@ test_that("estimate_voxel_hrf works with nuisance regressors", {
   events <- data.frame(onset = c(5, 20, 40), duration = 1, condition = "A")
   basis <- fmrihrf::HRF_SPMG1
   nuisance <- cbind(1:n_time, (1:n_time)^2)  # Linear and quadratic trends
+  sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = 1)
 
-  result <- estimate_voxel_hrf(Y, events, basis, nuisance_regs = nuisance)
+  result <- estimate_voxel_hrf(Y, events, basis, nuisance_regs = nuisance,
+                               sframe = sframe)
 
   expect_s3_class(result, "VoxelHRF")
 })
@@ -144,7 +147,7 @@ test_that("lss_with_hrf validates nuisance_regs", {
   events <- data.frame(onset = c(5, 15), duration = 1, condition = "A")
 
   mock_hrf <- list(
-    coefficients = matrix(1, 2, 2),
+    coefficients = matrix(1, 1, 2),
     basis = fmrihrf::HRF_SPMG1,
     conditions = "A"
   )
@@ -161,7 +164,7 @@ test_that("lss_with_hrf validates chunk_size", {
   events <- data.frame(onset = c(5, 15), duration = 1, condition = "A")
 
   mock_hrf <- list(
-    coefficients = matrix(1, 2, 2),
+    coefficients = matrix(1, 1, 2),
     basis = fmrihrf::HRF_SPMG1,
     conditions = "A"
   )

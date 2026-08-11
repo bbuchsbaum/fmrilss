@@ -20,13 +20,15 @@ test_that("OASIS with return_se=TRUE returns standard errors", {
 
   # Test with return_se = TRUE
   result <- lss(Y, X, Z, method = "oasis",
-                oasis = list(return_se = TRUE))
+                oasis = list(return_se = TRUE,
+                             ridge_mode = "absolute",
+                             ridge_x = 0, ridge_b = 0))
 
   # Should return a list with betas and se
   expect_true(is.list(result) || !is.null(attr(result, "se")))
 })
 
-test_that("OASIS with ridge + return_se computes SEs", {
+test_that("OASIS rejects inferential SEs under ridge", {
   skip_if_not_installed("fmrihrf")
 
   set.seed(234)
@@ -46,14 +48,16 @@ test_that("OASIS with ridge + return_se computes SEs", {
   Y <- matrix(rnorm(n_timepoints * n_voxels), n_timepoints, n_voxels)
 
   # Test with ridge and return_se
-  result <- lss(Y, X, Z, method = "oasis",
-                oasis = list(
-                  ridge_x = 0.01,
-                  ridge_b = 0.01,
-                  return_se = TRUE
-                ))
-
-  expect_true(is.list(result) || !is.null(attr(result, "se")))
+  expect_error(
+    lss(Y, X, Z, method = "oasis",
+        oasis = list(
+          ridge_mode = "absolute",
+          ridge_x = 0.01,
+          ridge_b = 0.01,
+          return_se = TRUE
+        )),
+    "only for unpenalized OASIS"
+  )
 })
 
 test_that("OASIS fractional ridge mode works", {

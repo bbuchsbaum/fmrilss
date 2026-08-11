@@ -7,6 +7,8 @@ test_that("oasis_options creates valid options with defaults", {
   # Check defaults
   expect_null(opts$design_spec)
   expect_null(opts$K)
+  expect_null(opts$ntrials)
+  expect_null(opts$trial_basis_map)
   expect_equal(opts$ridge_mode, "fractional")
   expect_equal(opts$ridge_x, 0.05)
   expect_equal(opts$ridge_b, 0.05)
@@ -21,8 +23,8 @@ test_that("oasis_options accepts custom values", {
   opts <- oasis_options(
     K = 3,
     ridge_mode = "fractional",
-    ridge_x = 0.01,
-    ridge_b = 0.05,
+    ridge_x = 0,
+    ridge_b = 0,
     block_cols = 2048L,
     return_se = TRUE,
     return_diag = TRUE,
@@ -31,8 +33,8 @@ test_that("oasis_options accepts custom values", {
 
   expect_equal(opts$K, 3L)
   expect_equal(opts$ridge_mode, "fractional")
-  expect_equal(opts$ridge_x, 0.01)
-  expect_equal(opts$ridge_b, 0.05)
+  expect_equal(opts$ridge_x, 0)
+  expect_equal(opts$ridge_b, 0)
   expect_equal(opts$block_cols, 2048L)
   expect_true(opts$return_se)
   expect_true(opts$return_diag)
@@ -66,15 +68,23 @@ test_that("oasis_options validates K", {
   expect_equal(oasis_options(K = 3)$K, 3L)
 })
 
+test_that("oasis_options rejects penalized standard errors", {
+  expect_error(
+    oasis_options(return_se = TRUE),
+    "return_se requires ridge_x = ridge_b = 0"
+  )
+})
+
 test_that("oasis_options validates ridge_mode", {
   expect_error(oasis_options(ridge_mode = "invalid"), "'arg' should be one of")
 })
 
-test_that("oasis_options allows extra arguments via ...", {
-  opts <- oasis_options(custom_field = "test_value", another = 123)
-
-  expect_equal(opts$custom_field, "test_value")
-  expect_equal(opts$another, 123)
+test_that("oasis_options rejects unknown and malformed controls", {
+  expect_error(oasis_options(rdig_x = 0), "unknown option")
+  expect_error(oasis_options(return_se = 1), "return_se must be TRUE or FALSE")
+  expect_error(oasis_options(return_diag = NA), "return_diag must be TRUE or FALSE")
+  expect_error(oasis_options(add_intercept = "yes"), "add_intercept must be TRUE or FALSE")
+  expect_error(oasis_options(orient_ref = 1), "orient_ref must be TRUE or FALSE")
 })
 
 test_that("prewhiten_options creates valid options with defaults", {
@@ -99,7 +109,7 @@ test_that("prewhiten_options accepts custom values", {
   opts <- prewhiten_options(
     method = "ar",
     p = 2,
-    q = 1L,
+    q = 0L,
     p_max = 8L,
     pooling = "voxel",
     runs = c(1, 1, 2, 2),
@@ -110,7 +120,7 @@ test_that("prewhiten_options accepts custom values", {
 
   expect_equal(opts$method, "ar")
   expect_equal(opts$p, 2)
-  expect_equal(opts$q, 1L)
+  expect_equal(opts$q, 0L)
   expect_equal(opts$p_max, 8L)
   expect_equal(opts$pooling, "voxel")
   expect_equal(opts$runs, c(1, 1, 2, 2))
@@ -125,7 +135,7 @@ test_that("prewhiten_options validates method", {
   # Valid methods should work
   expect_no_error(prewhiten_options(method = "none"))
   expect_no_error(prewhiten_options(method = "ar"))
-  expect_no_error(prewhiten_options(method = "arma"))
+  expect_no_error(prewhiten_options(method = "arma", q = 1))
 })
 
 test_that("prewhiten_options validates pooling", {
@@ -134,8 +144,8 @@ test_that("prewhiten_options validates pooling", {
   # Valid pooling options should work
   expect_no_error(prewhiten_options(pooling = "global"))
   expect_no_error(prewhiten_options(pooling = "voxel"))
-  expect_no_error(prewhiten_options(pooling = "run"))
-  expect_no_error(prewhiten_options(pooling = "parcel"))
+  expect_no_error(prewhiten_options(pooling = "run", runs = c(1, 1)))
+  expect_no_error(prewhiten_options(pooling = "parcel", parcels = c(1, 2)))
 })
 
 test_that("prewhiten_options validates exact_first", {
@@ -146,11 +156,56 @@ test_that("prewhiten_options validates exact_first", {
   expect_no_error(prewhiten_options(exact_first = "none"))
 })
 
-test_that("prewhiten_options coerces q and p_max to integer", {
-  opts <- prewhiten_options(q = 2.5, p_max = 5.9)
+test_that("prewhiten_options rejects lossy or malformed controls", {
+  expect_error(prewhiten_options(q = 2.5), "q must be a non-negative integer")
+  expect_error(prewhiten_options(p_max = 5.9), "p_max must be a positive integer")
+  expect_error(prewhiten_options(p = 1.5), "p must be a positive integer")
+  expect_error(prewhiten_options(compute_residuals = 1), "must be TRUE or FALSE")
+  expect_error(prewhiten_options(method = "arma", q = 0), "q must be a positive integer")
+  expect_error(prewhiten_options(method = "ar", q = 1), "q must be 0")
+  expect_error(prewhiten_options(pooling = "run"), "runs must be supplied")
+  expect_error(prewhiten_options(pooling = "parcel"), "parcels must be supplied")
+  expect_error(
+    prewhiten_options(pooling = "parcel", parcels = c(1.9, 2.1)),
+    "exact integer identifiers"
+  )
+})
 
-  expect_type(opts$q, "integer")
-  expect_type(opts$p_max, "integer")
-  expect_equal(opts$q, 2L)
-  expect_equal(opts$p_max, 5L)
+test_that("execution paths revalidate direct option lists", {
+  set.seed(42)
+  Y <- matrix(rnorm(80), 40, 2)
+  X <- matrix(rnorm(120), 40, 3)
+
+  expect_error(
+    lss(Y, X, method = "oasis", oasis = list(rdig_x = 0)),
+    "unknown option"
+  )
+  expect_error(
+    lss(Y, X, method = "oasis", oasis = list(
+      return_se = 1, ridge_mode = "absolute", ridge_x = 0, ridge_b = 0
+    )),
+    "oasis\\$return_se must be TRUE or FALSE"
+  )
+  expect_error(
+    lss(Y, X, prewhiten = list(method = "none", typo = 1)),
+    "unknown option"
+  )
+  expect_error(
+    lss(Y, X, prewhiten = list(method = "ar", p = 1.5)),
+    "prewhiten\\$p must be a positive integer"
+  )
+})
+
+test_that("stglmnet options reject silent coercion and unknown fields", {
+  expect_error(stglmnet_options(typo = 1), "unknown option")
+  expect_error(stglmnet_options(pool_to_mean = 1), "must be TRUE or FALSE")
+  expect_error(stglmnet_options(return_fit = NA), "must be TRUE or FALSE")
+  expect_error(stglmnet_options(cv_folds = 3.9), "must be a positive integer")
+  expect_error(stglmnet_options(alpha = c(0.1, 0.2)), "alpha must be one")
+  expect_error(stglmnet_options(lambda = -0.1), "lambda must contain")
+  expect_error(fmrilss:::.stg_resolve_options(list(typo = 1)), "unknown option")
+  expect_error(
+    fmrilss:::.stg_resolve_options(list(pool_to_mean = 1)),
+    "must be TRUE or FALSE"
+  )
 })

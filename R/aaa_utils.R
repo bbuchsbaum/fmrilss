@@ -28,6 +28,94 @@
   as.integer(x)
 }
 
+#' Validate and coerce a non-negative scalar integer
+#' @keywords internal
+#' @noRd
+.as_nonnegative_integer <- function(x, name) {
+  valid <- is.numeric(x) && length(x) == 1L && !is.na(x) && is.finite(x) &&
+    x >= 0 && x == floor(x) && x <= .Machine$integer.max
+  if (!valid) {
+    stop(name, " must be a non-negative integer", call. = FALSE)
+  }
+  as.integer(x)
+}
+
+#' Validate a scalar logical without coercion
+#' @keywords internal
+#' @noRd
+.as_scalar_logical <- function(x, name) {
+  if (!is.logical(x) || length(x) != 1L || is.na(x)) {
+    stop(name, " must be TRUE or FALSE", call. = FALSE)
+  }
+  x
+}
+
+#' Reject unknown named list fields
+#' @keywords internal
+#' @noRd
+.validate_option_names <- function(x, allowed, name) {
+  if (!is.list(x)) stop(name, " must be a list", call. = FALSE)
+  nms <- names(x)
+  if (length(x) && (is.null(nms) || anyNA(nms) || any(!nzchar(nms)))) {
+    stop(name, " must be a fully named list", call. = FALSE)
+  }
+  unknown <- setdiff(nms, allowed)
+  if (length(unknown)) {
+    stop(name, " contains unknown option(s): ", paste(unknown, collapse = ", "),
+         call. = FALSE)
+  }
+  invisible(x)
+}
+
+#' Certified OASIS option names
+#' @keywords internal
+#' @noRd
+.oasis_option_names <- function() {
+  c(
+    "design_spec", "K", "ntrials", "trial_basis_map", "ridge_mode",
+    "ridge_x", "ridge_b", "block_cols", "return_se", "return_diag",
+    "add_intercept", "hrf_mode", "infer_K_from_X", "lambda_shape",
+    "mu_rough", "ref_hrf", "shrink_global", "orient_ref", "whiten"
+  )
+}
+
+#' Certified prewhitening option names
+#' @keywords internal
+#' @noRd
+.prewhiten_option_names <- function(internal = FALSE) {
+  out <- c(
+    "method", "p", "q", "p_max", "pooling", "runs", "parcels",
+    "exact_first", "compute_residuals"
+  )
+  if (internal) c(out, ".whiten_plan") else out
+}
+
+#' Validate supplied identities or generate canonical names
+#' @keywords internal
+#' @noRd
+.validate_or_default_names <- function(nms, n, prefix, name) {
+  if (is.null(nms)) return(sprintf("%s%d", prefix, seq_len(n)))
+  valid <- length(nms) == n && !anyNA(nms) && all(nzchar(nms)) &&
+    !anyDuplicated(nms)
+  if (!valid) {
+    stop(name, " must be complete and unique when supplied", call. = FALSE)
+  }
+  nms
+}
+
+#' Validate an integer identity vector without lossy coercion
+#' @keywords internal
+#' @noRd
+.as_integer_ids <- function(x, name) {
+  valid <- is.numeric(x) && length(x) > 0L && !anyNA(x) &&
+    all(is.finite(x)) && all(x == floor(x)) &&
+    all(abs(x) <= .Machine$integer.max)
+  if (!valid) {
+    stop(name, " must contain complete exact integer identifiers", call. = FALSE)
+  }
+  as.integer(x)
+}
+
 #' Validate and coerce a non-negative numeric scalar
 #'
 #' @keywords internal

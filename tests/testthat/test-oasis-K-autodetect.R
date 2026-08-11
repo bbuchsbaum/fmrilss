@@ -1,5 +1,5 @@
 # tests/testthat/test-oasis-K-autodetect.R
-test_that("K autodetect via ntrials matches explicit K for SPMG3 designs", {
+test_that("raw SPMG3 designs require K and ntrials together", {
   skip_on_cran()
   skip_if_not_installed("fmrihrf")
 
@@ -22,25 +22,30 @@ test_that("K autodetect via ntrials matches explicit K for SPMG3 designs", {
   )
   X <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")
   if (inherits(X, "Matrix")) X <- as.matrix(X)
+  if (is.null(colnames(X))) colnames(X) <- paste0("trial_basis_", seq_len(ncol(X)))
+  identity_map <- data.frame(
+    column = colnames(X),
+    trial = rep(seq_len(ntrials), each = K),
+    basis = rep(seq_len(K), times = ntrials)
+  )
 
   # Simulate data with some signal
   Theta <- matrix(rnorm(ncol(X) * V, sd = 0.3), nrow = ncol(X))
   Y <- X %*% Theta + matrix(rnorm(T * V, sd = 1.0), T, V)
 
-  # (1) Autodetect K from ntrials and X columns
-  B_auto <- fmrilss:::.lss_oasis(
-    Y, X = X, Z = NULL, Nuisance = NULL,
-    oasis = list(ntrials = ntrials, ridge_mode = "absolute", ridge_x = 0, ridge_b = 0)
+  expect_error(
+    fmrilss:::.lss_oasis(
+      Y, X = X, Z = NULL, Nuisance = NULL,
+      oasis = list(ntrials = ntrials, ridge_mode = "absolute", ridge_x = 0, ridge_b = 0)
+    ),
+    "requires explicit oasis\\$K, oasis\\$ntrials, and oasis\\$trial_basis_map"
   )
 
-  # (2) Explicit K path should match
   B_explicit <- fmrilss:::.lss_oasis(
     Y, X = X, Z = NULL, Nuisance = NULL,
-    oasis = list(K = K, ridge_mode = "absolute", ridge_x = 0, ridge_b = 0)
+    oasis = list(K = K, ntrials = ntrials, trial_basis_map = identity_map,
+                 ridge_mode = "absolute", ridge_x = 0, ridge_b = 0)
   )
 
-  # Shapes and equality
-  expect_equal(dim(B_auto), c(ntrials * K, V))
   expect_equal(dim(B_explicit), c(ntrials * K, V))
-  expect_equal(B_auto, B_explicit, tolerance = 1e-10)
 })

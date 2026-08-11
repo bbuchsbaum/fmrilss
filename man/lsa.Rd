@@ -22,12 +22,15 @@ If both Z and Nuisance are provided, Z takes precedence.}
 \item{method}{Character string specifying the computational method:
 \itemize{
 \item "r" - Pure R implementation using lm.fit
-\item "cpp" - C++ implementation for better performance
+\item "cpp" - Compatibility alias for the numerically identical R
+implementation; no compiled LSA kernel is currently provided
 }}
 }
 \value{
 A numeric matrix of size T × V containing the beta estimates for
-each trial regressor (rows) and each voxel (columns).
+each trial regressor (rows) and each voxel (columns). Supplied trial and
+voxel names must be complete and unique; unnamed inputs receive canonical
+\code{Trial_i} and \code{Voxel_i} names.
 }
 \description{
 Performs a standard multiple regression analysis where all trial regressors
@@ -35,7 +38,7 @@ are fitted simultaneously. This provides a reference comparison to the
 Least Squares Separate (LSS) approach.
 }
 \details{
-LSA fits the model: Y = X\emph{beta + Z}gamma + error, where all trial regressors
+LSA fits the model \eqn{Y = X \beta + Z \gamma + \epsilon}, where all trial regressors
 in X are estimated simultaneously. This is in contrast to LSS, which fits
 each trial separately while treating other trials as nuisance regressors.
 }

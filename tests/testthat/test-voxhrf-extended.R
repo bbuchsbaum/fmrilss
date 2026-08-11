@@ -134,7 +134,7 @@ test_that("Roughness penalty reduces HRF curvature energy", {
   expect_true(mean(curv1) <= mean(curv0) + 1e-8)
 })
 
-test_that("Global shrinkage lowers across-voxel weight variance", {
+test_that("Global shrinkage lowers basis-invariant waveform dispersion", {
   skip_on_cran()
   set.seed(105)
   n_time <- 120
@@ -148,9 +148,18 @@ test_that("Global shrinkage lowers across-voxel weight variance", {
   v0 <- fmrilss:::`.estimate_voxel_hrf_fast`(Y, built$X_trials, spec, NULL, NULL, 0, 0, NULL, 0, TRUE)
   v1 <- fmrilss:::`.estimate_voxel_hrf_fast`(Y, built$X_trials, spec, NULL, NULL, 0, 0, NULL, 0.1, TRUE)
 
-  # Row-wise variance across voxels should decrease with shrinkage
-  rowvar <- function(M) apply(M, 1, var)
-  expect_true(mean(rowvar(v1$coefficients)) < mean(rowvar(v0$coefficients)))
+  times <- fmrihrf::samples(sframe, global = TRUE)
+  r <- fmrihrf::regressor(onsets = 0, hrf = spec$cond$hrf, duration = 0, span = 30)
+  B_time <- fmrihrf::evaluate(r, grid = times, precision = 0.1, method = "conv")
+  if (inherits(B_time, "Matrix")) B_time <- as.matrix(B_time)
+  if (is.vector(B_time)) B_time <- cbind(B_time)
+  angular_dispersion <- function(W) {
+    H <- B_time %*% W
+    H <- sweep(H, 2L, sqrt(colSums(H^2)), "/")
+    cosines <- crossprod(H)
+    mean(acos(pmax(-1, pmin(1, cosines[upper.tri(cosines)]))))
+  }
+  expect_lt(angular_dispersion(v1$coefficients), angular_dispersion(v0$coefficients))
 })
 
 test_that("Orientation flip aligns shapes with reference", {
@@ -242,7 +251,7 @@ test_that("VOXHRF works with advanced prewhitening (fmriAR) when available", {
     Y = Y,
     X = NULL,
     method = "oasis",
-    prewhiten = list(method = "arma", p = 1, q = 0),
+    prewhiten = list(method = "arma", p = 1, q = 1),
     oasis = list(
       design_spec = list(
         sframe = sframe,
@@ -269,7 +278,12 @@ test_that("VOXHRF handles degenerate trial designs without crashing", {
 
   basis <- fmrihrf::HRF_SPMG1
   coeffs <- matrix(1, nrow = 1L, ncol = n_vox)
-  vhrf <- list(coefficients = coeffs, basis = basis, conditions = "cond")
+  vhrf <- list(
+    coefficients = coeffs,
+    basis = basis,
+    conditions = "cond",
+    sframe = fmrihrf::sampling_frame(blocklens = n_time, TR = 1)
+  )
   class(vhrf) <- "VoxelHRF"
 
   Y <- matrix(rnorm(n_time * n_vox, sd = 0.1), n_time, n_vox)
@@ -304,6 +318,12 @@ test_that("Manual AR(1) prewhiten equals internal prewhiten in VOXHRF path", {
   built <- fmrilss:::`.oasis_build_X_from_events`(spec)
   X_trials <- built$X_trials
   K <- fmrihrf::nbasis(spec$cond$hrf)
+  if (is.null(colnames(X_trials))) colnames(X_trials) <- paste0("x", seq_len(ncol(X_trials)))
+  identity_map <- data.frame(
+    column = colnames(X_trials),
+    trial = rep(seq_along(onsets), each = K),
+    basis = rep(seq_len(K), times = length(onsets))
+  )
 
   # Random data
   Y <- matrix(rnorm(n_time * n_vox), n_time, n_vox)
@@ -324,6 +344,8 @@ test_that("Manual AR(1) prewhiten equals internal prewhiten in VOXHRF path", {
       design_spec = spec,
       hrf_mode = "voxel_ridge",
       K = K,
+      ntrials = length(onsets),
+      trial_basis_map = identity_map,
       lambda_shape = 0
     ),
     prewhiten = list(method = "ar", p = 1)
@@ -339,6 +361,8 @@ test_that("Manual AR(1) prewhiten equals internal prewhiten in VOXHRF path", {
       design_spec = spec,
       hrf_mode = "voxel_ridge",
       K = K,
+      ntrials = length(onsets),
+      trial_basis_map = identity_map,
       lambda_shape = 0
     ),
     prewhiten = list(method = "none")

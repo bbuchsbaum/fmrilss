@@ -41,6 +41,7 @@
   se <- matrix(NA_real_, N, V)
 
   for (j in seq_len(N)) {
+    if (length(dof) != N || dof[j] <= 0L) next
     dj <- d[j] + ridge_x
     ej <- s[j] + ridge_b
     cj <- alpha[j]
@@ -51,10 +52,12 @@
 
     SSE <- RY_norm2 - 2*(beta * n1 + gamma * n2) + 
       (beta^2) * d[j] + (gamma^2) * s[j] + 2*beta*gamma*cj
-    sigma2 <- pmax(SSE / dof, 0)
+    sigma2 <- pmax(SSE / dof[j], 0)
     
     # (G^{-1})_{11} = (e) / (d*e - c^2) with ridge included
-    denom <- pmax(dj * ej - cj * cj, .Machine$double.eps)
+    denom_raw <- dj * ej - cj * cj
+    if (!is.finite(denom_raw) || denom_raw <= .Machine$double.eps) next
+    denom <- denom_raw
     g11   <- ej / denom
     se[j, ] <- sqrt(sigma2 * g11)
   }

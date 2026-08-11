@@ -9,15 +9,29 @@ No value itself. This topic documents the object returned by
 }
 \description{
 Simple list-based S3 class returned by \code{lss_with_hrf} containing
-trial-wise beta estimates.
+trial-wise beta estimates. \code{as.matrix()} materializes C++-backed estimates
+as a dense matrix while preserving voxel names, sampling-frame,
+normalization, and unit metadata.
 }
+\section{Stored fields}{
+
+\code{betas} is the file-backed trial-by-voxel matrix; \code{dimnames} preserves trial
+and voxel identity; \code{sframe}, \code{normalization}, \code{units}, and
+\code{event_amplitude} and \code{event_duration} define timing and coefficient
+interpretation; and
+\code{engine_requested}, \code{engine_used}, and \code{chunk_size} record execution. Use
+\code{as.matrix()} for the documented dense extraction path; these metadata are
+retained as matrix attributes.
+}
+
 \examples{
 \dontshow{if (requireNamespace("fmrihrf", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 \donttest{
 Y <- matrix(rnorm(100), 50, 2)
 events <- data.frame(onset = c(5, 25), duration = 1, condition = "A")
 basis <- fmrihrf::HRF_SPMG1
-est <- estimate_voxel_hrf(Y, events, basis)
+sframe <- fmrihrf::sampling_frame(blocklens = nrow(Y), TR = 1)
+est <- estimate_voxel_hrf(Y, events, basis, sframe = sframe)
 fit <- lss_with_hrf(Y, events, est, engine = "C++", verbose = FALSE)
 class(fit)
 }

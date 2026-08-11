@@ -106,7 +106,7 @@ test_that("sbhm_build applies normalization", {
 
   # B should be orthonormal columns
   BtB <- crossprod(result$B)
-  expect_equal(BtB, diag(ncol(result$B)), tolerance = 1e-8)
+  expect_equal(unname(BtB), diag(ncol(result$B)), tolerance = 1e-8)
 })
 
 test_that("sbhm_build handles shifts parameter", {
@@ -158,7 +158,10 @@ test_that("sbhm_build clips rank to min(T, K)", {
   H <- matrix(rnorm(T_len * K), T_len, K)
 
   # Request rank 10, but only 3 columns available
-  result <- sbhm_build(library_H = H, tgrid = tgrid, r = 10, baseline = NULL)
+  expect_warning(
+    result <- sbhm_build(library_H = H, tgrid = tgrid, r = 10, baseline = NULL),
+    "numerical rank 3"
+  )
 
   # Should be clipped to min(T_len, K) = 3
   expect_equal(result$meta$r, 3)

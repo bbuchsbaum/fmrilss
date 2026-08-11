@@ -20,8 +20,10 @@ users who want to cache and reuse projection matrices.
 }
 \details{
 This function uses QR decomposition for numerical stability instead of
-computing the Moore-Penrose pseudoinverse directly. The resulting matrix
-Q can be applied to data to remove the influence of confound regressors.
+computing the Moore-Penrose pseudoinverse directly. Only the estimated-rank
+QR basis is used, so redundant confound columns do not over-project. The
+resulting matrix Q can be applied to data to remove the influence of
+confound regressors.
 }
 \examples{
 \donttest{

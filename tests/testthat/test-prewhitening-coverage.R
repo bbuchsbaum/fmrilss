@@ -12,13 +12,13 @@ test_that(".prewhiten_data returns unmodified data when method is 'none'", {
   expect_null(result$whiten_plan)
 })
 
-test_that(".prewhiten_data returns unmodified data when method is NULL", {
+test_that(".prewhiten_data rejects an explicit NULL method", {
   Y <- matrix(rnorm(100), 50, 2)
 
-  result <- fmrilss:::.prewhiten_data(Y, prewhiten = list(method = NULL))
-
-  expect_false(result$applied)
-  expect_equal(result$Y_whitened, Y)
+  expect_error(
+    fmrilss:::.prewhiten_data(Y, prewhiten = list(method = NULL)),
+    "may not be NULL"
+  )
 })
 
 test_that(".prewhiten_data handles non-matrix Y when method is none", {

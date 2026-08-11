@@ -686,6 +686,8 @@
     return_fit = FALSE
   )
 
+  .validate_option_names(stglmnet, names(defaults), "stglmnet")
+
   opts <- utils::modifyList(defaults, stglmnet, keep.null = TRUE)
   opts$mode <- match.arg(as.character(opts$mode), c("cv", "fixed"))
   opts$overlap_strategy <- match.arg(as.character(opts$overlap_strategy), c("none", "multiplicative", "additive", "hybrid", "threshold"))
@@ -694,7 +696,32 @@
   opts$cv_type.measure <- match.arg(as.character(opts$cv_type.measure), c("auto", "mse", "correlation", "reliability", "composite"))
   opts$cv_fold_scheme <- match.arg(as.character(opts$cv_fold_scheme), c("run", "random"))
   opts$cv_select <- match.arg(as.character(opts$cv_select), c("optimal", "1se"))
-  opts$cv_folds <- as.integer(opts$cv_folds)
+  logical_fields <- c(
+    "standardize", "intercept", "graph_pool", "graph_scale_by_overlap",
+    "pool_to_mean", "pool_scale_by_overlap", "return_fit"
+  )
+  for (nm in logical_fields) {
+    opts[[nm]] <- .as_scalar_logical(opts[[nm]], paste0("stglmnet$", nm))
+  }
+  scalar_nonnegative <- c(
+    "overlap_strength", "overlap_mix", "overlap_threshold",
+    "overlap_exponent", "graph_strength", "graph_exponent",
+    "graph_mean_penalty", "pool_strength", "pool_mean_penalty",
+    "nuisance_penalty", "whiten_threshold", "overlap_low_threshold"
+  )
+  for (nm in scalar_nonnegative) {
+    opts[[nm]] <- .as_nonnegative_scalar(opts[[nm]], paste0("stglmnet$", nm))
+  }
+  if (!is.numeric(opts$alpha) || length(opts$alpha) != 1L ||
+      !is.finite(opts$alpha) || opts$alpha < 0 || opts$alpha > 1) {
+    stop("stglmnet$alpha must be one finite value between 0 and 1", call. = FALSE)
+  }
+  if (!is.null(opts$lambda) &&
+      (!is.numeric(opts$lambda) || !length(opts$lambda) ||
+       any(!is.finite(opts$lambda)) || any(opts$lambda < 0))) {
+    stop("stglmnet$lambda must contain finite non-negative values", call. = FALSE)
+  }
+  opts$cv_folds <- .as_positive_integer(opts$cv_folds, "stglmnet$cv_folds")
   opts$cv_foldid <- if (is.null(opts$cv_foldid)) NULL else as.integer(opts$cv_foldid)
   opts$composite_weights <- .stg_parse_composite_weights(opts$composite_weights)
   opts
@@ -719,6 +746,14 @@
   if (nrow(Y) != nrow(X)) {
     stop("Y and X must have the same number of rows (timepoints)", call. = FALSE)
   }
+  trial_names <- .validate_or_default_names(
+    colnames(X), ncol(X), "Trial_", "X column names"
+  )
+  voxel_names <- .validate_or_default_names(
+    colnames(Y), ncol(Y), "Voxel_", "Y column names"
+  )
+  colnames(X) <- trial_names
+  colnames(Y) <- voxel_names
   if (!is.null(Z) && nrow(Z) != nrow(Y)) {
     stop("Z must be a numeric matrix with the same number of rows as Y", call. = FALSE)
   }
@@ -831,16 +866,8 @@
 
   beta <- .stg_extract_trial_betas(fit_obj$fit, n_trial = ncol(X), s = s, pool_fit = fit_obj$pooling)
 
-  if (!is.null(colnames(X))) {
-    rownames(beta) <- colnames(X)
-  } else {
-    rownames(beta) <- paste0("Trial_", seq_len(nrow(beta)))
-  }
-  if (!is.null(colnames(Y))) {
-    colnames(beta) <- colnames(Y)[seq_len(ncol(beta))]
-  } else {
-    colnames(beta) <- paste0("Voxel_", seq_len(ncol(beta)))
-  }
+  rownames(beta) <- trial_names
+  colnames(beta) <- voxel_names[seq_len(ncol(beta))]
 
   if (!isTRUE(opts$return_fit)) {
     return(beta)

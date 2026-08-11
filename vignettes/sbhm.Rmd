@@ -1,5 +1,5 @@
 ---
-title: 'Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation'
+title: 'Shared-basis HRF matching: shapes, score margins, and trial coefficients'
 output:
   rmarkdown::html_vignette:
     mathjax: default
@@ -18,14 +18,21 @@ resource_files:
 - fonts
 
 vignette: |
-  %\VignetteIndexEntry{Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation}
+  %\VignetteIndexEntry{Shared-basis HRF matching: shapes, score margins, and trial coefficients}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r setup-opts, include = FALSE}
-if (requireNamespace("ragg", quietly = TRUE)) knitr::opts_chunk$set(dev = "ragg_png")
-if (requireNamespace("systemfonts", quietly = TRUE)) albersdown::albers_register_fonts()
+```{r setup-opts, include=FALSE}
+if (requireNamespace("ragg", quietly = TRUE)) {
+  knitr::opts_chunk$set(dev = "ragg_png")
+} else {
+  knitr::opts_chunk$set(dev = "png")
+}
+if (requireNamespace("systemfonts", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  albersdown::albers_register_fonts()
+}
 if (requireNamespace("ggplot2", quietly = TRUE) &&
     requireNamespace("albersdown", quietly = TRUE)) {
   ggplot2::theme_set(
@@ -36,23 +43,10 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.width = 8,
-  fig.height = 6,
-  dev = "png",
-  dpi = 150,
-  warning = FALSE,
-  message = FALSE
+  fig.height = 5,
+  dpi = 150
 )
-
-# Make vignette render in pkgdown by using a lightweight fast mode
-fast_mode <- identical(Sys.getenv("IN_PKGDOWN"), "true") || identical(Sys.getenv("CI"), "true")
-
-# Always evaluate chunks, but keep computations small in fast mode
-eval_chunks <- TRUE
-
-# Global settings used throughout
-TR <- 1.0
-n_time <- if (fast_mode) 160 else 200
-set.seed(123)
+set.seed(811)
 ```
 
 ```{r albers-classes, echo=FALSE, results='asis'}
@@ -68,465 +62,639 @@ cat(sprintf(
 ))
 ```
 
+## What this workflow estimates
 
-## The Problem
+This is the final specialist article in the learning path. Read
+`vignette("fmrilss")`, `vignette("oasis_method")`, and
+`vignette("voxel-wise-hrf")` first. The voxel-wise HRF article estimates a
+continuous shape in a small basis. This article instead restricts each voxel to
+a finite library, or to a declared blend of nearby library members.
 
-Real fMRI data shows substantial HRF variability across brain regions. A single
-canonical HRF often fits poorly, but estimating fully unconstrained voxel-wise
-HRFs is expensive and noisy. SBHM offers a middle path: learn a shared basis
-from a library of plausible HRFs, then match each voxel to its best library
-member in a low-dimensional space.
+SBHM separates two quantities:
 
-The pipeline has four steps:
+1. a voxel-specific HRF **shape coordinate** in a shared basis; and
+2. a trial-wise **coefficient on the event design built from that shape**.
 
-1. **Build** a shared basis from an HRF library via SVD (`sbhm_build()`)
-2. **Prepass** aggregate model fit per voxel (`sbhm_prepass()`)
-3. **Match** voxels to library members by cosine similarity (`sbhm_match()`)
-4. **Project** trial-wise coefficients to scalar amplitudes (`sbhm_project()`)
+The coefficient is not automatically a peak BOLD response. With
+`normalize = TRUE`, `sbhm_build()` normalizes each candidate to discrete unit
+\(L_2\) energy before rank truncation. The returned coefficient is therefore on
+the scale of the selected rank-truncated waveform and the supplied event
+duration and amplitude. Changing any of those changes the coefficient scale.
 
-In practice, `lss_sbhm()` runs all four steps in a single call.
+SBHM produces adaptive point estimates. Shape matching, optional blending,
+ridge penalties, and reuse of the same data for shape selection and coefficient
+estimation are not covered by a calibrated standard-error or test-statistic
+contract. Every SBHM amplitude route rejects `return_se = TRUE`.
 
-```{r setup, message=FALSE, warning=FALSE}
-library(fmrihrf)
-library(fmrilss)
-
-# Derived convenience defaults for examples
-n_voxels_default <- if (fast_mode) 20 else 50
-n_trials_default <- if (fast_mode) 6 else 10
-ranks_default    <- if (fast_mode) 2:6 else 2:10
+```{r imports}
+suppressPackageStartupMessages({
+  library(fmrihrf)
+  library(fmrilss)
+})
 ```
 
-## Step 1: Build the Shared Basis
-
-We start by defining a grid of gamma HRF parameters spanning physiological
-variability in peak time and width.
-
-```{r param-grid, eval=eval_chunks}
-shapes <- if (fast_mode) seq(6, 10, by = 2) else seq(5, 11, by = 1.5)
-rates  <- if (fast_mode) seq(0.8, 1.2, by = 0.2) else seq(0.7, 1.3, by = 0.15)
-param_grid <- expand.grid(shape = shapes, rate = rates)
-cat("Library size:", nrow(param_grid), "HRFs\n")
+```{r contract-table}
+contract <- data.frame(
+  Object = c("Library", "Shared basis", "Shape match", "Trial output", "Uncertainty"),
+  Contract = c(
+    "Finite, uniquely named candidate waveforms; optional discrete-L2 normalization",
+    "Rank-r SVD representation with total-energy and numerical-rank metadata",
+    "Hard candidate or explicit soft blend; margin is an uncalibrated score difference",
+    "Coefficient on the supplied event design using the selected rank-truncated shape",
+    "Point estimates only; SBHM standard errors and tests are not calibrated"
+  )
+)
+knitr::kable(contract, caption = "The estimands and boundaries used throughout this article.")
 ```
 
-Each grid row becomes a gamma HRF. We wrap this in a factory function that
-`sbhm_build()` can evaluate across the grid.
+## Build one transparent library
 
-```{r gamma-fun, eval=eval_chunks}
-gamma_fun <- function(shape, rate) {
-  f <- function(t) fmrihrf::hrf_gamma(t, shape = shape, rate = rate)
-  fmrihrf::as_hrf(f, name = sprintf("gamma(s=%.2f,r=%.2f)", shape, rate), span = 32)
-}
-```
+For a compact computational example, we use a grid of positive gamma curves.
+It is a demonstration library, not a package recommendation and not a claim
+that the grid spans physiological HRFs. A scientific analysis must justify its
+own candidates, preprocessing, and coverage.
 
-Now we build the SBHM basis. The SVD decomposes the library into a shared time
-basis `B`, singular values `S`, and per-HRF coordinates `A`.
-
-```{r build-sbhm, eval=eval_chunks}
+```{r build-library}
+TR <- 1
+n_time <- 180L
 sframe <- sampling_frame(blocklens = n_time, TR = TR)
+time <- samples(sframe, global = TRUE)
+span <- 32
+
+library_grid <- expand.grid(
+  shape = c(5, 6.5, 8, 9.5),
+  rate = c(0.85, 1.00, 1.15)
+)
+library_H <- vapply(seq_len(nrow(library_grid)), function(i) {
+  h <- dgamma(time, shape = library_grid$shape[i], rate = library_grid$rate[i])
+  h[time > span] <- 0
+  h
+}, numeric(length(time)))
+colnames(library_H) <- sprintf(
+  "gamma_s%02d_r%03d",
+  round(10 * library_grid$shape), round(100 * library_grid$rate)
+)
+
+rank_used <- 4L
 sbhm <- sbhm_build(
-  library_spec = list(fun = gamma_fun, pgrid = param_grid, span = 32,
-                      precision = 0.1, method = "conv"),
-  r = 6, sframe = sframe,
-  baseline = c(0, 0.5), normalize = TRUE, ref = "mean"
+  library_H = library_H,
+  r = rank_used,
+  tgrid = time,
+  span = span,
+  normalize = TRUE,
+  baseline = NULL,
+  ref = "mean"
 )
 ```
 
-```{r report-dims, eval=eval_chunks}
-cat("B (time basis):", dim(sbhm$B), "\n")
-cat("A (library coords):", dim(sbhm$A), "\n")
-cat("Singular values:", round(sbhm$S, 2), "\n")
+### Rank is a declared approximation
+
+`sbhm_build()` performs one decomposition and retains the full singular-value
+spectrum as metadata. The cumulative fraction below uses total squared
+singular-value energy—not the energy of the largest rank we happened to plot.
+Rank four is a modeling choice for this fixture; the table makes its
+approximation error inspectable rather than turning it into a generic rule.
+
+```{r rank-court}
+singular_values <- sbhm$meta$singular_values_full
+rank_table <- data.frame(
+  Rank = seq_along(singular_values),
+  CumulativeEnergy = cumsum(singular_values^2) / sum(singular_values^2),
+  RelativeResidual = sqrt(
+    pmax(0, 1 - cumsum(singular_values^2) / sum(singular_values^2))
+  )
+)
+rank_table <- head(rank_table, 6)
+rank_table$CumulativeEnergy <- round(rank_table$CumulativeEnergy, 6)
+rank_table$RelativeResidual <- round(rank_table$RelativeResidual, 6)
+knitr::kable(
+  rank_table,
+  caption = "Total library energy retained and relative Frobenius residual by rank."
+)
 ```
 
-### Visualizing the Basis
-
-Each basis function captures a principal mode of HRF variation: the main shape,
-timing shifts, width differences, and undershoot features.
-
-```{r visualize-basis, fig.width=10, fig.height=6, eval=eval_chunks, fig.alt="Six panels showing SBHM shared basis functions capturing principal modes of HRF variation."}
-local({
-  oldpar <- par(mfrow = c(2, 3), mar = c(3, 3, 2, 1))
-  on.exit(par(oldpar), add = TRUE)
-  for (i in 1:ncol(sbhm$B)) {
-    plot(sbhm$tgrid, sbhm$B[, i], type = "l", col = "navy", lwd = 2,
-         main = paste0("Basis ", i, " (s=", round(sbhm$S[i], 2), ")"),
-         xlab = "Time (s)", ylab = "Amplitude")
-    abline(h = 0, col = "gray", lty = 2)
-  }
-})
+```{r rank-court-check, include=FALSE}
+stopifnot(
+  sbhm$meta$numerical_rank >= rank_used,
+  abs(sbhm$meta$retained_energy_fraction -
+        rank_table$CumulativeEnergy[rank_used]) < 1e-6,
+  all(diff(rank_table$CumulativeEnergy) >= 0),
+  all(diff(rank_table$RelativeResidual) <= 0)
+)
 ```
 
-### Choosing the Rank
+The shared basis `B` is orthonormal on this sampled grid. The coordinates `A`
+reconstruct the rank-four candidate waveforms as `B %*% A`; basis vectors are
+algebraic modes, not direct estimates of latency, width, or physiology.
 
-Aim for 90--95% variance explained. We can sweep ranks to find the elbow.
+## A truth-referenced fixture
 
-```{r choose-rank, fig.width=8, fig.height=5, eval=eval_chunks}
-ranks <- ranks_default
-ve <- sapply(ranks, function(ri) {
-  sum(sbhm_build(library_spec = list(fun = gamma_fun, pgrid = param_grid, span = 32),
-                 r = ri, sframe = sframe, normalize = TRUE)$S^2)
-})
-```
+The fixture contains twelve voxels. Six use an exact library member and six use
+an off-library convex mixture. This tests both interpolation and the limitation
+of hard matching. Trial coefficients vary across trials and voxels. Motion-like
+nuisance signals and independent Gaussian noise are added explicitly.
 
-```{r plot-rank, fig.width=8, fig.height=5, eval=eval_chunks, fig.alt="Line plot of variance explained vs rank showing elbow around rank 6."}
-plot(ranks, ve / max(ve) * 100, type = "b", pch = 19, col = "navy",
-     lwd = 2, xlab = "Rank (r)", ylab = "Variance Explained (%)",
-     main = "Choosing SBHM Rank")
-abline(h = 95, col = "red", lty = 2)
-grid()
-```
-
-### Library Coverage
-
-A sample of rank-r reconstructed HRFs shows the range of shapes the library
-spans.
-
-```{r library-coverage, fig.width=8, fig.height=5, eval=eval_chunks, fig.alt="Overlaid HRF curves showing the range of shapes spanned by the library reconstruction."}
-H_hat <- sbhm$B %*% sbhm$A
-sel <- unique(round(seq(1, ncol(H_hat), length.out = min(ncol(H_hat), 12))))
-matplot(sbhm$tgrid, H_hat[, sel, drop = FALSE], type = "l", lty = 1,
-        col = colorRampPalette(c("#6baed6", "#08519c"))(length(sel)),
-        lwd = 1.5, xlab = "Time (s)", ylab = "Amplitude",
-        main = "Sample of Library HRFs (rank-r reconstruction)")
-abline(h = 0, col = "gray80", lty = 2)
-```
-
-## Step 2: Generate Synthetic Data
-
-To demonstrate recovery, we create data where each voxel uses a known HRF from
-the library. First, set up the experimental design.
-
-```{r design-setup, eval=eval_chunks}
-n_voxels <- n_voxels_default
-n_trials <- n_trials_default
-safe_end <- max(sbhm$tgrid) - 30
-onsets <- seq(20, safe_end, length.out = n_trials)
-```
-
-Assign each voxel a random library HRF and build per-trial regressors. The
-fresh `set.seed()` here keeps the HRF assignment reproducible independently of
-earlier random draws.
-
-```{r assign-hrfs, eval=eval_chunks}
-set.seed(456)
-true_hrf_idx <- sample(ncol(sbhm$A), n_voxels, replace = TRUE)
+```{r simulate-fixture}
+n_voxels <- 12L
+voxel_names <- paste0("voxel_", sprintf("%02d", seq_len(n_voxels)))
+onsets <- seq(12, 138, length.out = 8)
+n_trials <- length(onsets)
+trial_names <- paste0("event_", sprintf("%02d", seq_len(n_trials)))
 design_spec <- list(
   sframe = sframe,
-  cond = list(onsets = onsets, duration = 0, span = 30)
+  cond = list(
+    onsets = onsets,
+    duration = 0,
+    amplitude = 1,
+    span = span,
+    trial_names = trial_names
+  ),
+  precision = 0.1,
+  method = "conv"
 )
-hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
-```
 
-```{r build-regressors, eval=eval_chunks}
-regressors_by_trial <- lapply(onsets, function(ot) {
-  rr_t <- regressor(onsets = ot, hrf = hrf_B, duration = 0, span = 30, summate = FALSE)
-  evaluate(rr_t, grid = sbhm$tgrid, precision = 0.1, method = "conv")
-})
-```
-
-Now generate the signal. Each voxel's response is the sum of per-trial
-regressors projected through that voxel's HRF coordinates, scaled by a random
-amplitude, plus noise.
-
-```{r generate-signal, eval=eval_chunks}
-Y <- matrix(rnorm(n_time * n_voxels, sd = 0.5), n_time, n_voxels)
-true_amplitudes <- matrix(rnorm(n_trials * n_voxels, mean = 2, sd = 0.5),
-                          n_trials, n_voxels)
-for (v in 1:n_voxels) {
-  alpha_true <- sbhm$A[, true_hrf_idx[v]]
-  for (t in 1:n_trials)
-    Y[, v] <- Y[, v] + true_amplitudes[t, v] * (regressors_by_trial[[t]] %*% alpha_true)
+on_library_idx <- c(1L, 3L, 5L, 7L, 9L, 11L)
+alpha_true <- matrix(NA_real_, rank_used, n_voxels)
+alpha_true[, 1:6] <- sbhm$A[, on_library_idx, drop = FALSE]
+mix_pairs <- rbind(c(1, 2), c(3, 4), c(5, 6), c(7, 8), c(9, 10), c(11, 12))
+mix_weight <- c(0.25, 0.40, 0.55, 0.70, 0.35, 0.60)
+for (v in 1:6) {
+  alpha_true[, 6 + v] <-
+    mix_weight[v] * sbhm$A[, mix_pairs[v, 1]] +
+    (1 - mix_weight[v]) * sbhm$A[, mix_pairs[v, 2]]
 }
+colnames(alpha_true) <- voxel_names
+
+hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
+trial_regs <- lapply(seq_along(onsets), function(j) {
+  rr <- regressor(
+    onsets = onsets[j], hrf = hrf_B,
+    duration = 0, amplitude = 1, span = span, summate = FALSE
+  )
+  as.matrix(evaluate(rr, grid = time, precision = 0.1, method = "conv"))
+})
+
+trial_index <- seq_len(n_trials)
+voxel_index <- seq_len(n_voxels)
+beta_true <- outer(trial_index, voxel_index, function(i, v) {
+  1.6 + 0.35 * sin(i / 1.7 + v / 4) + 0.12 * cos(i * v / 5)
+})
+dimnames(beta_true) <- list(trial_names, voxel_names)
+
+Nuisance <- cbind(
+  linear = seq(-1, 1, length.out = n_time),
+  slow_sine = sin(2 * pi * time / max(time))
+)
+nuisance_coef <- rbind(
+  seq(-0.25, 0.25, length.out = n_voxels),
+  seq(0.20, -0.20, length.out = n_voxels)
+)
+Y_mean <- matrix(2, n_time, n_voxels) + Nuisance %*% nuisance_coef
+for (v in seq_len(n_voxels)) {
+  for (j in seq_len(n_trials)) {
+    Y_mean[, v] <- Y_mean[, v] +
+      beta_true[j, v] * as.numeric(trial_regs[[j]] %*% alpha_true[, v])
+  }
+}
+set.seed(812)
+Y <- Y_mean + matrix(rnorm(n_time * n_voxels, sd = 0.04), n_time, n_voxels)
+colnames(Y) <- voxel_names
 ```
 
-```{r data-summary, eval=eval_chunks}
-cat("Y:", dim(Y), "\n")
-cat("Unique true HRFs:", length(unique(true_hrf_idx)), "\n")
-```
+The main call makes every consequential choice explicit. Zero penalties are
+used so the later direct-GLM oracle has the same estimand. Hard matching is used
+first; soft matching is evaluated separately rather than being hidden in a
+default.
 
-## Step 3: Run the SBHM Pipeline
-
-A single call to `lss_sbhm()` runs the entire pipeline. All control lists
-(`prepass`, `match`, `oasis`, `amplitude`) are optional; pass only what you want
-to override. See `?lss_sbhm` for full parameter documentation.
-
-```{r run-sbhm, eval=eval_chunks}
-res_sbhm <- lss_sbhm(
-  Y = Y, sbhm = sbhm, design_spec = design_spec,
+```{r fit-hard}
+fit_hard <- lss_sbhm(
+  Y = Y,
+  sbhm = sbhm,
+  design_spec = design_spec,
+  Nuisance = Nuisance,
+  prepass = list(ridge = list(mode = "absolute", lambda = 0)),
+  match = list(topK = 1, soft_blend = FALSE, whiten = FALSE),
+  oasis = list(ridge_mode = "absolute", ridge_x = 0, ridge_b = 0),
+  amplitude = list(method = "global_ls", ridge = 0),
   return = "both"
 )
 ```
 
-```{r sbhm-dims, eval=eval_chunks}
-cat("Amplitudes:", dim(res_sbhm$amplitude), "\n")
-cat("Coefficients:", dim(res_sbhm$coeffs_r), "\n")
-cat("Matched indices:", length(res_sbhm$matched_idx), "\n")
-```
-
-If you use `fmridesign`, prefer `lss_sbhm_design()` for an even simpler
-interface that mirrors `lss_design()`. See `?lss_sbhm_design`.
-
-## Step 4: Evaluate Recovery
-
-### Matching Accuracy
-
-```{r evaluate-recovery, eval=eval_chunks}
-accuracy <- mean(res_sbhm$matched_idx == true_hrf_idx)
-cat("HRF matching accuracy:", round(100 * accuracy, 1), "%\n")
-cat("Confused voxels:", sum(res_sbhm$matched_idx != true_hrf_idx),
-    "/", n_voxels, "\n")
-```
-
-### Matching Confidence
-
-The `margin` (top-1 minus top-2 cosine score) indicates how unambiguous each
-assignment is. Higher is better.
-
-```{r margin-stats, eval=eval_chunks}
-cat("Margin -- mean:", round(mean(res_sbhm$margin), 3),
-    " median:", round(median(res_sbhm$margin), 3), "\n")
-```
-
-```{r visualize-margin, fig.width=8, fig.height=5, eval=eval_chunks, fig.alt="Histogram of matching confidence margins with median line."}
-hist(res_sbhm$margin, breaks = 20, col = "skyblue", border = "white",
-     main = "Matching Confidence (Margin)",
-     xlab = "Margin (top1 - top2 cosine score)")
-abline(v = median(res_sbhm$margin), col = "red", lwd = 2, lty = 2)
-grid()
-```
-
-In this simulation the median margin is small, which means many voxels sit close
-to multiple library members. That is exactly the regime where soft blending (see
-below) can help.
-
-### Amplitude Recovery
-
-```{r compare-amplitudes, fig.width=8, fig.height=5, eval=eval_chunks, fig.alt="Scatter plot of true vs estimated amplitudes showing recovery quality."}
-cor_amp <- cor(as.vector(res_sbhm$amplitude), as.vector(true_amplitudes))
-plot(as.vector(true_amplitudes), as.vector(res_sbhm$amplitude),
-     pch = 19, col = adjustcolor("navy", alpha.f = 0.3),
-     xlab = "True Amplitude", ylab = "Estimated Amplitude",
-     main = paste0("Amplitude Recovery (r = ", round(cor_amp, 3), ")"))
-abline(0, 1, col = "red", lwd = 2, lty = 2)
-grid()
-```
-
-```{r recovery-summary, eval=eval_chunks}
-recovery_summary <- data.frame(
-  HRFMatchingAccuracy = accuracy,
-  AmplitudeCorrelation = cor_amp,
-  MedianMargin = median(res_sbhm$margin)
+```{r output-contract}
+output_contract <- data.frame(
+  Component = c(
+    "alpha_coords", "amplitude", "coeffs_r", "matched_name", "shape_mode",
+    "event_amplitude / event_duration"
+  ),
+  Shape = c(
+    paste(dim(fit_hard$alpha_coords), collapse = " x "),
+    paste(dim(fit_hard$amplitude), collapse = " x "),
+    paste(dim(fit_hard$coeffs_r), collapse = " x "),
+    as.character(length(fit_hard$matched_name)),
+    as.character(length(fit_hard$shape_mode)),
+    paste(length(fit_hard$event_amplitude), "/", length(fit_hard$event_duration))
+  ),
+  Meaning = c(
+    "rank x voxel coordinates actually used by the amplitude refit",
+    "trial x voxel event-design coefficients",
+    "rank x trial x voxel OASIS coefficients",
+    "top-scoring library candidate for each voxel",
+    "hard, soft, or fallback shape policy actually used",
+    "named event-design scale metadata aligned with amplitude rows"
+  )
 )
-recovery_summary
+knitr::kable(output_contract, caption = "Reader-facing SBHM output contract for the fitted fixture.")
 ```
 
-```{r recovery-summary-check, include = FALSE, eval = eval_chunks}
-stopifnot(all(is.finite(as.matrix(recovery_summary))))
+```{r output-contract-check, include=FALSE}
+stopifnot(
+  identical(dim(fit_hard$alpha_coords), c(rank_used, n_voxels)),
+  identical(dim(fit_hard$amplitude), c(n_trials, n_voxels)),
+  identical(dim(fit_hard$coeffs_r), c(rank_used, n_trials, n_voxels)),
+  identical(colnames(fit_hard$alpha_coords), voxel_names),
+  identical(dimnames(fit_hard$amplitude), list(trial_names, voxel_names)),
+  identical(dimnames(fit_hard$coeffs_r)[2:3], list(trial_names, voxel_names)),
+  identical(names(fit_hard$matched_name), voxel_names),
+  identical(names(fit_hard$event_amplitude), trial_names),
+  identical(names(fit_hard$event_duration), trial_names),
+  identical(fit_hard$trial_basis_map$trial_name,
+            rep(trial_names, each = rank_used))
+)
 ```
 
-### Recovered HRF Shapes
+## Evaluate the shape actually used
 
-For the most confidently matched voxels, the recovered and true HRFs should
-overlap closely.
+Exact library index is secondary: nearby candidates can have almost identical
+waveforms. We therefore evaluate `B %*% alpha_coords` for every voxel. Angular
+error is zero for identical waveform direction and ignores arbitrary positive
+scale. Unit-norm waveform RMSE adds a time-domain discrepancy.
 
-```{r hrf-prep, eval=eval_chunks}
-H_hat <- sbhm$B %*% sbhm$A
-vox_show <- head(order(-res_sbhm$margin), n = min(6, n_voxels))
+```{r shape-metrics, include=FALSE}
+waveform_metrics <- function(alpha_est, alpha_truth, B) {
+  estimated <- B %*% alpha_est
+  truth <- B %*% alpha_truth
+  est_norm <- sweep(estimated, 2, sqrt(colSums(estimated^2)), "/")
+  truth_norm <- sweep(truth, 2, sqrt(colSums(truth^2)), "/")
+  cosine <- pmin(1, pmax(-1, colSums(est_norm * truth_norm)))
+  data.frame(
+    AngularErrorRadians = acos(cosine),
+    UnitWaveformRMSE = sqrt(colMeans((est_norm - truth_norm)^2))
+  )
+}
+
+hard_shape_by_voxel <- waveform_metrics(fit_hard$alpha_coords, alpha_true, sbhm$B)
+shape_group <- rep(c("On-library", "Off-library"), each = 6)
+shape_summary <- do.call(rbind, lapply(split(hard_shape_by_voxel, shape_group), function(x) {
+  data.frame(
+    MeanAngularErrorRadians = mean(x$AngularErrorRadians),
+    MaxAngularErrorRadians = max(x$AngularErrorRadians),
+    MeanUnitWaveformRMSE = mean(x$UnitWaveformRMSE)
+  )
+}))
+shape_summary$Truth <- rownames(shape_summary)
+rownames(shape_summary) <- NULL
+shape_summary <- shape_summary[, c("Truth", setdiff(names(shape_summary), "Truth"))]
 ```
 
-```{r matched-vs-true, fig.width=10, fig.height=6, eval=eval_chunks, fig.alt="Six panels comparing true and matched HRF shapes for the most confident voxels."}
+```{r shape-summary}
+shape_summary_display <- shape_summary
+shape_summary_display[-1] <- lapply(shape_summary_display[-1], round, 5)
+knitr::kable(
+  shape_summary_display,
+  caption = "All-voxel hard-match waveform error, separated by library coverage."
+)
+```
+
+```{r shape-plot-prep, include=FALSE}
+true_waveforms <- sbhm$B %*% alpha_true
+hard_waveforms <- sbhm$B %*% fit_hard$alpha_coords
+shape_alt <- sprintf(
+  paste0(
+    "Twelve panels compare true solid and hard-matched dashed rank-four waveforms. ",
+    "Mean angular error is %.3f radians on-library and %.3f radians off-library."
+  ),
+  shape_summary$MeanAngularErrorRadians[shape_summary$Truth == "On-library"],
+  shape_summary$MeanAngularErrorRadians[shape_summary$Truth == "Off-library"]
+)
+```
+
+```{r shape-plot, fig.width=10, fig.height=7, fig.alt=shape_alt, fig.cap="True and hard-matched rank-four waveforms for every voxel. Solid blue is truth; dashed orange is the coordinate actually used by the amplitude refit. Panels marked '(off)' contain off-library mixtures and are intentionally harder."}
 local({
-  oldpar <- par(mfrow = c(2, 3), mar = c(3, 3, 2, 1))
+  oldpar <- par(mfrow = c(3, 4), mar = c(2.7, 2.8, 2.1, 0.6), bg = "white")
   on.exit(par(oldpar), add = TRUE)
-  for (v in vox_show) {
-    rng <- range(c(H_hat[, true_hrf_idx[v]], H_hat[, res_sbhm$matched_idx[v]]))
-    plot(sbhm$tgrid, H_hat[, true_hrf_idx[v]], type = "l", col = "#2c7fb8",
-         lwd = 2, ylim = rng, main = paste0("Voxel ", v), xlab = "Time (s)", ylab = "HRF")
-    lines(sbhm$tgrid, H_hat[, res_sbhm$matched_idx[v]], col = "#d95f02", lwd = 2, lty = 2)
-    legend("topright", bty = "n", cex = 0.8, legend = c("True", "Matched"),
-           lty = 1:2, lwd = 2, col = c("#2c7fb8", "#d95f02"))
+  keep <- time <= span
+  for (v in seq_len(n_voxels)) {
+    ylim <- range(true_waveforms[keep, v], hard_waveforms[keep, v])
+    plot(time[keep], true_waveforms[keep, v], type = "l", lwd = 2,
+         col = "#2c7fb8", ylim = ylim, xlab = "Seconds", ylab = "Shape",
+         main = paste0(voxel_names[v], if (v <= 6) " (on)" else " (off)"))
+    lines(time[keep], hard_waveforms[keep, v], lwd = 2, lty = 2, col = "#d95f02")
+    abline(h = 0, col = "gray85")
   }
 })
 ```
 
-### Library Manifold
+For the six on-library voxels, exact candidate identity is also judgeable:
 
-PCA of the library coordinates shows which HRFs were present (true) versus
-selected (matched).
-
-```{r pca-library, fig.width=8, fig.height=5, eval=eval_chunks, fig.alt="PCA scatter of library coordinates showing true and matched HRF positions."}
-pca <- prcomp(t(sbhm$A), center = TRUE, scale. = TRUE)
-pc <- pca$x[, 1:2, drop = FALSE]
-plot(pc, pch = 16, col = "gray70", xlab = "PC1", ylab = "PC2",
-     main = "Library Coordinate Space (PCA)")
-points(pc[unique(true_hrf_idx), , drop = FALSE], pch = 1, col = "#2c7fb8", lwd = 2)
-points(pc[unique(res_sbhm$matched_idx), , drop = FALSE], pch = 4, col = "#d95f02", lwd = 2)
-legend("topright", bty = "n",
-       legend = c("Library", "True", "Matched"),
-       pch = c(16, 1, 4), col = c("gray60", "#2c7fb8", "#d95f02"))
+```{r index-secondary}
+exact_index_accuracy <- mean(
+  fit_hard$matched_name[1:6] == colnames(sbhm$A)[on_library_idx]
+)
+data.frame(OnLibraryExactCandidateAccuracy = exact_index_accuracy)
 ```
 
-## Soft Assignment for Ambiguous Voxels
+## Hard and soft matching answer different questions
 
-Hard assignment picks the single best HRF per voxel. When the margin is small,
-blending the top-K candidates can reduce variance. The built-in approach
-requires just two extra arguments.
+Soft matching uses cosine-score softmax weights; those weights are not mixture
+fractions and the score margin is not calibrated confidence. We compare an
+explicit soft policy with the explicit hard fit against the same truth. The
+result is descriptive for this fixture, not a rule that soft matching reduces
+variance or improves interpolation.
 
-```{r soft-blend, eval=eval_chunks}
-res_soft <- lss_sbhm(
-  Y = Y, sbhm = sbhm, design_spec = design_spec,
-  match = list(topK = 3, soft_blend = TRUE,
-               blend_margin = median(res_sbhm$margin)),
+```{r fit-soft}
+fit_soft <- lss_sbhm(
+  Y = Y,
+  sbhm = sbhm,
+  design_spec = design_spec,
+  Nuisance = Nuisance,
+  prepass = list(ridge = list(mode = "absolute", lambda = 0)),
+  match = list(
+    topK = 3, soft_blend = TRUE, blend_margin = 2,
+    whiten = FALSE
+  ),
+  oasis = list(ridge_mode = "absolute", ridge_x = 0, ridge_b = 0),
+  amplitude = list(method = "global_ls", ridge = 0),
+  return = "both"
+)
+```
+
+```{r compare-policies}
+soft_shape_by_voxel <- waveform_metrics(fit_soft$alpha_coords, alpha_true, sbhm$B)
+policy_table <- rbind(
+  data.frame(
+    Policy = "Hard top-1",
+    VoxelsUsingPolicy = sum(fit_hard$shape_mode == "hard"),
+    MeanAngularError = mean(hard_shape_by_voxel$AngularErrorRadians),
+    AmplitudeBias = mean(fit_hard$amplitude - beta_true),
+    AmplitudeRMSE = sqrt(mean((fit_hard$amplitude - beta_true)^2))
+  ),
+  data.frame(
+    Policy = "Soft top-3",
+    VoxelsUsingPolicy = sum(fit_soft$shape_mode == "soft"),
+    MeanAngularError = mean(soft_shape_by_voxel$AngularErrorRadians),
+    AmplitudeBias = mean(fit_soft$amplitude - beta_true),
+    AmplitudeRMSE = sqrt(mean((fit_soft$amplitude - beta_true)^2))
+  )
+)
+policy_table[-1] <- lapply(policy_table[-1], round, 5)
+knitr::kable(
+  policy_table,
+  caption = "Truth-referenced hard and soft results for this fixed fixture."
+)
+```
+
+```{r policy-check, include=FALSE}
+stopifnot(
+  all(fit_hard$shape_mode == "hard"),
+  all(fit_soft$shape_mode == "soft")
+)
+```
+
+The returned `margin` is simply the top-one minus top-two cosine score. Low
+margin can reveal near-ties, but no universal `min_margin` or `blend_margin`
+follows from it. If gating is used, inspect `shape_mode` and
+`fallback_low_conf`; `matched_name` remains the top-scoring candidate, whereas
+`alpha_coords` records the shape actually used.
+
+## Bind the coefficient estimator to an independent GLM
+
+With `amplitude$method = "global_ls"` and zero ridge, the final stage is an
+ordinary trial-wise GLM conditional on the selected shape. The following oracle
+assembles every voxel model independently from the public `fmrihrf` regressors.
+It proves implementation identity; it does not remove shape-selection bias.
+
+```{r direct-oracle, include=FALSE}
+direct_amplitude <- function(alpha) {
+  out <- matrix(NA_real_, n_trials, n_voxels,
+                dimnames = list(trial_names, voxel_names))
+  common <- cbind(intercept = 1, Nuisance)
+  for (v in seq_len(n_voxels)) {
+    Xv <- do.call(cbind, lapply(
+      trial_regs, function(Xt) as.numeric(Xt %*% alpha[, v])
+    ))
+    fit <- lm.fit(cbind(common, Xv), Y[, v])
+    out[, v] <- tail(fit$coefficients, n_trials)
+  }
+  out
+}
+direct_hard <- direct_amplitude(fit_hard$alpha_coords)
+known_shape <- direct_amplitude(alpha_true)
+direct_error <- max(abs(direct_hard - fit_hard$amplitude))
+amplitude_table <- data.frame(
+  Estimator = c("Known truth shape", "SBHM hard-selected shape", "SBHM soft-selected shape"),
+  Bias = c(
+    mean(known_shape - beta_true),
+    mean(fit_hard$amplitude - beta_true),
+    mean(fit_soft$amplitude - beta_true)
+  ),
+  RMSE = c(
+    sqrt(mean((known_shape - beta_true)^2)),
+    sqrt(mean((fit_hard$amplitude - beta_true)^2)),
+    sqrt(mean((fit_soft$amplitude - beta_true)^2))
+  )
+)
+```
+
+```{r direct-oracle-table}
+amplitude_display <- amplitude_table
+amplitude_display[-1] <- lapply(amplitude_display[-1], round, 5)
+amplitude_display$DirectGLMMaxError <- c(NA, format(direct_error, scientific = TRUE), NA)
+knitr::kable(
+  amplitude_display,
+  caption = "Trial-coefficient recovery and the independent all-cell GLM identity check."
+)
+```
+
+```{r direct-oracle-check, include=FALSE}
+stopifnot(
+  direct_error < 1e-10,
+  all(is.finite(as.matrix(amplitude_table[-1]))),
+  identical(dimnames(fit_hard$amplitude), dimnames(beta_true))
+)
+```
+
+```{r amplitude-plot-prep, include=FALSE}
+amp_bias <- mean(fit_hard$amplitude - beta_true)
+amp_rmse <- sqrt(mean((fit_hard$amplitude - beta_true)^2))
+amp_alt <- sprintf(
+  paste0(
+    "Scatter of 96 true and hard-match event-design coefficients. ",
+    "Bias is %.3f and RMSE is %.3f; a diagonal reference line is shown."
+  ),
+  amp_bias, amp_rmse
+)
+amp_range <- range(beta_true, fit_hard$amplitude)
+```
+
+```{r amplitude-plot, fig.alt=amp_alt, fig.cap="Hard-match event-design coefficients against truth for all trials and voxels. The red dashed line is equality; the displayed bias and RMSE are conditional on this fixed simulation."}
+plot(
+  as.vector(beta_true), as.vector(fit_hard$amplitude),
+  pch = 19, col = grDevices::adjustcolor("#2c7fb8", alpha.f = 0.55),
+  xlim = amp_range, ylim = amp_range,
+  xlab = "True event-design coefficient",
+  ylab = "Estimated event-design coefficient",
+  main = sprintf("Hard matching: bias %.3f, RMSE %.3f", amp_bias, amp_rmse)
+)
+abline(0, 1, col = "#d7301f", lwd = 2, lty = 2)
+grid()
+```
+
+## Factorization accelerates only the prepass
+
+`data_fac` represents `Y` as `scores %*% loadings`, where scores are
+\(T \times q\) and loadings are \(q \times V\). The full `Y` is still required by
+`lss_sbhm()` for OASIS and the amplitude stage. The shortcut therefore reduces
+only prepass multiplication; it does not make the full pipeline independent of
+\(V\). Named factor axes must agree between scores and loadings; when `Y` has
+voxel names, loadings must carry the same names and are aligned before use.
+Active prewhitening with `data_fac` fails explicitly because the supplied
+factorization is not a factorization of the estimated whitened data.
+
+```{r factorized-prepass}
+set.seed(813)
+q <- 4L
+scores <- matrix(rnorm(n_time * q), n_time, q)
+loadings <- matrix(rnorm(q * n_voxels), q, n_voxels)
+colnames(scores) <- rownames(loadings) <- paste0("factor_", seq_len(q))
+colnames(loadings) <- voxel_names
+Y_factorized <- scores %*% loadings
+colnames(Y_factorized) <- voxel_names
+
+pre_dense <- sbhm_prepass(
+  Y_factorized, sbhm, design_spec,
+  ridge = list(mode = "absolute", lambda = 0)
+)
+pre_factorized <- sbhm_prepass(
+  Y_factorized, sbhm, design_spec,
+  ridge = list(mode = "absolute", lambda = 0),
+  data_fac = list(scores = scores, loadings = loadings)
+)
+factorized_error <- max(abs(pre_dense$beta_bar - pre_factorized$beta_bar))
+data.frame(
+  Scores = paste(dim(scores), collapse = " x "),
+  Loadings = paste(dim(loadings), collapse = " x "),
+  Voxels = ncol(Y_factorized),
+  DenseVsFactorizedMaxError = factorized_error
+)
+```
+
+```{r factorized-check, include=FALSE}
+stopifnot(q < n_voxels, factorized_error < 1e-10)
+factorized_whitening_error <- try(
+  sbhm_prepass(
+    Y_factorized, sbhm, design_spec,
+    prewhiten = list(method = "ar", p = 1L),
+    data_fac = list(scores = scores, loadings = loadings)
+  ),
+  silent = TRUE
+)
+stopifnot(
+  inherits(factorized_whitening_error, "try-error"),
+  grepl("does not support active prewhitening", as.character(factorized_whitening_error), fixed = TRUE)
+)
+```
+
+For a PCA factorization, `prcomp(Y)$x` supplies scores and
+`t(prcomp(Y)$rotation)` supplies the required \(q \times V\) loading
+orientation. The evaluated path below keeps `Y` as the response for OASIS and
+the amplitude stage while using a rank-four uncentered PCA approximation only
+for the prepass. This is a computational approximation, not an accuracy claim.
+
+```{r pca-end-to-end}
+pca <- prcomp(Y, center = FALSE, scale. = FALSE, rank. = q)
+pca_scores <- pca$x[, seq_len(q), drop = FALSE]
+pca_loadings <- t(pca$rotation[, seq_len(q), drop = FALSE])
+
+fit_pca_prepass <- lss_sbhm(
+  Y = Y,
+  sbhm = sbhm,
+  design_spec = design_spec,
+  Nuisance = Nuisance,
+  prepass = list(
+    ridge = list(mode = "absolute", lambda = 0),
+    data_fac = list(scores = pca_scores, loadings = pca_loadings)
+  ),
+  match = list(topK = 1, soft_blend = FALSE, whiten = FALSE),
+  oasis = list(ridge_mode = "absolute", ridge_x = 0, ridge_b = 0),
+  amplitude = list(method = "global_ls", ridge = 0),
   return = "amplitude"
 )
-```
-
-```{r soft-compare, eval=eval_chunks}
-cor_sv <- cor(as.vector(res_soft$amplitude), as.vector(res_sbhm$amplitude))
-cat("Soft vs hard amplitude correlation:", round(cor_sv, 3), "\n")
-```
-
-Blending only applies to voxels whose margin falls below `blend_margin`;
-confident voxels keep their hard assignment. For manual control over the
-blending weights, use `sbhm_prepass()`, `sbhm_match(topK = K)`, and
-`sbhm_project()` directly. See `?sbhm_match` for details.
-
-## Shape Estimation Strategies
-
-By default, SBHM estimates each voxel's HRF shape from an aggregate prepass
-fit (`alpha_source = "prepass"`). Two alternative strategies are available when
-the prepass is unreliable:
-
-- `"trial_projection"` estimates shape from per-trial projection coefficients in
-  the shared basis, using the leading singular vector across trials.
-- `"oasis_rank1"` extracts shape from the rank-1 approximation of the
-  trial-wise OASIS betas. Set `rank1_min` to gate voxels with low rank-1
-  variance fraction back to prepass.
-
-```{r alpha-source, eval=FALSE}
-res_proj <- lss_sbhm(
-  Y, sbhm, design_spec,
-  match = list(alpha_source = "trial_projection")
+data.frame(
+  ScoreShape = paste(dim(pca_scores), collapse = " x "),
+  LoadingShape = paste(dim(pca_loadings), collapse = " x "),
+  FullResponseShape = paste(dim(Y), collapse = " x "),
+  OutputShape = paste(dim(fit_pca_prepass$amplitude), collapse = " x ")
 )
 ```
 
-### Low-Confidence Gating
-
-For voxels where matching is uncertain (low margin or weak signal), you can gate
-them to a fallback shape using `min_margin` and `min_beta_norm`. Gated voxels
-use the reference coordinate instead of the matched one.
-
-```{r gating-example, eval=FALSE}
-res_gated <- lss_sbhm(
-  Y, sbhm, design_spec,
-  match = list(min_margin = 0.05, min_beta_norm = 1e-3)
-)
-cat("Voxels gated to fallback:", res_gated$diag$fallback_low_conf_n, "\n")
-```
-
-## Amplitude Policy
-
-The final amplitude stage estimates per-trial scalars from the matched HRF. The
-`amplitude$method` argument selects the estimator:
-`"lss1"` (default, per-trial 2x2 LSS---robust under overlap),
-`"global_ls"` (fast ridge-regularized GLM across all trials), or
-`"oasis_voxel"` (full OASIS per voxel, heaviest but returns SEs).
-
-The default `"lss1"` provides the best balance of robustness and accuracy for
-typical rapid event-related designs.  For slow designs with well-separated
-trials, `"global_ls"` can be faster.  Use `cond_gate` to fall back
-automatically when the design is too collinear for a given method.
-
-```{r amplitude-policy, eval=FALSE}
-out <- lss_sbhm(
-  Y, sbhm, design_spec,
-  amplitude = list(method = "lss1",
-                   ridge_frac = list(x = 0.02, b = 0.02),
-                   cond_gate = list(metric = "rho", thr = 0.999, fallback = "global_ls"))
+```{r pca-end-to-end-check, include=FALSE}
+stopifnot(
+  q < n_voxels,
+  identical(dim(fit_pca_prepass$amplitude), c(n_trials, n_voxels)),
+  all(is.finite(fit_pca_prepass$amplitude))
 )
 ```
 
-See `?lss_sbhm` for guidance on choosing by ISI regime (slow, moderate, fast ER).
+## Runs, conditions, and whitening
 
-## Returning Coefficients for Custom Analysis
+Raw multi-run `design_spec` inputs use run-relative onsets and an explicit
+`cond$run` vector. SBHM constructs every trial inside its own sampling-frame
+run and uses run-specific intercepts, so an HRF tail cannot cross a run
+boundary. `lss_sbhm_design()` obtains those run identities and heterogeneous
+durations from the unique trialwise `fmridesign` term; non-trial event terms and
+baseline-model columns enter the fixed nuisance span. See
+`vignette("lss_with_fmridesign")` for the event-model identity contract.
 
-When you need the full r-dimensional trial-wise coefficients instead of scalar
-amplitudes, request `return = "coefficients"`.
+If estimated prewhitening is requested, SBHM applies the same transformation to
+the response, trial basis, other-condition span, and nuisance design in the
+prepass, diagnostics, and final amplitude estimator. The whitening plan is
+estimated once from the complete trial and common design, then reused at every
+stage. For a multi-run sampling frame, omitted `prewhiten$runs` are filled from
+the frame's run boundaries; contradictory labels fail rather than allowing a
+temporal filter to bridge runs. This changes the conditional point estimator;
+it does not create calibrated post-selection standard errors. Factorized
+prepasses and active prewhitening cannot be combined.
 
-```{r coeffs-demo, eval=eval_chunks}
-res_c <- lss_sbhm(Y = Y[, 1:5], sbhm = sbhm,
-                   design_spec = design_spec, return = "coefficients")
-cat("Coefficients:", dim(res_c$coeffs_r), " [r x trials x voxels]\n")
-```
+## Advanced policies are explicit heuristics
 
-## Parameter Quick Reference
+`alpha_source = "trial_projection"` and `"oasis_rank1"`, low-score fallback,
+condition gates, ridge penalties, and adaptive ridge controls are available for
+specialized studies. They change the estimator. No rank, ridge fraction,
+margin threshold, ISI boundary, or TR cutoff is generally recommended here.
+Choose and validate such a policy against the design, signal scale, failure
+modes, and loss function of the intended analysis.
 
-| Parameter | Default | Recommended | Notes |
-|-----------|---------|-------------|-------|
-| `r` (rank) | -- | 6--12 | Aim for 90--95% variance explained |
-| `topK` | 3 | 1--5 | Use 3--5 with `soft_blend = TRUE` for ambiguous cases |
-| `soft_blend` | TRUE | TRUE | Blend top-K candidates for uncertain voxels |
-| `blend_margin` | 0.08 | 0.05--0.15 | Only blend voxels with margin below this |
-| `alpha_source` | `"prepass"` | `"prepass"` | Also `"trial_projection"` or `"oasis_rank1"` |
-| `prepass$ridge` | NULL | `list(mode = "fractional", lambda = 0.01)` | Stabilizes noisy/collinear designs |
-| `match$shrink$tau` | 0 | 0--0.2 | Increase for low SNR |
-| `match$whiten` | FALSE | FALSE | Set TRUE with `whiten_power = 0.5` for partial whitening |
-| `match$min_margin` | NULL | 0.05--0.1 | Gate low-confidence voxels to fallback shape |
-| `prewhiten` | NULL | `list(method = "ar", p = 1L)` | Use for TR < 2s |
-| `amplitude$method` | `"lss1"` | varies by ISI | `"global_ls"` for slow ER, `"lss1"` otherwise |
+The three scalar-coefficient engines also answer different model questions:
 
-For full details on every parameter, see `?sbhm_build`, `?sbhm_match`, and
-`?lss_sbhm`.
+- `global_ls` fits all trial columns jointly for each selected voxel shape;
+- `lss1` fits one target and one aggregate-other column per trial;
+- `oasis_voxel` applies the K=1 OASIS operator per voxel.
 
-## Performance Considerations
+Exactly coincident or otherwise unidentified trials cannot be recovered by any
+of these labels. Ridge may return symmetric finite coefficients, but it does not
+restore identification. None of the three engines returns calibrated SBHM
+standard errors.
 
-SBHM's cost scales as O(T*r*N*V) for the LSS step, where N is the number of
-trials. Compared to unconstrained voxel-wise HRF estimation this is typically
-10--50x faster, since r << K*N.
+## Takeaways
 
-For very large datasets (V > 50,000), PCA factorization reduces memory by
-fitting the prepass on q "meta-voxels" instead of V voxels.
+SBHM is a constrained shape-selection and coefficient-estimation workflow. Its
+useful compression comes with visible assumptions: the library defines the
+shape space, rank truncation defines the approximation, matching or blending
+defines the voxel waveform, and the supplied event design defines coefficient
+units. Judge the waveform actually used (`alpha_coords`), retain the identity
+maps, and evaluate hard, soft, fallback, ridge, and whitening policies against
+truth or external calibration before using them in a scientific conclusion.
 
-```{r factorized, eval=FALSE}
-pca_Y <- prcomp(Y, center = TRUE, rank. = 100)
-res <- lss_sbhm(
-  Y = pca_Y$x, sbhm = sbhm, design_spec = design_spec,
-  prepass = list(data_fac = list(scores = pca_Y$x, loadings = pca_Y$rotation))
-)
-```
-
-For ROI-based analyses, simply subset columns of Y before calling `lss_sbhm()`.
-A benchmark script is available via
-`system.file("benchmarks", "bench_sbhm.R", package = "fmrilss")`.
-
-## Prewhitening
-
-If your TR is short (< 2s) or residuals show autocorrelation, add prewhitening
-to the final OASIS step.
-
-```{r prewhiten-example, eval=FALSE}
-res_pw <- lss_sbhm(
-  Y = Y, sbhm = sbhm, design_spec = design_spec,
-  prewhiten = list(method = "ar", p = 1L, pooling = "global", exact_first = "ar1")
-)
-```
-
-Note: the factorized prepass intentionally skips prewhitening for efficiency.
-The final OASIS step still applies it when `prewhiten` is provided.
-
-## References
-
-- Mumford et al. (2012). "Deconvolving BOLD activation in event-related designs for multivoxel pattern classification analyses." *NeuroImage*.
-- Lindquist et al. (2009). "Modeling the hemodynamic response function in fMRI." *NeuroImage*.
-
-## Summary
-
-SBHM provides efficient, interpretable voxel-specific HRF estimation by
-learning a shared basis from a plausible library and matching each voxel in a
-low-dimensional coefficient space. The `lss_sbhm()` function runs the full
-pipeline in a single call, returning trial-wise amplitudes with per-voxel HRF
-assignments and confidence scores.
-
-**Next steps:**
-see `?sbhm_build` for library construction,
-`?lss_sbhm` for the end-to-end pipeline,
-and the "Voxel-wise HRF" vignette for unconstrained alternatives.
+This is the end of the vignette learning path. Continue with `?sbhm_build`,
+`?sbhm_match`, `?sbhm_prepass`, `?lss_sbhm`, and `?lss_sbhm_design` for the
+complete API contracts.

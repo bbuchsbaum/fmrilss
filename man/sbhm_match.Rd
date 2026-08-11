@@ -26,14 +26,15 @@ GLM in the SBHM basis. Columns correspond to voxels.}
 
 \item{shrink}{List with optional shrinkage options:
 \itemize{
-\item \code{tau} numeric >=0: global strength (default 0, i.e., no shrinkage).
+\item \code{tau} numeric in \verb{[0,1]}: global strength (default 0, i.e., no shrinkage).
 \item \code{ref} numeric length-r vector (alpha_ref) or NULL. If NULL, uses
 the mean of A columns. Shrinkage is: beta_bar <- (1-lambda) beta_bar + lambda ref.
 \item \code{snr} optional numeric length-V estimates; if provided, per-voxel
 lambda_v = tau/(snr_v + tau). Otherwise lambda = tau.
 }}
 
-\item{topK}{Integer, return top-K scores/weights if >1 (default 1).}
+\item{topK}{Positive integer no larger than the library size; return top-K
+scores/weights if greater than one (default 1).}
 
 \item{whiten}{Logical, divide coefficients by S before normalization (default TRUE).}
 
@@ -51,11 +52,16 @@ negative before matching (default TRUE).}
 A list with:
 \itemize{
 \item \code{idx} length-V integer indices of best-matching library HRF (1..K)
-\item \code{margin} length-V numeric: score(top1) - score(top2)
+\item \code{margin} named length-V numeric score difference: top1 - top2. It is not
+a calibrated confidence measure.
 \item \code{alpha_hat} r×V matrix: the selected library coordinates (unwhitened, unnormalized)
 \item \code{scores} optional K×V cosine score matrix (returned when topK > 1)
-\item \code{weights} optional top-K weights per voxel (when topK > 1)
+\item \code{weights} optional cosine-softmax top-K weights per voxel (when topK > 1)
 }
+
+Non-finite inputs, zero-norm voxel summaries or library candidates, and
+malformed matching controls fail explicitly. Named basis axes must identify
+the same complete set and are aligned before matching.
 }
 \description{
 Given per-voxel aggregate coefficients \code{beta_bar} in the shared basis \code{B},

@@ -32,7 +32,8 @@ that returns an \code{fmrihrf} HRF object when called with parameters.
 \item{library_H}{Optional precomputed TxK matrix of candidate HRFs, already
 aligned to the TR grid \code{tgrid} (or \code{sframe}). Mutually exclusive with \code{library_spec}.}
 
-\item{r}{Target rank for the shared basis (default 6). Clipped to \code{min(T, K)}.}
+\item{r}{Positive integer target rank for the shared basis (default 6).
+Requests above the numerical library rank are clipped with a warning.}
 
 \item{sframe}{Optional \code{fmrihrf::sampling_frame}, used to derive the global time
 grid when \code{tgrid} is not provided.}
@@ -64,7 +65,8 @@ A list with components:
 \item \code{tgrid}: the global time grid used (seconds)
 \item \code{span}: span used for reference HRF
 \item \code{ref}: list with \code{alpha_ref} (length r) and \code{name}
-\item \code{meta}: list with \code{r}, \code{K}, \code{normalize}, \code{baseline}
+\item \code{meta}: rank, normalization, candidate identity, full singular values,
+numerical rank, and retained total-energy fraction
 }
 }
 \description{

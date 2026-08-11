@@ -272,8 +272,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // oasisk_betas_se
-Rcpp::List oasisk_betas_se(const arma::cube& D, const arma::cube& C, const arma::cube& E, const arma::mat& N1, const arma::mat& SY, const arma::vec& RY_norm2, double ridge_x, double ridge_b);
-RcppExport SEXP _fmrilss_oasisk_betas_se(SEXP DSEXP, SEXP CSEXP, SEXP ESEXP, SEXP N1SEXP, SEXP SYSEXP, SEXP RY_norm2SEXP, SEXP ridge_xSEXP, SEXP ridge_bSEXP) {
+Rcpp::List oasisk_betas_se(const arma::cube& D, const arma::cube& C, const arma::cube& E, const arma::mat& N1, const arma::mat& SY, const arma::vec& RY_norm2, const arma::ivec& dof, double ridge_x, double ridge_b);
+RcppExport SEXP _fmrilss_oasisk_betas_se(SEXP DSEXP, SEXP CSEXP, SEXP ESEXP, SEXP N1SEXP, SEXP SYSEXP, SEXP RY_norm2SEXP, SEXP dofSEXP, SEXP ridge_xSEXP, SEXP ridge_bSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -283,9 +283,10 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::mat& >::type N1(N1SEXP);
     Rcpp::traits::input_parameter< const arma::mat& >::type SY(SYSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type RY_norm2(RY_norm2SEXP);
+    Rcpp::traits::input_parameter< const arma::ivec& >::type dof(dofSEXP);
     Rcpp::traits::input_parameter< double >::type ridge_x(ridge_xSEXP);
     Rcpp::traits::input_parameter< double >::type ridge_b(ridge_bSEXP);
-    rcpp_result_gen = Rcpp::wrap(oasisk_betas_se(D, C, E, N1, SY, RY_norm2, ridge_x, ridge_b));
+    rcpp_result_gen = Rcpp::wrap(oasisk_betas_se(D, C, E, N1, SY, RY_norm2, dof, ridge_x, ridge_b));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -340,7 +341,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_oasisk_products", (DL_FUNC) &_fmrilss_oasisk_products, 5},
     {"_fmrilss_oasisk_betas", (DL_FUNC) &_fmrilss_oasisk_betas, 8},
     {"_fmrilss_oasisk_compute_RY_norm2", (DL_FUNC) &_fmrilss_oasisk_compute_RY_norm2, 2},
-    {"_fmrilss_oasisk_betas_se", (DL_FUNC) &_fmrilss_oasisk_betas_se, 8},
+    {"_fmrilss_oasisk_betas_se", (DL_FUNC) &_fmrilss_oasisk_betas_se, 9},
     {"_fmrilss_estimate_hrf_cpp", (DL_FUNC) &_fmrilss_estimate_hrf_cpp, 2},
     {"_fmrilss_lss_engine_vox_hrf", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf, 10},
     {NULL, NULL, 0}

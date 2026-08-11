@@ -36,6 +36,32 @@ test_that("lss_sbhm_design basic functionality (single run)", {
   expect_true(!is.null(attr(out, "sampling_frame")))
 })
 
+test_that("lss_sbhm_design rejects malformed validation and reserved dots", {
+  skip_if_not_installed("fmridesign")
+  skip_if_not_installed("fmrihrf")
+
+  sframe <- fmrihrf::sampling_frame(blocklens = 60, TR = 1)
+  trials <- data.frame(onset = c(5, 20, 35), run = 1)
+  emod <- fmridesign::event_model(
+    onset ~ fmridesign::trialwise(basis = "spmg1"),
+    data = trials,
+    block = ~run,
+    sampling_frame = sframe
+  )
+  H <- cbind(exp(-seq(0, 3, length.out = 60)), exp(-seq(0, 6, length.out = 60)))
+  sbhm <- sbhm_build(library_H = H, r = 2, sframe = sframe, normalize = TRUE)
+  Y <- matrix(rnorm(60 * 2), 60, 2)
+
+  expect_error(
+    lss_sbhm_design(Y, sbhm, emod, validate = NA),
+    "validate must be TRUE or FALSE"
+  )
+  expect_error(
+    lss_sbhm_design(Y, sbhm, emod, typo = 1),
+    "unsupported argument"
+  )
+})
+
 test_that("lss_sbhm_design with baseline_model (multi-run)", {
   skip_if_not_installed("fmridesign")
   skip_if_not_installed("fmrihrf")

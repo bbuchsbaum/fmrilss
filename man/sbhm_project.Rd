@@ -16,6 +16,9 @@ system as \code{beta_rt} (unwhitened, not L2-normalized) for interpretable ampli
 }
 \value{
 Numeric matrix ntrials x V of scalar amplitudes.
+Zero-norm or non-finite coordinates are unidentified and fail explicitly.
+When basis or voxel names are present, both inputs must provide the same
+complete unique identities; \code{alpha_hat} is reordered to \code{beta_rt}.
 }
 \description{
 Given trial-wise coefficients in the shared basis (rxntrialsxV) and the

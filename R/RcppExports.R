@@ -149,8 +149,8 @@ oasisk_compute_RY_norm2 <- function(Q, Y) {
     .Call(`_fmrilss_oasisk_compute_RY_norm2`, Q, Y)
 }
 
-oasisk_betas_se <- function(D, C, E, N1, SY, RY_norm2, ridge_x = 0.0, ridge_b = 0.0) {
-    .Call(`_fmrilss_oasisk_betas_se`, D, C, E, N1, SY, RY_norm2, ridge_x, ridge_b)
+oasisk_betas_se <- function(D, C, E, N1, SY, RY_norm2, dof, ridge_x = 0.0, ridge_b = 0.0) {
+    .Call(`_fmrilss_oasisk_betas_se`, D, C, E, N1, SY, RY_norm2, dof, ridge_x, ridge_b)
 }
 
 estimate_hrf_cpp <- function(X, Y) {

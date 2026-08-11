@@ -7,6 +7,8 @@
 oasis_options(
   design_spec = NULL,
   K = NULL,
+  ntrials = NULL,
+  trial_basis_map = NULL,
   ridge_mode = c("fractional", "absolute"),
   ridge_x = 0.05,
   ridge_b = 0.05,
@@ -23,6 +25,11 @@ oasis_options(
 
 \item{K}{Optional basis dimension override.}
 
+\item{ntrials}{Number of trials for a raw multi-basis design.}
+
+\item{trial_basis_map}{For a raw multi-basis design, a data frame with one
+row per \code{X} column and fields \code{column}, \code{trial}, and \code{basis}.}
+
 \item{ridge_mode}{\code{"fractional"} (default) or \code{"absolute"}.}
 
 \item{ridge_x, ridge_b}{Non-negative ridge penalties (defaults 0.05 each).}
@@ -37,14 +44,17 @@ oasis_options(
 
 \item{hrf_mode}{Optional mode (e.g. \code{"voxhrf"}); advanced use.}
 
-\item{...}{Additional options.}
+\item{...}{Certified advanced options: \code{infer_K_from_X}, \code{lambda_shape},
+\code{mu_rough}, \code{ref_hrf}, \code{shrink_global}, \code{orient_ref}, and the deprecated
+\code{whiten} compatibility field. Unknown names are rejected.}
 }
 \value{
 A list with class \code{"fmrilss_oasis_options"}.
 }
 \description{
 Convenience constructor for the \verb{oasis=} list accepted by \code{lss(method="oasis")}.
-Unknown fields are allowed via \code{...} for forward compatibility.
+Unknown fields are rejected so misspelled scientific controls cannot be
+silently ignored.
 }
 \examples{
 oasis_options(ridge_mode = "fractional", ridge_x = 0.1, ridge_b = 0.1)

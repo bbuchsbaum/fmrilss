@@ -2,7 +2,7 @@
 % Please edit documentation in R/sbhm_fit.R
 \name{sbhm_prepass}
 \alias{sbhm_prepass}
-\title{SBHM Prepass: Aggregate Fit in Shared Basis}
+\title{SBHM Prepass: Aggregate Fit in a Shared Basis}
 \usage{
 sbhm_prepass(
   Y,
@@ -15,78 +15,38 @@ sbhm_prepass(
 )
 }
 \arguments{
-\item{Y}{Numeric matrix T×V of fMRI time series.}
+\item{Y}{Finite numeric T by V response matrix.}
 
-\item{sbhm}{SBHM object from \code{sbhm_build()} (must contain B, S, A, tgrid, span).}
+\item{sbhm}{Object returned by \code{\link[=sbhm_build]{sbhm_build()}}.}
 
-\item{design_spec}{List describing events (same shape as \code{oasis$design_spec}).
-Must contain \code{sframe} and \code{cond} with \code{onsets} (and optional \code{duration},
-\code{amplitude}, \code{span}). \code{cond$hrf} is ignored and replaced with \code{sbhm_hrf}.
-Optional \code{others} (list of other conditions) will be aggregated as nuisances.}
+\item{design_spec}{Event specification with \code{sframe} and \code{cond}; multi-run
+inputs use run-relative onsets and an explicit \code{cond$run} vector.}
 
-\item{Nuisance}{Optional T×P nuisance matrix (motion, drift, etc.).}
+\item{Nuisance}{Optional T by P nuisance matrix.}
 
-\item{prewhiten}{Optional fmriAR prewhitening options (see \code{?lss}). If provided,
-Y and design are prewhitened together.}
+\item{prewhiten}{Optional prewhitening options passed to the package
+prewhitening layer. Run labels are inferred from \code{design_spec$sframe} when
+omitted; supplied labels must match those sampling-frame boundaries.}
 
-\item{ridge}{Optional list for targeted ridge shrinkage in the prepass solve:
-\itemize{
-\item \code{mode}: "fractional" (default) or "absolute". Fractional scales by mean(diag(G)).
-\item \code{lambda}: nonnegative scalar (default 0.01 in fractional mode).
-\item \code{alpha_ref}: r-vector to shrink towards (default zero vector).
-}}
+\item{ridge}{List with \code{mode}, nonnegative \code{lambda}, and optional
+rank-length \code{alpha_ref}.}
 
-\item{data_fac}{Optional list for external factorization: \code{scores} (T×q),
-\code{loadings} (q×V). If provided, computes X'Y via (X'Scores) × Loadings. In this
-PR2 version, prewhitening is not applied when \code{data_fac} is used.}
+\item{data_fac}{Optional exact or approximate factorization with \code{scores}
+T by q and \code{loadings} q by V. Active prewhitening is unsupported with this
+shortcut, and the original full \code{Y} remains required by \code{\link[=lss_sbhm]{lss_sbhm()}}. If
+factor axes are named, scores and loadings must provide the same complete
+unique names and are aligned before multiplication. When \code{Y} is named,
+loadings must provide the same complete unique voxel names and are reordered
+to \code{Y}.}
 }
 \value{
-List with:
-\itemize{
-\item \code{beta_bar} r×V aggregate coefficients
-\item \code{A_agg}   T×r aggregated per-basis design (after any residualization/whitening)
-\item \code{G}       r×r crossprod of A_agg
-\item \code{diag}    list with K=r, ntrials, times, used_prewhiten
-}
+A list containing named \code{beta_bar} (rank by voxel), the residualized
+aggregate design \code{A_agg}, its Gram matrix \code{G}, and design diagnostics and
+identity maps.
 }
 \description{
-Compute per-voxel coefficients in the shared SBHM basis by fitting a single
-aggregate GLM with one regressor per basis column (trials summed), optionally
-residualizing by nuisances and prewhitening. This produces \code{beta_bar} (r×V)
-that you can feed to \code{sbhm_match()}.
-}
-\details{
-Notes:
-\itemize{
-\item Aggregated per-basis regressors can be highly collinear, making G = A' A
-ill-conditioned. A small ridge is recommended for stability. The default
-uses fractional mode with \code{lambda = 0.01} (scaled by mean(diag(G))).
-\item When \code{data_fac} is provided (factorized data path), prewhitening is skipped
-in this version; both dense and factorized paths perform nuisance
-residualization consistently.
-}
-}
-\examples{
-\donttest{
-  library(fmrihrf)
-  set.seed(1)
-  Tlen <- 120; V <- 5; r <- 4
-  sframe <- sampling_frame(blocklens = Tlen, TR = 1)
-  H <- cbind(exp(-seq(0, 30, length.out = Tlen)/4),
-             exp(-seq(0, 30, length.out = Tlen)/6))
-  sbhm <- sbhm_build(library_H = H, r = r, sframe = sframe, normalize = TRUE)
-  r <- ncol(sbhm$B)
-  onsets <- seq(5, 95, by = 10)
-  design_spec <- list(sframe = sframe, cond = list(onsets = onsets, duration = 0, span = 30))
-  hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
-  rr <- fmrihrf::regressor(onsets = onsets, hrf = hrf_B, duration = 0, span = 30, summate = FALSE)
-  X <- fmrihrf::evaluate(rr, grid = sbhm$tgrid, precision = 0.1, method = "conv")
-  betas_true <- matrix(rnorm(r), r)
-  Y <- matrix(rnorm(Tlen*V, sd = 0.5), Tlen, V)
-  Y[,1] <- Y[,1] + X \%*\% betas_true
-  pre <- sbhm_prepass(Y, sbhm, design_spec)
-  str(pre)
-}
-
-
+Fit the trial-aggregated SBHM basis to every voxel after projecting
+run-specific intercepts, supplied nuisance columns, and complete modeled
+other-condition spans. The same run-safe design builder is used by the full
+SBHM pipeline.
 }

@@ -11,14 +11,9 @@ lss_sbhm(
   Nuisance = NULL,
   prewhiten = NULL,
   prepass = list(),
-  match = list(shrink = list(tau = 0, ref = NULL, snr = NULL), topK = 3, soft_blend =
-    TRUE, blend_margin = 0.08, whiten = FALSE, sv_floor_rel = 0.05, whiten_power = 0.5,
-    min_margin = NULL, min_beta_norm = NULL, fallback_ref = NULL, orient_ref = TRUE,
-    alpha_source = "prepass", rank1_min = 0),
+  match = list(),
   oasis = list(),
-  amplitude = list(method = "lss1", ridge = list(mode = "fractional", lambda = 0.02),
-    ridge_frac = list(x = 0.02, b = 0.02), cond_gate = NULL, adaptive = list(enable =
-    FALSE, base = 0.02, k0 = 1000, max = 0.08), return_se = FALSE),
+  amplitude = list(),
   return = c("amplitude", "coefficients", "both")
 )
 }
@@ -27,13 +22,17 @@ lss_sbhm(
 
 \item{sbhm}{SBHM object from \code{sbhm_build()}.}
 
-\item{design_spec}{List for design construction (same as \code{oasis$design_spec}):
+\item{design_spec}{List for design construction:
 \code{list(sframe=..., cond=list(onsets=..., duration=0, span=...), others=list(...))}.
-The HRF in \code{cond$hrf} is ignored and replaced with the SBHM basis HRF.}
+The target HRF is replaced by the SBHM basis. Multi-run inputs use
+run-relative onsets and an explicit \code{cond$run} vector; other conditions use
+the same event fields and may supply their own HRF.}
 
 \item{Nuisance}{Optional T×P nuisance regressors.}
 
-\item{prewhiten}{Optional prewhitening options (see \code{?lss}).}
+\item{prewhiten}{Optional prewhitening options (see \code{?lss}). Run labels are
+inferred from \code{design_spec$sframe} when omitted; supplied labels must match
+those sampling-frame boundaries.}
 
 \item{prepass}{Optional list forwarded to \code{sbhm_prepass()} (e.g., ridge, data_fac).}
 
@@ -62,8 +61,9 @@ matching. Voxels below threshold fall back to \code{fallback_ref}.
 \code{sbhm$ref$alpha_ref}).
 }}
 
-\item{oasis}{Optional list forwarded to \code{lss(..., method="oasis")}. \code{K} is set to
-\code{ncol(sbhm$B)} if not provided, and \code{design_spec} is injected automatically.}
+\item{oasis}{Optional list forwarded to \code{lss(..., method="oasis")}. The basis
+dimension, trial count, run-specific intercept span, and trial/basis map
+are supplied from the run-safe SBHM design.}
 
 \item{amplitude}{List controlling the scalar amplitude stage. Fields:
 \itemize{
@@ -80,23 +80,35 @@ A list with components:
 \itemize{
 \item \code{amplitude} ntrials×V matrix (when requested)
 \item \code{coeffs_r} r×ntrials×V array of trial-wise coefficients (when requested)
-\item \code{matched_idx} length-V integer indices into the library
-\item \code{margin} length-V confidence margins (top1 - top2 cosine)
+\item \code{matched_name} and \code{matched_idx}: named top-scoring library identities
+\item \code{margin} named length-V score differences (top1 - top2 cosine); these are
+not calibrated confidence measures
 \item \code{alpha_coords} r×V matched coordinates per voxel
+\item \code{shape_mode} and \code{fallback_low_conf}: named vectors recording the shape
+policy actually used
+\item \code{prepass_fallback}: named logical vector identifying voxels whose requested
+shape source fell back to the aggregate prepass
+\item \code{trial_basis_map}: complete trial/basis output identity
+\item \code{event_amplitude}, \code{event_duration}, and \code{event_run}: named event-design
+metadata
 \item \code{diag} list with \code{r}, \code{ntrials}, and \code{times}
 }
+
+Scalar amplitudes are coefficients on the supplied event design using the
+selected rank-truncated library shape. They are not automatically peak BOLD
+responses. SBHM standard errors are not calibrated and \code{return_se=TRUE}
+fails explicitly for every amplitude method.
 }
 \description{
-Orchestrates the SBHM pipeline: (1) prepass aggregate fit in the learned
-shared basis, (2) cosine matching to a library of HRFs represented in the
-same basis, (3) Least Squares Separate (OASIS) with the SBHM basis to obtain
-trial-wise r-dimensional coefficients, and (4) projection of those
-coefficients onto the matched coordinates to produce scalar amplitudes.
+Orchestrates the SBHM pipeline: (1) run-safe trial design and OASIS fit in the
+shared basis, (2) a voxel shape summary from the requested source, (3) hard
+library matching or explicit blending, and (4) a separate scalar-coefficient
+refit using the selected voxel shape.
 }
 \details{
 Most users should treat the \code{prepass}, \code{match}, \code{oasis}, and \code{amplitude} inputs
-as optional \emph{override lists}: you can provide only the fields you want to
-change, and rely on defaults for everything else.
+as optional nested \emph{override lists}: you can provide only the fields you want
+to change. Unspecified nested defaults are preserved.
 
 If you already use \code{fmridesign}, prefer \code{\link[=lss_sbhm_design]{lss_sbhm_design()}} to avoid manually
 assembling an OASIS \code{design_spec}.

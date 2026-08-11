@@ -13,32 +13,18 @@
 #' Build per-trial basis regressors (each T x r) from SBHM basis + design_spec
 #' @keywords internal
 .sbhm_build_trial_regs <- function(sbhm, design_spec) {
-  hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
-  os <- design_spec$cond
-  ntrials <- length(os$onsets)
-  regs <- vector("list", ntrials)
-  for (t in seq_len(ntrials)) {
-    rr_t <- fmrihrf::regressor(onsets = os$onsets[t], hrf = hrf_B,
-                               duration = os$duration %||% 0,
-                               span     = os$span     %||% sbhm$span,
-                               summate  = FALSE)
-    Xt <- fmrihrf::evaluate(rr_t, grid = sbhm$tgrid,
-                            precision = design_spec$precision %||% 0.1,
-                            method    = design_spec$method    %||% "conv")
-    if (inherits(Xt, "Matrix")) Xt <- as.matrix(Xt)
-    if (!is.matrix(Xt)) Xt <- cbind(Xt)
-    regs[[t]] <- Xt
-  }
-  regs
+  .sbhm_build_design(sbhm, design_spec)$regs
 }
 
 #' Optionally prewhiten Y, regs (stacked), intercept and nuisance
 #' @keywords internal
-.sbhm_prewhiten <- function(Y, regs, Zint, Nuisance, prewhiten) {
+.sbhm_prewhiten <- function(Y, regs, Zint, Nuisance, prewhiten, X_other = NULL) {
   if (is.null(prewhiten) || (is.list(prewhiten) && (prewhiten$method %||% "none") == "none")) {
-    return(list(Yw = Y, Zw = Zint, Nw = Nuisance, regs_w = regs, applied = FALSE))
+    return(list(Yw = Y, Zw = Zint, Nw = Nuisance, regs_w = regs,
+                X_other_w = X_other, applied = FALSE))
   }
   X_stack <- do.call(cbind, regs)
+  if (!is.null(X_other)) X_stack <- cbind(X_stack, X_other)
   pw <- .prewhiten_data(Y, X = X_stack, Z = Zint, Nuisance = Nuisance, prewhiten = prewhiten)
   Xw <- pw$X_whitened
   r <- ncol(regs[[1]]); ntrials <- length(regs)
@@ -47,16 +33,30 @@
     cols <- ((j - 1L) * r + 1L):(j * r)
     regs_w[[j]] <- Xw[, cols, drop = FALSE]
   }
-  list(Yw = pw$Y_whitened, Zw = pw$Z_whitened, Nw = pw$Nuisance_whitened, regs_w = regs_w, applied = TRUE)
+  other_w <- if (!is.null(X_other)) {
+    Xw[, (ntrials * r + 1L):ncol(Xw), drop = FALSE]
+  } else NULL
+  list(Yw = pw$Y_whitened, Zw = pw$Z_whitened, Nw = pw$Nuisance_whitened,
+       regs_w = regs_w, X_other_w = other_w, applied = TRUE)
 }
 
 #' Resolve ridge value from spec (absolute or fractional)
 #' @keywords internal
 .sbhm_resolve_ridge <- function(G, ridge) {
   if (is.null(ridge)) return(0)
-  if (is.numeric(ridge)) return(as.numeric(ridge))
-  mode <- ridge$mode %||% "fractional"
+  if (is.numeric(ridge)) {
+    value <- as.numeric(ridge)
+    if (length(value) != 1L || !is.finite(value) || value < 0) {
+      stop("ridge must be one nonnegative finite value", call. = FALSE)
+    }
+    return(value)
+  }
+  if (!is.list(ridge)) stop("ridge must be numeric or a list", call. = FALSE)
+  mode <- match.arg(ridge$mode %||% "fractional", c("fractional", "absolute"))
   lam  <- as.numeric(ridge$lambda %||% 0.02)
+  if (length(lam) != 1L || !is.finite(lam) || lam < 0) {
+    stop("ridge$lambda must be one nonnegative finite value", call. = FALSE)
+  }
   if (mode == "absolute") return(lam)
   lam * mean(diag(G))
 }
@@ -85,23 +85,33 @@ sbhm_amplitude_ls <- function(Y, sbhm, design_spec, alpha_hat,
                               ridge = list(mode = "fractional", lambda = 0.02),
                               prewhiten = NULL,
                               return_se = FALSE) {
+  if (isTRUE(return_se)) {
+    stop("SBHM amplitude standard errors are not calibrated; request amplitudes only", call. = FALSE)
+  }
   stopifnot(is.matrix(Y), is.matrix(alpha_hat))
   Tlen <- nrow(Y); V <- ncol(Y)
   r <- nrow(alpha_hat)
   if (ncol(alpha_hat) != V) stop("alpha_hat must be r x V to match Y")
 
-  regs <- .sbhm_build_trial_regs(sbhm, design_spec)
+  built <- .sbhm_build_design(sbhm, design_spec)
+  regs <- built$regs
   ntrials <- length(regs)
+  X_other <- built$X_other
 
   # Build nuisance design: intercept + provided + others (aggregates)
-  Zint <- matrix(1, Tlen, 1)
-  N_mat <- cbind(Zint, if (!is.null(Nuisance)) Nuisance)
+  Zint <- built$intercepts
+  N_mat <- cbind(Zint, if (!is.null(Nuisance)) Nuisance,
+                 if (!is.null(X_other)) X_other)
   if (is.null(N_mat)) N_mat <- matrix(0, Tlen, 0)
 
   # Optional prewhitening
   if (!is.null(prewhiten)) {
-    pw <- .sbhm_prewhiten(Y, regs, Zint, Nuisance, prewhiten)
-    Y <- pw$Yw; regs <- pw$regs_w; Zint <- pw$Zw; N_mat <- cbind(pw$Zw, pw$Nw)
+    pw <- .sbhm_prewhiten(Y, regs, Zint, Nuisance, prewhiten, X_other)
+    Y <- pw$Yw
+    regs <- pw$regs_w
+    Zint <- pw$Zw
+    X_other <- pw$X_other_w
+    N_mat <- cbind(pw$Zw, pw$Nw, if (!is.null(X_other)) X_other)
   }
   # Residualize Y once
   Y_res <- .sbhm_resid(Y, N_mat)
@@ -146,36 +156,21 @@ sbhm_amplitude_lss1 <- function(Y, sbhm, design_spec, alpha_hat,
                                 ridge_frac = list(x = 0.02, b = 0.02),
                                 prewhiten = NULL,
                                 return_se = FALSE) {
+  if (isTRUE(return_se)) {
+    stop("SBHM amplitude standard errors are not calibrated; request amplitudes only", call. = FALSE)
+  }
   stopifnot(is.matrix(Y), is.matrix(alpha_hat))
   Tlen <- nrow(Y); V <- ncol(Y)
   r <- nrow(alpha_hat)
   if (ncol(alpha_hat) != V) stop("alpha_hat must be r x V to match Y")
 
-  # Build basis HRF and per-trial regressors (T x r each)
-  hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
-  os <- design_spec$cond
-  ntrials <- length(os$onsets)
-  regs <- vector("list", ntrials)
-  for (t in seq_len(ntrials)) {
-    rr_t <- fmrihrf::regressor(onsets = os$onsets[t], hrf = hrf_B,
-                               duration = os$duration %||% 0,
-                               span     = os$span     %||% sbhm$span,
-                               summate  = FALSE)
-    Xt <- fmrihrf::evaluate(rr_t, grid = sbhm$tgrid,
-                            precision = design_spec$precision %||% 0.1,
-                            method    = design_spec$method    %||% "conv")
-    if (inherits(Xt, "Matrix")) Xt <- as.matrix(Xt)
-    if (!is.matrix(Xt)) Xt <- cbind(Xt)
-    regs[[t]] <- Xt  # T x r
-  }
+  built <- .sbhm_build_design(sbhm, design_spec)
+  regs <- built$regs
+  ntrials <- length(regs)
 
   # Nuisance matrix (intercept + provided + others)
-  spec2 <- design_spec
-  spec2$cond <- spec2$cond %||% list()
-  spec2$cond$hrf <- hrf_B
-  built <- .oasis_build_X_from_events(spec2)
   X_other <- built$X_other
-  Zint <- matrix(1, Tlen, 1)
+  Zint <- built$intercepts
   N_mat <- cbind(Zint, if (!is.null(Nuisance)) Nuisance,
                  if (!is.null(X_other)) X_other)
   if (is.null(N_mat)) N_mat <- matrix(0, Tlen, 0)
@@ -265,23 +260,29 @@ sbhm_amplitude_lss1 <- function(Y, sbhm, design_spec, alpha_hat,
 sbhm_amplitude_oasis_k1 <- function(Y, sbhm, design_spec, alpha_hat,
                                     Nuisance = NULL,
                                     ridge_frac = list(x = 0.02, b = 0.02),
-                                    prewhiten = NULL, return_se = TRUE) {
+                                    prewhiten = NULL, return_se = FALSE) {
+  if (isTRUE(return_se)) {
+    stop("SBHM amplitude standard errors are not calibrated; request amplitudes only", call. = FALSE)
+  }
   stopifnot(is.matrix(Y), is.matrix(alpha_hat))
   V <- ncol(Y)
-  regs <- .sbhm_build_trial_regs(sbhm, design_spec)
+  built <- .sbhm_build_design(sbhm, design_spec)
+  regs <- built$regs
   ntrials <- length(regs)
+  X_other <- built$X_other
+  nuisance_full <- cbind(built$intercepts, Nuisance, X_other)
   BETA <- matrix(NA_real_, ntrials, V)
   SE   <- if (isTRUE(return_se)) matrix(NA_real_, ntrials, V) else NULL
   for (v in seq_len(V)) {
     Xv <- do.call(cbind, lapply(regs, function(Xt) as.numeric(Xt %*% alpha_hat[, v])))
     res <- .lss_oasis(
-      Y = Y[, v, drop = FALSE], X = Xv, Z = NULL, Nuisance = Nuisance,
+      Y = Y[, v, drop = FALSE], X = Xv, Z = NULL, Nuisance = nuisance_full,
       oasis = list(K = 1L,
                    ridge_mode = "fractional",
                    ridge_x = ridge_frac$x %||% 0,
                    ridge_b = ridge_frac$b %||% 0,
                    return_se = isTRUE(return_se),
-                   add_intercept = TRUE),
+                   add_intercept = FALSE),
       prewhiten = prewhiten
     )
     if (isTRUE(return_se)) {

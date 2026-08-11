@@ -4,26 +4,48 @@
 \alias{estimate_voxel_hrf}
 \title{Estimate Voxel-wise HRF Basis Coefficients}
 \usage{
-estimate_voxel_hrf(Y, events, basis, nuisance_regs = NULL)
+estimate_voxel_hrf(
+  Y,
+  events,
+  basis,
+  nuisance_regs = NULL,
+  sframe = NULL,
+  fixed_regs = NULL
+)
 }
 \arguments{
 \item{Y}{Numeric matrix of BOLD data (time x voxels).}
 
-\item{events}{Data frame with \code{onset}, \code{duration} and \code{condition} columns.}
+\item{events}{Data frame with \code{onset}, \code{duration} and
+\code{condition} columns. For a multi-run sampling frame, a \code{run}
+column is required and onsets are physical times relative to that run.}
 
 \item{basis}{HRF object from the \code{fmrihrf} package.}
 
-\item{nuisance_regs}{Optional numeric matrix of nuisance regressors.}
+\item{nuisance_regs}{Optional finite numeric matrix of nuisance regressors.}
+
+\item{sframe}{Explicit \code{fmrihrf} sampling frame defining scan times and
+TR. Required; onset and duration values use its physical-time units.}
+
+\item{fixed_regs}{Optional finite numeric matrix of fixed/common regressors. An
+intercept is added when it is not already in their span.}
 }
 \value{
 A \link{VoxelHRF} object containing at least:
-\item{coefficients}{Matrix of HRF basis coefficients with one row per
-basis function and one column per voxel.}
+\item{coefficients}{Matrix of positive-peak-normalized HRF shape weights
+with one row per basis function and one column per voxel.}
+\item{amplitude_scale}{The signed scale removed from each raw pooled-fit
+coefficient column.}
 \item{basis}{The HRF basis object used.}
-\item{conditions}{Character vector of modeled conditions.}
+\item{conditions}{Observed event labels. Labels are metadata: all events
+are pooled into one shape per voxel.}
+\item{condition_pooling}{The literal string "all-events".}
 }
 \description{
-Fits a GLM to estimate HRF basis coefficients for every voxel.
+Fits a common-amplitude GLM to estimate one pooled HRF shape for every
+voxel. The HRF basis and response are residualized against the complete
+fixed and nuisance span before fitting. Estimation fails when that span
+makes the HRF basis unidentifiable or rank deficient.
 }
 \examples{
 \donttest{
@@ -41,7 +63,7 @@ rset <- fmrihrf::regressor_set(onsets = events$onset,
 X <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")
 coef <- matrix(rnorm(ncol(X) * ncol(Y)), ncol(X), ncol(Y))
 Y <- X \%*\% coef + Y * 0.1
-est <- estimate_voxel_hrf(Y, events, basis)
+est <- estimate_voxel_hrf(Y, events, basis, sframe = sframe)
 str(est)
 }
 }

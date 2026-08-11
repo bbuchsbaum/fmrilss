@@ -49,27 +49,62 @@
                                 method = spec$method %||% "conv")
   X_trials <- if (inherits(X_trials, "Matrix")) as.matrix(X_trials) else X_trials
 
-  # Aggregates for "other" conditions (one col each) -> nuisances
-  X_other <- NULL
-  if (length(spec$others)) {
-    X_other <- do.call(cbind, lapply(spec$others, function(oc) {
-      rr <- fmrihrf::regressor(onsets   = oc$onsets,
-                               hrf      = oc$hrf %||% hrf_obj,
-                               duration = oc$duration %||% 0,
-                               amplitude= oc$amplitude %||% 1,
-                               span     = oc$span %||% 40,
-                               summate  = TRUE)
-      x_eval <- fmrihrf::evaluate(rr, times,
-                                  precision = spec$precision %||% 0.1,
-                                  method = spec$method %||% "conv")
-      if (inherits(x_eval, "Matrix")) x_eval <- as.matrix(x_eval)
-      # For multi-basis HRFs, aggregate columns to a single condition column
-      if (is.matrix(x_eval)) rowSums(x_eval) else as.numeric(x_eval)
-    }))
-    if (is.null(dim(X_other))) X_other <- matrix(X_other, ncol = 1)
+  ntrials <- length(spec$cond$onsets)
+  output_names <- if (K == 1L) {
+    .default_trial_names(ntrials)
+  } else {
+    as.vector(t(outer(
+      .default_trial_names(ntrials),
+      sprintf("Basis_%d", seq_len(K)), paste, sep = ":"
+    )))
   }
+  if (length(output_names) != ncol(X_trials)) {
+    stop("event-built trial design dimensions disagree with its HRF basis", call. = FALSE)
+  }
+  colnames(X_trials) <- output_names
+  trial_basis_map <- data.frame(
+    column = output_names,
+    trial = rep(seq_len(ntrials), each = K),
+    basis = rep(seq_len(K), times = ntrials),
+    output_name = output_names,
+    stringsAsFactors = FALSE
+  )
 
-  return(list(X_trials = X_trials, X_other = X_other, K = K))
+  X_other <- .oasis_build_X_other(spec, hrf_obj = hrf_obj, times = times)
+
+  return(list(
+    X_trials = X_trials, X_other = X_other, K = K,
+    trial_basis_map = trial_basis_map
+  ))
+}
+
+# Build the aggregate basis columns for modeled non-target conditions. The
+# target HRF is the fallback for an `others` entry that does not specify one.
+# Keeping this separate lets HRF-grid selection construct the exact common
+# span associated with each candidate.
+.oasis_build_X_other <- function(spec, hrf_obj, times = NULL) {
+  if (!length(spec$others)) return(NULL)
+  if (is.null(times)) times <- fmrihrf::samples(spec$sframe, global = TRUE)
+
+  X_other <- do.call(cbind, lapply(spec$others, function(oc) {
+    rr <- fmrihrf::regressor(
+      onsets = oc$onsets,
+      hrf = oc$hrf %||% hrf_obj,
+      duration = oc$duration %||% 0,
+      amplitude = oc$amplitude %||% 1,
+      span = oc$span %||% 40,
+      summate = TRUE
+    )
+    x_eval <- fmrihrf::evaluate(
+      rr, times,
+      precision = spec$precision %||% 0.1,
+      method = spec$method %||% "conv"
+    )
+    if (inherits(x_eval, "Matrix")) x_eval <- as.matrix(x_eval)
+    if (is.matrix(x_eval)) x_eval else matrix(as.numeric(x_eval), ncol = 1L)
+  }))
+  if (is.null(dim(X_other))) X_other <- matrix(X_other, ncol = 1L)
+  X_other
 }
 
 # --- Helper: LWU HRF grid selection via matched-filter score ---
@@ -81,12 +116,6 @@
   sframe <- design_spec$sframe
   times  <- fmrihrf::samples(sframe, global = TRUE)
   onsets <- design_spec$cond$onsets
-  
-  # Residualize Y against confounds once
-  if (!is.null(confounds) && ncol(confounds) > 0) {
-    Q <- qr.Q(qr(confounds))
-    Y <- Y - Q %*% crossprod(Q, Y)
-  }
   
   scores <- numeric(length(hrf_grid))
   
@@ -106,23 +135,55 @@
     
     # Handle multi-basis HRFs - sum across basis functions for aggregate
     if (is.matrix(x_eval)) {
-      x <- rowSums(x_eval)
+      x_raw <- rowSums(x_eval)
     } else {
-      x <- as.numeric(x_eval)
+      x_raw <- as.numeric(x_eval)
     }
-    
+
+    # Candidate selection must use the same common span as the subsequent
+    # model. Other conditions without their own HRF inherit this candidate.
+    X_other <- .oasis_build_X_other(
+      design_spec, hrf_obj = hrf_grid[[i]], times = times
+    )
+    common <- cbind(confounds, X_other)
+    Y_use <- Y
+    x <- x_raw
+    if (!is.null(common) && ncol(common) > 0L) {
+      qr_common <- qr(common)
+      if (qr_common$rank > 0L) {
+        Q <- qr.Q(qr_common)[, seq_len(qr_common$rank), drop = FALSE]
+        Y_use <- Y_use - Q %*% crossprod(Q, Y_use)
+        x <- x - Q %*% crossprod(Q, x)
+      }
+    }
+
     # Matched-filter score: sum of correlations
-    x_norm <- matrix(x / sqrt(sum(x^2)), ncol = 1)
+    x_energy <- sum(x^2)
+    raw_energy <- sum(x_raw^2)
+    if (!is.finite(x_energy) ||
+        x_energy <= .Machine$double.eps * max(raw_energy, 1)) {
+      stop(
+        sprintf(
+          "HRF-grid candidate %d has zero residual norm after projection onto the common design",
+          i
+        ),
+        call. = FALSE
+      )
+    }
+    x_norm <- matrix(x / sqrt(x_energy), ncol = 1L)
     
     # Process in blocks for memory efficiency
     score <- 0
     for (v_start in seq(1, ncol(Y), by = block_cols)) {
       v_end <- min(v_start + block_cols - 1, ncol(Y))
-      Y_block <- Y[, v_start:v_end, drop = FALSE]
+      Y_block <- Y_use[, v_start:v_end, drop = FALSE]
       
       # Correlation with each voxel
-      cors <- t(x_norm) %*% Y_block / 
-        sqrt(colSums(Y_block^2))
+      y_norm <- sqrt(colSums(Y_block^2))
+      valid <- is.finite(y_norm) & y_norm > 0
+      cors <- numeric(ncol(Y_block))
+      cors[valid] <- as.numeric(t(x_norm) %*% Y_block[, valid, drop = FALSE]) /
+        y_norm[valid]
       score <- score + sum(abs(cors), na.rm = TRUE)
     }
     scores[i] <- score

@@ -101,6 +101,7 @@ test_that(".sbhm_build_trial_regs builds regressors", {
   )
 
   design_spec <- list(
+    sframe = fmrihrf::sampling_frame(blocklens = n_time, TR = 1),
     cond = list(
       onsets = c(10, 40, 70),
       duration = 0,

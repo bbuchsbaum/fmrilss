@@ -1,5 +1,5 @@
 ---
-title: Using fmridesign with fmrilss
+title: 'Run-aware LSS with fmridesign'
 output:
   rmarkdown::html_vignette:
     toc: yes
@@ -17,34 +17,37 @@ resource_files:
 - fonts
 
 vignette: |
-  %\VignetteIndexEntry{Using fmridesign with fmrilss}
+  %\VignetteIndexEntry{Run-aware LSS with fmridesign}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
 ```{r setup-opts, include = FALSE}
-if (requireNamespace("ragg", quietly = TRUE)) knitr::opts_chunk$set(dev = "ragg_png")
-if (requireNamespace("systemfonts", quietly = TRUE)) albersdown::albers_register_fonts()
-has_fmridesign <- requireNamespace("fmridesign", quietly = TRUE)
-if (has_fmridesign &&
-    requireNamespace("ggplot2", quietly = TRUE) &&
-    requireNamespace("albersdown", quietly = TRUE)) {
-  ggplot2::theme_set(
-    albersdown::theme_albers(family = params$family, preset = params$preset)
+if (!requireNamespace("fmridesign", quietly = TRUE)) {
+  stop(
+    "This vignette requires the suggested package 'fmridesign'; ",
+    "install it before building the article."
   )
+}
+if (requireNamespace("ragg", quietly = TRUE)) {
+  knitr::opts_chunk$set(dev = "ragg_png")
+}
+if (requireNamespace("systemfonts", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  albersdown::albers_register_fonts()
 }
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  eval = has_fmridesign,
-  fig.width = 7,
+  fig.width = 8,
   fig.height = 5,
-  warning = FALSE,
-  message = FALSE
+  dpi = 150,
+  warning = TRUE,
+  message = TRUE
 )
 ```
 
-```{r albers-classes, echo=FALSE, results='asis'}
+```{r albers-classes, echo = FALSE, results = 'asis'}
 cat(sprintf(
   paste0(
     '<script>document.addEventListener("DOMContentLoaded",function(){',
@@ -57,418 +60,612 @@ cat(sprintf(
 ))
 ```
 
+`lss_design()` is the run-aware adapter between `fmridesign` event and baseline
+models and the OASIS estimator. Read this after `vignette("fmrilss")` and
+`vignette("oasis_method")`. The adapter is useful when event tables have
+run-relative onsets, the baseline is structured by run, or non-trial event
+terms must remain in the common model.
 
-```{r setup}
-library(fmrilss)
-library(fmridesign)
-library(fmrihrf)
+This article requires the suggested `fmridesign` package. Load the three
+packages used below before copying the workflow into a fresh session.
+
+```{r packages}
+suppressPackageStartupMessages({
+  library(fmrilss)
+  library(fmridesign)
+  library(fmrihrf)
+})
 ```
 
-## Introduction
+## Know the adapter contract
 
-The `fmridesign` package provides a powerful formula-based interface for creating fMRI design matrices. While `fmrilss` has its own `design_spec` format for the OASIS method, you can now use `event_model` and `baseline_model` objects directly with the new `lss_design()` function.
-
-### When to Use lss_design()
-
-Use `lss_design()` when:
-
-- You have **multi-condition factorial designs**
-- You need **parametric modulators** (e.g., RT, difficulty ratings)
-- You want **design validation** and diagnostic tools
-- You prefer **formula-based specification**
-- You need **explicit multi-run handling** with run-relative onsets
-
-### When to Use Traditional lss()
-
-Use the traditional `lss()` interface when:
-
-- You have simple **trial-wise designs** already constructed
-- You want **minimal dependencies**
-- You're using **internal SBHM pipelines**
-- You already have design matrices prepared
-
-## Simulated Data Setup
-
-We'll build a small two-run experiment from scratch so every piece of the workflow is visible. Start with the run-level parameters:
-
-```{r sim-params}
-set.seed(123)
-n_scans_per_run <- 150
-n_runs          <- 2
-n_voxels        <- 500
-TR              <- 2
-```
-
-Next, a trial table with run-relative onsets — six trials per run — and the matching sampling frame:
-
-```{r sim-trials}
-trials <- data.frame(
-  onset = rep(c(10, 30, 50, 70, 90, 110), times = 2),
-  run   = rep(1:2, each = 6)
+```{r contract-table, echo = FALSE}
+contracts <- data.frame(
+  Question = c(
+    "Which columns become LSS targets?",
+    "What happens to other event terms?",
+    "How are baseline terms mapped?",
+    "What does multi-basis output mean?"
+  ),
+  Answer = c(
+    "Exactly one trialwise event term",
+    "They are fixed common regressors, not extra trials",
+    "drift + block go to Z; nuisance is projected as Nuisance",
+    "K coefficient rows per trial, in trial-major order"
+  )
 )
-sframe <- sampling_frame(blocklens = rep(n_scans_per_run, n_runs), TR = TR)
-```
-
-Build a trial-wise event model, then extract the design matrix used to generate the signal:
-
-```{r sim-design}
-emod_sim <- event_model(
-  onset ~ trialwise(basis = "spmg1"),
-  data = trials, block = ~run, sampling_frame = sframe
+knitr::kable(
+  contracts,
+  align = c("l", "l"),
+  caption = "The fmridesign-to-LSS mapping used by lss_design()."
 )
-X_trial <- as.matrix(design_matrix(emod_sim))
 ```
 
-A per-run intercept + linear drift serves as the baseline:
+The function requires one—and only one—trialwise event term. A parametric or
+condition-level event term can accompany it, but that term is part of every
+trial's common design. It does not create another set of trial targets.
 
-```{r sim-baseline}
-bmodel_sim <- baseline_model(
-  basis = "poly", degree = 1, sframe = sframe, intercept = "runwise"
+## Start from a two-run event table
+
+Onsets are relative to the start of each run. Here, the same five onset times
+occur in both runs; the `run` column supplies their distinct identities.
+
+```{r event-table}
+set.seed(20260821)
+
+run_lengths <- c(110L, 130L)
+TR <- 1
+sframe <- sampling_frame(blocklens = run_lengths, TR = TR)
+
+events <- data.frame(
+  event_id = seq_len(10L),
+  onset = rep(c(10, 30, 50, 70, 90), times = 2),
+  run = rep(1:2, each = 5),
+  RT = seq(0.4, 0.9, length.out = 10)
 )
-Z_baseline <- as.matrix(design_matrix(bmodel_sim))
+events$RT_c <- events$RT - mean(events$RT)
+events
 ```
 
-Finally, combine true trial effects, baseline drift, and noise to produce `Y`:
+Build one trialwise target term and one reaction-time event term. The latter is
+a common regressor: it adjusts every LSS model for the specified amplitude
+modulation but is not reported as a trial beta.
 
-```{r sim-data}
-true_betas <- matrix(rnorm(12 * n_voxels, mean = 1.5, sd = 0.8), 12, n_voxels)
-Y <- X_trial  %*% true_betas +
-     Z_baseline %*% matrix(rnorm(ncol(Z_baseline) * n_voxels, sd = 2), ncol = n_voxels) +
-     matrix(rnorm(nrow(X_trial) * n_voxels, sd = 3), nrow(X_trial), n_voxels)
-dim(Y)
-```
-
-## Quick Start
-
-Here's a minimal example using `lss_design()`:
-
-```{r quickstart}
-# Use the first run only for quick start
-trials_run1 <- trials[trials$run == 1, ]
-sframe_run1 <- sampling_frame(blocklens = n_scans_per_run, TR = TR)
-Y_run1 <- Y[1:n_scans_per_run, ]
-
-# Build event model with trialwise design
+```{r event-model}
 emod <- event_model(
-  onset ~ trialwise(basis = "spmg1"),
-  data = trials_run1,
-  block = ~run,
-  sampling_frame = sframe_run1
-)
-
-# Run LSS
-beta <- lss_design(Y_run1, emod, method = "oasis")
-
-# Result: 6 trials × 500 voxels
-dim(beta)
-```
-
-```{r quickstart-check, include = FALSE}
-stopifnot(all(dim(beta) == c(6, n_voxels)), all(is.finite(beta)))
-```
-
-## Multi-Run Experiments
-
-One of the key advantages of `lss_design()` is automatic handling of multi-run experiments with proper onset timing.
-
-### Onset Convention: Run-Relative
-
-**Important:** When using `fmridesign`, onsets should be **run-relative** (resetting to 0 at the start of each run). This is the standard convention for multi-run fMRI experiments.
-
-```{r multirun}
-# Trial data with run-relative onsets (already defined above)
-print(trials)
-
-# Create event model - conversion to global time is automatic
-emod_multi <- event_model(
-  onset ~ trialwise(basis = "spmg1"),
-  data = trials,
+  onset ~ trialwise(basis = "spmg1") + hrf(RT_c),
+  data = events,
   block = ~run,
   sampling_frame = sframe
 )
 
-# Run LSS
-beta_multi <- lss_design(Y, emod_multi, method = "oasis")
-
-# Result: 12 trials × 500 voxels
-dim(beta_multi)
+event_dm <- design_matrix(emod)
+event_meta <- attr(event_dm, "col_metadata")
+table(event_meta$term_tag)
 ```
 
-### Why Run-Relative Onsets?
+The ten `trial` columns are the LSS targets; the one `RT_c` column is fixed.
+`lss_design()` uses the design metadata and stable column identities rather
+than assuming that columns arrived in a particular order.
 
-- **Standard convention**: Most experiment software (E-Prime, PsychoPy) logs onsets relative to run start
-- **Easier data management**: No manual offset calculations needed
-- **Automatic conversion**: `fmridesign` handles conversion to global time internally
-- **Less error-prone**: Reduces risk of incorrect timing specifications
+## Verify the run boundary
 
-## Adding Baseline Correction
+The target matrix is block diagonal by run: trials 1--5 have no energy in run
+2, and trials 6--10 have no energy in run 1.
 
-The `baseline_model` allows you to specify drift correction, block intercepts, and nuisance regressors in a structured way.
+```{r public-design-reconstruction, include = FALSE}
+# Reconstruct the adapter contract from public fmridesign outputs. This court
+# deliberately does not call fmrilss's internal mapper.
+reconstruct_public_lss <- function(event_model, trial_tag = "trial") {
+  dm <- as.matrix(design_matrix(event_model))
+  term <- event_model$terms[[trial_tag]]
+  trial_levels <- as.character(term$condition_levels)
+  K <- fmrihrf::nbasis(attr(term, "hrfspec")$hrf)
+  suffix <- if (K == 1L) "" else sprintf("_b%02d", seq_len(K))
+  expected <- unlist(lapply(
+    paste0(trial_tag, "_", trial_levels),
+    function(trial_name) paste0(trial_name, suffix)
+  ), use.names = FALSE)
+  target_columns <- match(expected, colnames(dm))
+  stopifnot(!anyNA(target_columns), !anyDuplicated(target_columns))
+  fixed_columns <- setdiff(seq_len(ncol(dm)), target_columns)
+  list(
+    X = dm[, target_columns, drop = FALSE],
+    fixed = if (length(fixed_columns)) dm[, fixed_columns, drop = FALSE] else NULL,
+    target_columns = target_columns,
+    fixed_columns = fixed_columns,
+    K = K,
+    ntrials = length(trial_levels)
+  )
+}
 
-```{r baseline}
-# Create baseline model with B-spline drift correction
-bmodel <- baseline_model(
-  basis = "bs",
-  degree = 5,
-  sframe = sframe,
-  intercept = "runwise"
-)
-
-# LSS with baseline correction
-beta_baseline <- lss_design(Y, emod_multi, bmodel, method = "oasis")
-
-dim(beta_baseline)
+public_design <- reconstruct_public_lss(emod)
+X_trial <- public_design$X
+X_event_fixed <- public_design$fixed
+n_trials <- public_design$ntrials
+n_time <- sum(run_lengths)
+run_rows <- split(seq_len(n_time), rep(seq_along(run_lengths), run_lengths))
 ```
 
-### Adding Motion Parameters
-
-For demonstration, we'll create synthetic motion regressors.
-
-```{r motion-demo}
-# Simulate motion parameters (6 motion parameters per run)
-motion_run1 <- matrix(rnorm(n_scans_per_run * 6, sd = 0.5),
-                      nrow = n_scans_per_run, ncol = 6)
-motion_run2 <- matrix(rnorm(n_scans_per_run * 6, sd = 0.5),
-                      nrow = n_scans_per_run, ncol = 6)
-
-# Create baseline model with motion as nuisance
-bmodel_motion <- baseline_model(
-  basis = "bs",
-  degree = 5,
-  sframe = sframe,
-  intercept = "runwise",
-  nuisance_list = list(motion_run1, motion_run2)
-)
-
-beta_motion <- lss_design(Y, emod_multi, bmodel_motion, method = "oasis")
-dim(beta_motion)
-```
-
-```{r motion-real, eval = FALSE}
-# In real analysis, load motion from files:
-motion_run1 <- as.matrix(read.table("motion_run1.txt"))
-motion_run2 <- as.matrix(read.table("motion_run2.txt"))
-
-bmodel <- baseline_model(
-  basis = "bs",
-  degree = 5,
-  sframe = sframe,
-  intercept = "runwise",
-  nuisance_list = list(motion_run1, motion_run2)
-)
-```
-
-## Multi-Basis HRFs
-
-For multi-basis HRF models (e.g., canonical + temporal + dispersion derivatives), use `nbasis`:
-
-```{r multibasis}
-# Create event model with SPMG3 (3 basis functions)
-emod_3basis <- event_model(
-  onset ~ trialwise(basis = "spmg3", nbasis = 3),
-  data = trials,
-  block = ~run,
-  sampling_frame = sframe
-)
-
-# LSS will auto-detect K = 3
-beta_3basis <- lss_design(Y, emod_3basis, method = "oasis")
-
-# Output: (12 trials × 3 basis) × 500 voxels = 36 × 500
-dim(beta_3basis)
-
-# Extract canonical basis estimates (every 3rd row starting at 1)
-beta_canonical <- beta_3basis[seq(1, nrow(beta_3basis), by = 3), ]
-dim(beta_canonical)
-```
-
-## Ridge Regularization
-
-For designs with potential collinearity, use ridge regularization:
-
-```{r ridge}
-beta_ridge <- lss_design(
-  Y, emod_multi, bmodel,
-  method = "oasis",
-  oasis = list(
-    ridge_mode = "fractional",
-    ridge_x = 0.02,
-    ridge_b = 0.02
+```{r run-boundary-table, echo = FALSE}
+run_boundary <- data.frame(
+  Check = c("run-1 trials inside run 2", "run-2 trials inside run 1"),
+  Maximum_absolute_design_value = c(
+    max(abs(X_trial[run_rows[[2]], 1:5, drop = FALSE])),
+    max(abs(X_trial[run_rows[[1]], 6:10, drop = FALSE]))
   )
 )
-
-dim(beta_ridge)
+knitr::kable(
+  run_boundary,
+  digits = 12,
+  caption = "Cross-run leakage in the trialwise design."
+)
 ```
 
-## Comparison with design_spec
+```{r run-boundary-plot, echo = FALSE, fig.cap="The trialwise design is block diagonal by run; the vertical line marks the boundary after scan 110.", fig.alt="Heatmap with activity for trials 1 through 5 only before scan 110 and trials 6 through 10 only after scan 110; no trial regressor crosses the run boundary."}
+old_par <- par(bg = "white")
+image(
+  x = seq_len(nrow(X_trial)),
+  y = seq_len(ncol(X_trial)),
+  z = X_trial,
+  col = hcl.colors(40, "Blues 3", rev = TRUE),
+  xlab = "Scan",
+  ylab = "Trial column",
+  axes = FALSE
+)
+axis(1, at = c(1, 55, 110, 175, 240))
+axis(2, at = seq_len(n_trials), las = 1)
+abline(v = run_lengths[1] + 0.5, col = "#b2182b", lwd = 2, lty = 2)
+box()
+par(old_par)
+```
 
-### Using design_spec (old approach)
+```{r run-boundary-contract, include = FALSE}
+stopifnot(max(run_boundary$Maximum_absolute_design_value) < 1e-12)
+```
 
-```{r designspec, eval = FALSE}
-# Manual design_spec construction requires global/absolute onsets
-# For run-relative onsets (10, 30, 50, 70, 90, 110) in each of 2 runs,
-# global onsets would be: 10, 30, 50, 70, 90, 110, 310, 330, 350, 370, 390, 410
-# (second run starts at 150 scans × 2s = 300s)
+## Add a structured baseline
 
-beta_old <- lss(
+`baseline_model()` keeps run intercepts, drift, and nuisance inputs attached to
+the same sampling frame. The example uses two synthetic motion columns per run.
+
+```{r baseline-model}
+motion <- list(
+  matrix(rnorm(run_lengths[1] * 2, sd = 0.15), run_lengths[1], 2),
+  matrix(rnorm(run_lengths[2] * 2, sd = 0.15), run_lengths[2], 2)
+)
+
+bmodel <- baseline_model(
+  basis = "poly",
+  degree = 1,
+  sframe = sframe,
+  intercept = "runwise",
+  nuisance_list = motion
+)
+
+baseline_terms <- term_matrices(bmodel)
+vapply(baseline_terms, ncol, integer(1))
+```
+
+The adapter sends `drift` and `block` to `Z`, sends `nuisance` to
+`Nuisance`, and appends the fixed `RT_c` event column to `Z`. If no baseline
+model is supplied, it inserts run-wise intercepts instead.
+
+## Fit and check every trial against a full GLM
+
+The simulation below is correctly specified for every LSS model: target trials
+share a coefficient within each voxel, while drift, run intercepts, motion, and
+the RT modulator all have their own common coefficients. This is an adapter
+court, not evidence about recovery in arbitrary designs.
+
+```{r simulate-data, include = FALSE}
+Z_common <- as.matrix(cbind(
+  baseline_terms$drift,
+  baseline_terms$block,
+  X_event_fixed
+))
+N_common <- as.matrix(baseline_terms$nuisance)
+n_voxels <- 4L
+
+common_trial_beta <- matrix(seq(0.7, 1.3, length.out = n_voxels), 1L)
+Z_beta <- matrix(
+  rnorm(ncol(Z_common) * n_voxels, sd = 0.3),
+  ncol(Z_common),
+  n_voxels
+)
+N_beta <- matrix(
+  rnorm(ncol(N_common) * n_voxels, sd = 0.2),
+  ncol(N_common),
+  n_voxels
+)
+Y <- matrix(rowSums(X_trial), n_time, 1L) %*% common_trial_beta +
+  Z_common %*% Z_beta +
+  N_common %*% N_beta +
+  matrix(rnorm(n_time * n_voxels), n_time, n_voxels)
+```
+
+Use explicit zero ridge when the goal is ordinary LSS. The default OASIS
+configuration is penalized.
+
+```{r fit}
+fit <- lss_design(
   Y,
+  emod,
+  bmodel,
   method = "oasis",
-  oasis = list(
-    design_spec = list(
-      sframe = sframe,
-      cond = list(
-        onsets = c(10, 30, 50, 70, 90, 110, 310, 330, 350, 370, 390, 410),
-        hrf = HRF_SPMG1,
-        span = 30
-      )
-    )
+  oasis = oasis_options(
+    ridge_mode = "absolute",
+    ridge_x = 0,
+    ridge_b = 0
+  ),
+  validate = FALSE
+)
+dim(fit)
+fit[1:4, ]
+```
+
+`validate = FALSE` above skips the adapter's optional full-design
+condition-number warning; it does not disable the mandatory trial/basis
+identity mapping. The full trialwise matrix contains `RT_c` as a weighted sum
+of trial columns, so that screening matrix is rank deficient even though each
+target-specific LSS model below is full rank. The independent court checks the
+actual per-target designs and every returned cell.
+
+```{r direct-oracle, include = FALSE}
+direct <- matrix(NA_real_, n_trials, n_voxels)
+direct_rank <- direct_columns <- integer(n_trials)
+for (j in seq_len(n_trials)) {
+  D <- cbind(
+    X_trial[, j],
+    rowSums(X_trial[, -j, drop = FALSE]),
+    Z_common,
+    N_common
+  )
+  qr_D <- qr(D)
+  direct_rank[j] <- qr_D$rank
+  direct_columns[j] <- ncol(D)
+  direct[j, ] <- qr.coef(qr_D, Y)[1L, ]
+}
+direct_error <- max(abs(unname(fit) - direct))
+stopifnot(
+  direct_error < 1e-10,
+  all(direct_rank == direct_columns),
+  identical(
+    attr(fit, "trial_basis_map")$source_column,
+    public_design$target_columns
   )
 )
 ```
 
-**Limitations:**
-- Requires **global/absolute onsets** (not run-relative)
-- No structured baseline handling
-- No multi-condition support
-- No parametric modulators
-- Less validation
+```{r direct-result, echo = FALSE}
+knitr::kable(
+  data.frame(
+    Maximum_absolute_error = direct_error,
+    Minimum_target_model_rank = min(direct_rank),
+    Target_model_columns = unique(direct_columns)
+  ),
+  digits = 12,
+  caption = "lss_design() versus independently assembled full GLMs."
+)
+```
 
-### Using lss_design() (new approach)
+The zero discrepancy also proves that the RT event term and baseline nuisance
+span entered the model without becoming extra trial rows.
 
-```{r lssdesign}
-# Formula-based design with run-relative onsets
-emod_new <- event_model(
-  onset ~ trialwise(basis = "spmg1"),
-  data = trials,
+```{r fixed-term-mutation, include = FALSE}
+direct_without_rt <- matrix(NA_real_, n_trials, n_voxels)
+Z_without_rt <- as.matrix(cbind(baseline_terms$drift, baseline_terms$block))
+for (j in seq_len(n_trials)) {
+  D_without_rt <- cbind(
+    X_trial[, j],
+    rowSums(X_trial[, -j, drop = FALSE]),
+    Z_without_rt,
+    N_common
+  )
+  direct_without_rt[j, ] <- qr.coef(qr(D_without_rt), Y)[1L, ]
+}
+rt_omission_error <- max(abs(direct_without_rt - direct))
+stopifnot(rt_omission_error > 1e-3)
+```
+
+## Decide whether other-trial effects are pooled across runs
+
+Run-aware onset placement does not make the default coefficient estimator
+run-local. A single `lss_design()` call passes all target columns to one OASIS
+fit, whose other-trial regressor aggregates trials from both runs. A run-1
+target can therefore change when the run-2 response changes. This is a pooled
+multi-run estimand, not leakage in the event convolution.
+
+The next mutation adds signal only in run 2. It changes the joint fit's run-1
+coefficients, while two explicitly separate run fits leave run 1 unchanged.
+
+```{r run-pooling-contract, include = FALSE}
+Y_shifted <- Y
+Y_shifted[run_rows[[2]], ] <- Y_shifted[run_rows[[2]], ] +
+  matrix(rowSums(X_trial[run_rows[[2]], 6:10, drop = FALSE]), run_lengths[2], 1L) %*%
+  matrix(rep(20, n_voxels), 1L, n_voxels)
+
+fit_shifted <- lss_design(
+  Y_shifted,
+  emod,
+  bmodel,
+  method = "oasis",
+  oasis = oasis_options(
+    ridge_mode = "absolute", ridge_x = 0, ridge_b = 0
+  ),
+  validate = FALSE
+)
+
+fit_one_run <- function(response, run) {
+  scan_start <- sum(run_lengths[seq_len(run - 1L)]) + 1L
+  scan_rows <- scan_start:(scan_start + run_lengths[run] - 1L)
+  events_run <- events[events$run == run, , drop = FALSE]
+  events_run$run <- 1L
+  sframe_run <- sampling_frame(blocklens = run_lengths[run], TR = TR)
+  emod_run <- event_model(
+    onset ~ trialwise(basis = "spmg1") + hrf(RT_c),
+    data = events_run,
+    block = ~run,
+    sampling_frame = sframe_run
+  )
+  bmodel_run <- baseline_model(
+    basis = "poly",
+    degree = 1,
+    sframe = sframe_run,
+    intercept = "runwise",
+    nuisance_list = list(motion[[run]])
+  )
+  beta_run <- lss_design(
+    response[scan_rows, , drop = FALSE],
+    emod_run,
+    bmodel_run,
+    method = "oasis",
+    oasis = oasis_options(
+      ridge_mode = "absolute", ridge_x = 0, ridge_b = 0
+    ),
+    validate = FALSE
+  )
+  map_run <- attr(beta_run, "trial_basis_map")
+  map_run$local_trial <- map_run$trial
+  map_run$local_trial_name <- map_run$trial_name
+  map_run$local_source_column <- map_run$source_column
+  map_run$global_event_id <- events_run$event_id[map_run$trial]
+  map_run$run <- run
+  global_name <- sprintf(
+    "event_%02d_basis_%02d", map_run$global_event_id, map_run$basis
+  )
+  map_run$trial <- map_run$global_event_id
+  map_run$trial_name <- sprintf("event_%02d", map_run$global_event_id)
+  map_run$source_column <- public_design$target_columns[map_run$global_event_id]
+  map_run$column <- global_name
+  map_run$name <- global_name
+  map_run$output_name <- global_name
+  rownames(beta_run) <- global_name
+  attr(beta_run, "trial_basis_map") <- map_run
+  list(beta = beta_run, map = map_run)
+}
+
+combine_run_fits <- function(parts) {
+  beta <- do.call(rbind, lapply(parts, `[[`, "beta"))
+  map <- do.call(rbind, lapply(parts, `[[`, "map"))
+  rownames(map) <- NULL
+  map$output_row <- seq_len(nrow(map))
+  attr(beta, "trial_basis_map") <- map
+  beta
+}
+
+local_fit <- combine_run_fits(lapply(seq_along(run_lengths), function(run) {
+  fit_one_run(Y, run)
+}))
+local_shifted <- combine_run_fits(lapply(seq_along(run_lengths), function(run) {
+  fit_one_run(Y_shifted, run)
+}))
+
+local_map <- attr(local_fit, "trial_basis_map")
+
+run_perturbation <- data.frame(
+  Estimator = c("one pooled two-run fit", "two separate run fits"),
+  Maximum_change_in_run1_beta = c(
+    max(abs(fit_shifted[1:5, ] - fit[1:5, ])),
+    max(abs(local_shifted[1:5, ] - local_fit[1:5, ]))
+  )
+)
+stopifnot(
+  run_perturbation$Maximum_change_in_run1_beta[1] > 1e-6,
+  run_perturbation$Maximum_change_in_run1_beta[2] < 1e-12,
+  identical(local_map$global_event_id, events$event_id),
+  !anyDuplicated(local_map$global_event_id),
+  !anyDuplicated(rownames(local_fit)),
+  identical(local_map$trial, events$event_id),
+  identical(local_map$source_column, public_design$target_columns),
+  identical(local_map$column, rownames(local_fit)),
+  identical(local_map$name, rownames(local_fit)),
+  identical(local_map$output_name, rownames(local_fit)),
+  !anyDuplicated(paste(local_map$trial, local_map$basis))
+)
+```
+
+```{r run-pooling-result, echo = FALSE}
+knitr::kable(
+  run_perturbation,
+  digits = 12,
+  caption = "Effect of a run-2-only response mutation on run-1 coefficients."
+)
+```
+
+Use one joint call only when that cross-run pooling is the intended LSS model.
+For run-local coefficients, fit each run with its own event and baseline models,
+then restore global event identifiers in both row names and the trial/basis map
+before combining rows, as the helper above does. Run-specific prewhitening does
+not by itself change the pooled other-trial estimand.
+
+## Preserve output identity
+
+The result carries the event model, baseline model, sampling frame, and an
+explicit trial/basis map. Use the map or row names; do not reconstruct trial
+identity from a presumed source-column order.
+
+```{r output-identity}
+attributes_kept <- c(
+  event_model = !is.null(attr(fit, "event_model")),
+  baseline_model = !is.null(attr(fit, "baseline_model")),
+  sampling_frame = !is.null(attr(fit, "sampling_frame")),
+  trial_basis_map = !is.null(attr(fit, "trial_basis_map"))
+)
+attributes_kept
+identity_map <- attr(fit, "trial_basis_map")
+stopifnot(identical(identity_map$trial, events$event_id))
+identity_map$input_event_id <- events$event_id
+identity_map[1:3, c("input_event_id", "trial", "basis", "output_row")]
+```
+
+## Multi-basis designs return coefficients, not amplitudes
+
+With SPMG3, `lss_design()` detects three basis columns per trial and returns
+rows in trial-major, basis-minor order. The next simulation is correctly
+specified in that three-dimensional basis and is checked against independent
+full GLMs.
+
+```{r multibasis-data, include = FALSE}
+emod_spmg3 <- event_model(
+  onset ~ trialwise(basis = "spmg3", nbasis = 3),
+  data = events,
   block = ~run,
   sampling_frame = sframe
 )
-
-bmodel_new <- baseline_model(basis = "bs", degree = 5, sframe = sframe)
-
-beta_new <- lss_design(Y, emod_new, bmodel_new, method = "oasis")
-```
-
-**Advantages:**
-- **Run-relative onsets** (standard convention)
-- **Structured baseline** (drift + nuisance)
-- **Automatic validation**
-- **Richer metadata**
-- **Formula-based DSL**
-
-## Validation: Estimated vs True Betas
-
-Let's visualize how well LSS recovers the true trial effects from our simulated data.
-
-```{r validation-plot, fig.alt = "Scatter plot showing estimated LSS betas versus true simulated betas with near-diagonal alignment"}
-# Compare estimated betas (with baseline correction) to true betas
-# Flatten matrices for plotting
-est_vec <- as.vector(beta_baseline)
-true_vec <- as.vector(true_betas)
-
-recovery_summary <- data.frame(
-  Correlation = cor(est_vec, true_vec),
-  RMSE = sqrt(mean((est_vec - true_vec)^2))
+public_spmg3 <- reconstruct_public_lss(emod_spmg3)
+X_spmg3 <- public_spmg3$X
+K <- public_spmg3$K
+run_intercepts <- cbind(
+  rep(c(1, 0), times = run_lengths),
+  rep(c(0, 1), times = run_lengths)
 )
-recovery_summary
-
-# Plot
-plot(true_vec, est_vec,
-     pch = 16, cex = 0.3, col = rgb(0, 0, 0, 0.3),
-     xlab = "True Beta", ylab = "Estimated Beta",
-     main = sprintf("LSS Recovery (r = %.3f)", recovery_summary$Correlation))
-abline(0, 1, col = "red", lwd = 2, lty = 2)
-grid()
-```
-
-```{r validation-check, include = FALSE}
-stopifnot(all(is.finite(as.matrix(recovery_summary))))
-```
-
-The fit is not perfect because the simulation adds substantial baseline structure and noise, but the recovered betas still track the ground truth in a way that is easy to diagnose numerically and visually.
-
-## Advanced: Parametric Modulators
-
-`event_model` supports parametric modulators for trial-by-trial amplitude modulation. This example demonstrates the syntax but requires special setup.
-
-```{r parametric, eval = FALSE}
-# Trial data with reaction times
-trials_rt <- data.frame(
-  onset = c(10, 30, 50, 70, 90, 110),
-  RT = c(0.5, 0.7, 0.6, 0.8, 0.5, 0.9),
-  run = 1
+summed_spmg3 <- vapply(seq_len(K), function(k) {
+  rowSums(X_spmg3[, seq(k, ncol(X_spmg3), by = K), drop = FALSE])
+}, numeric(n_time))
+theta_spmg3 <- rbind(
+  seq(0.8, 1.0, length.out = n_voxels),
+  seq(0.05, 0.15, length.out = n_voxels),
+  seq(-0.12, -0.06, length.out = n_voxels)
 )
+Y_spmg3 <- summed_spmg3 %*% theta_spmg3 +
+  run_intercepts %*% matrix(rnorm(2 * n_voxels), 2L, n_voxels) +
+  matrix(rnorm(n_time * n_voxels), n_time, n_voxels)
+```
 
-# Center RT
-trials_rt$RT_c <- scale(trials_rt$RT, center = TRUE, scale = FALSE)[, 1]
-
-# Model: trial effects + RT modulation
-emod_rt <- event_model(
-  onset ~ trialwise() + hrf(RT_c),
-  data = trials_rt,
-  block = ~run,
-  sampling_frame = sframe
+```{r multibasis-fit}
+fit_spmg3 <- lss_design(
+  Y_spmg3,
+  emod_spmg3,
+  method = "oasis",
+  oasis = oasis_options(
+    ridge_mode = "absolute",
+    ridge_x = 0,
+    ridge_b = 0
+  ),
+  validate = FALSE
 )
-
-# Note: This creates trial-wise regressors PLUS an RT amplitude modulator
-# May require special handling in OASIS for proper separation
+c(rows = nrow(fit_spmg3), trials = n_trials, basis_dimension = K)
+rownames(fit_spmg3)[1:6]
+attr(fit_spmg3, "trial_basis_map")[
+  1:6, c("trial", "basis", "source_column", "output_row")
+]
 ```
 
-## Troubleshooting
-
-### Error: "Y has X rows but sampling_frame expects Y scans"
-
-**Cause:** Mismatch between data dimensions and sampling_frame specification.
-
-**Solution:** Check that `sum(blocklens)` matches `nrow(Y)`:
-
-```{r troubleshoot1}
-sframe_check <- sampling_frame(blocklens = c(150, 150), TR = 2)
-sum(fmrihrf::blocklens(sframe_check))
-nrow(Y)
-```
-
-### Error: "event_model and baseline_model have different sampling_frames"
-
-**Cause:** The two models were created with different `sampling_frame` objects.
-
-**Solution:** Use the same `sframe` object for both:
-
-```{r troubleshoot2, eval = FALSE}
-sframe <- sampling_frame(blocklens = c(150, 150), TR = 2)
-
-emod <- event_model(..., sampling_frame = sframe)
-bmodel <- baseline_model(..., sframe = sframe)
-```
-
-### Warning: "High collinearity detected"
-
-**Cause:** Events are too close together or design is ill-conditioned.
-
-**Solution:** Use ridge regularization:
-
-```{r troubleshoot3, eval = FALSE}
-beta <- lss_design(
-  Y, emod, bmodel,
-  oasis = list(ridge_mode = "fractional", ridge_x = 0.02)
+```{r multibasis-oracle, include = FALSE}
+direct_spmg3 <- matrix(NA_real_, n_trials * K, n_voxels)
+for (j in seq_len(n_trials)) {
+  target_rows <- ((j - 1L) * K + 1L):(j * K)
+  other_trials <- setdiff(seq_len(n_trials), j)
+  B <- vapply(seq_len(K), function(k) {
+    columns <- (other_trials - 1L) * K + k
+    rowSums(X_spmg3[, columns, drop = FALSE])
+  }, numeric(n_time))
+  D <- cbind(X_spmg3[, target_rows, drop = FALSE], B, run_intercepts)
+  direct_spmg3[target_rows, ] <- qr.coef(qr(D), Y_spmg3)[seq_len(K), ]
+}
+spmg3_error <- max(abs(unname(fit_spmg3) - direct_spmg3))
+stopifnot(
+  all(dim(fit_spmg3) == c(n_trials * K, n_voxels)),
+  spmg3_error < 1e-10,
+  identical(
+    attr(fit_spmg3, "trial_basis_map")$source_column,
+    public_spmg3$target_columns
+  )
 )
 ```
 
-## Summary
+```{r multibasis-result, echo = FALSE}
+knitr::kable(
+  data.frame(Maximum_absolute_error = spmg3_error),
+  digits = 12,
+  caption = "Multi-basis lss_design() versus independent full GLMs."
+)
+```
 
-The `lss_design()` function provides a modern, formula-based interface for LSS analysis that:
+Each trial now has canonical, temporal-derivative, and dispersion-derivative
+coefficients. The canonical coefficient alone is not a normalized response
+amplitude. Keep all three rows unless a separately defined shape and amplitude
+estimand justifies a reduction.
 
-- Handles **multi-run experiments** correctly with run-relative onsets
-- Provides **structured baseline** specification
-- Supports **multi-basis HRFs** with automatic detection
-- Validates **design compatibility** automatically
-- Integrates with the **fmridesign ecosystem**
+## Ridge, standard errors, and whitening retain OASIS semantics
 
-For simple designs or when you already have design matrices prepared, the traditional `lss()` interface remains fully supported and unchanged.
+The adapter does not change the inference contract:
 
-## Further Reading
+- `oasis_options()` uses fractional ridge by default.
+- `return_se = TRUE` requires zero ridge, a fixed full-rank design, positive
+  residual degrees of freedom, and no estimated prewhitening.
+- A non-trial event term remains common whether or not ridge is used.
 
-- `vignette("fmrilss")` - Traditional LSS interface
-- `vignette("oasis_method")` - OASIS method details
-- `vignette("a_04_event_models", package = "fmridesign")` - Event model tutorial
-- `vignette("a_03_baseline_model", package = "fmridesign")` - Baseline model tutorial
+For multiple runs, whitening needs scan-level segmentation. `lss_design()`
+infers it from the sampling frame. The explicit vector below is equivalent and
+shows the underlying contract; if supplied, it must encode the same boundaries.
+The event model's `blockids` describe events, not scans, so do not pass that
+shorter vector as `prewhiten$runs`.
+
+```{r whitening-recipe, eval = FALSE}
+scan_run <- rep(seq_along(run_lengths), times = run_lengths)
+
+fit_whitened <- lss_design(
+  Y,
+  emod,
+  bmodel,
+  method = "oasis",
+  oasis = oasis_options(),
+  prewhiten = prewhiten_options(
+    method = "ar",
+    p = 1,
+    pooling = "run",
+    runs = scan_run
+  )
+)
+```
+
+This is a recipe, not a recommendation that AR(1) fits every dataset. Choose the
+noise model from residual diagnostics. Shared-design OASIS calls reject voxel-
+or parcel-specific whitening operators because those require correspondingly
+voxel- or parcel-specific filtered designs.
+
+## Validation and failure modes
+
+With `validate = TRUE`, the adapter checks time dimensions and sampling-frame
+agreement. It computes a scale-dependent condition number for the full
+assembled design and emits a warning only when that number exceeds 30 and the
+effective ridge penalties are all zero; it does not return the number as a
+diagnostic. Treat the warning as screening, not as a characterization of every
+residualized LSS target model. Mandatory semantic checks remain active
+regardless of the flag: the event design must have metadata, exactly one
+trialwise term, a complete trial/basis rectangle, and stable identities.
+
+Common failures are direct:
+
+- `nrow(Y)` must equal `sum(blocklens(sframe))`.
+- The event and baseline models must use the same sampling frame.
+- Multi-basis metadata must agree with the HRF basis dimension.
+- Parametric and condition-level terms are fixed regressors; they are not
+  additional trialwise targets.
+
+## Next steps
+
+- `vignette("voxel-wise-hrf")` --- normalized voxel-specific HRF shapes
+- `vignette("sbhm")` --- library-constrained voxel-specific HRFs

@@ -106,8 +106,7 @@ lss_naive <- function(Y = NULL, bdes, dset = NULL) {
   beta_matrix <- matrix(NA, nrow = n_events, ncol = n_voxels)
   
   # Project out confounds first (same as other methods)
-  qrX <- qr(X_base_fixed)
-  Q <- diag(n_timepoints) - tcrossprod(qr.Q(qrX))
+  Q <- .Q_project(X_base_fixed)
   
   # Apply projection to data and design
   data_projected <- Q %*% data_matrix

@@ -6,6 +6,12 @@
 .estimate_voxel_hrf_fast <- function(Y, X_trials, design_spec, N_nuis = NULL, K = NULL,
                                      lambda_shape = 0, mu_rough = 0,
                                      ref_hrf = NULL, shrink_global = 0, orient_ref = TRUE) {
+  lambda_shape <- .as_nonnegative_scalar(lambda_shape, "lambda_shape")
+  mu_rough <- .as_nonnegative_scalar(mu_rough, "mu_rough")
+  shrink_global <- .as_nonnegative_scalar(shrink_global, "shrink_global")
+  if (shrink_global > 1) {
+    stop("shrink_global must be between 0 and 1", call. = FALSE)
+  }
   # Coerce
   Y <- .as_base_matrix(Y)
   if (!is.matrix(Y)) Y <- as.matrix(Y)
@@ -96,21 +102,28 @@
   # 5) Normalize each voxel's HRF shape to unit energy on the time grid
   # energy_v = sqrt( diag(W^T (B^T B) W) ) computed without forming H = B W
   M <- BtB
-  MW <- M %*% W                                   # K x V
-  s2 <- sqrt(pmax(colSums(W * MW), .Machine$double.eps))
-  W  <- sweep(W, 2L, s2, "/")
-  W  <- matrix(W, nrow = K, ncol = ncol(Y))
-
   ref_norm <- sqrt(sum((B_time %*% W0)^2))
-
-  # 6) Optional global shrinkage for stability
-  if (shrink_global > 0) {
-    Wbar <- rowMeans(W)
-    W <- (1 - shrink_global) * W + shrink_global * matrix(Wbar, nrow = K, ncol = ncol(W))
-    W <- matrix(W, nrow = K, ncol = ncol(W))
+  if (!is.finite(ref_norm) || ref_norm <= .Machine$double.eps) {
+    stop("Reference HRF has undefined energy", call. = FALSE)
   }
+  W0_unit <- W0 / ref_norm
+  fallback_voxels <- integer()
+  normalize_energy <- function(weights) {
+    MW <- M %*% weights
+    s2 <- sqrt(pmax(colSums(weights * MW), 0))
+    degenerate <- which(!is.finite(s2) | s2 <= .Machine$double.eps)
+    safe_s2 <- s2
+    safe_s2[degenerate] <- 1
+    out <- matrix(sweep(weights, 2L, safe_s2, "/"), nrow = K, ncol = ncol(weights))
+    if (length(degenerate)) {
+      out[, degenerate] <- W0_unit
+      fallback_voxels <<- sort(unique(c(fallback_voxels, degenerate)))
+    }
+    out
+  }
+  W <- normalize_energy(W)
 
-  # 7) Optional orientation: align with reference HRF so betas are positive-interpretable
+  # 6) Optional orientation: align sign-indeterminate shapes before averaging.
   if (isTRUE(orient_ref)) {
     cvec <- as.numeric(crossprod(B_time, ref_hrf))   # length K
     if (length(cvec) != nrow(W)) {
@@ -121,10 +134,24 @@
     if (length(flip)) W[, flip] <- -W[, flip, drop = FALSE]
   }
 
+  # 7) Optional global shrinkage for stability. Averaging happens only after
+  # reference orientation so equivalent shapes with opposite solver signs do
+  # not cancel and defeat the shrinkage target.
+  if (shrink_global > 0) {
+    Wbar <- rowMeans(W)
+    W <- (1 - shrink_global) * W + shrink_global * matrix(Wbar, nrow = K, ncol = ncol(W))
+    W <- matrix(W, nrow = K, ncol = ncol(W))
+  }
+
+  # Convex shrinkage changes waveform energy; restore the declared unit-energy
+  # shape contract after every combination and orientation step.
+  W <- normalize_energy(W)
+
   structure(list(
     coefficients = W,                          # K x V
     basis       = design_spec$cond$hrf,        # fmrihrf basis object
     conditions  = "cond",
-    ref_norm    = as.numeric(ref_norm)
+    ref_norm    = as.numeric(ref_norm),
+    fallback_voxels = fallback_voxels
   ), class = "VoxelHRF")
 }

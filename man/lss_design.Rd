@@ -20,8 +20,8 @@ lss_design(
 \item{Y}{Numeric matrix of fMRI data (timepoints × voxels).}
 
 \item{event_model}{An event_model object from \code{fmridesign::event_model()}.
-This defines the trial-wise or condition-wise task design. For LSS, typically
-created with \code{trialwise()} to generate one regressor per trial.}
+It must contain exactly one \code{trialwise()} target term. Any additional
+condition-level event terms are included as common fixed regressors.}
 
 \item{baseline_model}{Optional baseline_model object from
 \code{fmridesign::baseline_model()}. Defines drift correction, block intercepts,
@@ -36,7 +36,8 @@ event_model integration.}
 (\code{ridge_x}, \code{ridge_b}, \code{ridge_mode}), standard errors
 (\code{return_se}), etc.  See \code{\link{oasis_options}} and the
 Details section of \code{\link{lss}} for the full list.
-Note: \code{design_spec} is not used when providing event_model, and
+Note: \code{design_spec} must not be supplied when providing event_model
+and is rejected at the adapter boundary;
 \code{oasis$whiten} is deprecated — use \code{prewhiten} instead.}
 
 \item{prewhiten}{Optional prewhitening specification as a list (or
@@ -48,8 +49,8 @@ correction via the \pkg{fmriAR} package.  Key fields: \code{method}
 See \code{\link{prewhiten_options}} and \code{\link{lss}} for full
 details and examples.}
 
-\item{blockids}{Optional block/run identifiers for event_model. If NULL,
-extracted from event_model$blockids.}
+\item{blockids}{Optional complete exact-integer block/run identifiers, one
+per scan. If NULL, run intercepts are derived from the sampling frame.}
 
 \item{validate}{Logical. If TRUE (default), performs validation checks on
 design compatibility, collinearity, and temporal alignment.}
@@ -57,8 +58,12 @@ design compatibility, collinearity, and temporal alignment.}
 \item{...}{Additional arguments passed to the underlying LSS method.}
 }
 \value{
-Matrix of trial-wise beta estimates (trials × voxels), or
-(trials × basis_functions) × voxels for multi-basis HRFs.
+Normally a trial-by-voxel beta matrix, or a
+(trial × basis)-by-voxel matrix for multi-basis HRFs. When OASIS
+\code{return_diag = TRUE} or \code{return_se = TRUE}, returns
+\verb{list(beta, diag?, se?)} with the matrix/list shapes documented in \code{\link[=lss]{lss()}}.
+Adapter metadata are attached to the returned object; multi-basis beta and
+SE matrices retain the canonical \code{trial_basis_map}.
 }
 \description{
 Perform Least Squares Separate (LSS) analysis using event_model and
@@ -77,9 +82,10 @@ The \code{event_model} should typically use \code{trialwise()} for LSS:
                       sampling_frame = sframe)
 }
 
-For factorial designs (e.g., estimating condition-level betas separately):
+Non-trial event terms are supported as common fixed regressors, for example
+a parametric modulator alongside the unique trialwise target term:
 \preformatted{
-  emod <- event_model(onset ~ hrf(condition),
+  emod <- event_model(onset ~ trialwise(basis = "spmg1") + hrf(RT),
                       data = events,
                       block = ~run,
                       sampling_frame = sframe)
@@ -96,16 +102,20 @@ If provided, baseline_model components are mapped as follows:
 \strong{Multi-Run Handling:}
 
 Both event_model and baseline_model must use the same \code{sampling_frame}.
-Run structure is automatically respected. Event onsets should be run-relative
-(resetting to 0 each run) as per fmridesign convention - conversion to global
-time is handled automatically.
+Event onsets should be run-relative (resetting to 0 each run) as per
+fmridesign convention; conversion to global time and run boundaries in the
+design are handled automatically. A joint call still uses one OASIS
+other-trial aggregate across all runs, so its coefficients are cross-run
+pooled. Fit each run separately when run-local LSS coefficients are required.
 
 \strong{Prewhitening:}
 
 Use the \code{prewhiten} parameter (not the \code{oasis} list) for temporal
-autocorrelation correction.  For multi-run data, pass
-\code{prewhiten = list(method = "ar", p = 1, pooling = "run", runs = blockids)}
-so that whitening respects run boundaries.
+autocorrelation correction. For active multi-run whitening, this adapter
+infers the scan-level run segmentation from the sampling frame. An explicit
+\code{prewhiten$runs} vector is allowed only when it encodes those same
+boundaries. The event model's \code{blockids} usually has one value per event
+and is not the required scan-level vector.
 See \code{\link{lss}} and \code{\link{prewhiten_options}} for full details.
 
 \strong{Validation:}
@@ -113,8 +123,9 @@ See \code{\link{lss}} and \code{\link{prewhiten_options}} for full details.
 When \code{validate = TRUE}, the function checks:
 \itemize{
 \item Temporal alignment: nrow(Y) matches total scans in sampling_frame
-\item Collinearity: Design matrix condition number < 30 (suppressed when
-ridge is already configured via \code{oasis$ridge_x} or \code{oasis$ridge_b})
+\item Collinearity: emits a warning when the full assembled design has a
+condition number above 30 and all effective ridge penalties are zero.
+The condition number is scale-dependent and is not returned.
 \item Compatibility: event_model and baseline_model use same sampling_frame
 }
 }

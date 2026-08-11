@@ -11,13 +11,25 @@ No value itself. This topic documents the structure returned by
 Simple list-based S3 class returned by \code{estimate_voxel_hrf} containing
 voxel-wise HRF basis coefficients and related metadata.
 }
+\section{Stored fields}{
+
+\code{coefficients} contains one normalized HRF-shape column per voxel;
+\code{amplitude_scale} records the removed positive-peak scale; \code{basis} stores the
+HRF basis; \code{conditions} records observed labels while \code{condition_pooling}
+states that all events estimate one pooled shape; \code{sframe} preserves physical scan
+timing; and \code{normalization} plus \code{coefficient_units} state the coefficient
+scale. Voxel names, when supplied on \code{Y}, identify coefficient columns and
+amplitude-scale entries.
+}
+
 \examples{
 \dontshow{if (requireNamespace("fmrihrf", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 \donttest{
 Y <- matrix(rnorm(100), 50, 2)
 events <- data.frame(onset = c(5, 25), duration = 1, condition = "A")
 basis <- fmrihrf::HRF_SPMG1
-est <- estimate_voxel_hrf(Y, events, basis)
+sframe <- fmrihrf::sampling_frame(blocklens = nrow(Y), TR = 1)
+est <- estimate_voxel_hrf(Y, events, basis, sframe = sframe)
 class(est)
 }
 \dontshow{\}) # examplesIf}

@@ -12,14 +12,20 @@ test_that("sbhm_build creates valid basis (basic, rank-deficient, shifts)", {
     exp(-seq(0, 20, length.out = Tlen)/6),
     exp(-seq(0, 20, length.out = Tlen)/8)
   )
-  sbhm <- sbhm_build(library_H = H, r = 4, sframe = sframe, normalize = TRUE)
+  expect_warning(
+    sbhm <- sbhm_build(library_H = H, r = 4, sframe = sframe, normalize = TRUE),
+    "numerical rank 3"
+  )
   expect_true(is.matrix(sbhm$B) && nrow(sbhm$B) == Tlen)
   expect_true(length(sbhm$S) == ncol(sbhm$B))
   expect_true(all(dim(sbhm$A)[1] == ncol(sbhm$B)))
 
   # Rank-deficient case: duplicate column
   H2 <- cbind(H, H[,1])
-  sbhm2 <- sbhm_build(library_H = H2, r = 6, sframe = sframe, normalize = TRUE)
+  expect_warning(
+    sbhm2 <- sbhm_build(library_H = H2, r = 6, sframe = sframe, normalize = TRUE),
+    "numerical rank 3"
+  )
   expect_lte(ncol(sbhm2$B), min(nrow(H2), ncol(H2)))
   expect_true(all(sbhm2$S >= 0))
 

@@ -52,7 +52,8 @@ best-scoring lambda, \code{"1se"} applies the one-standard-error rule.}
 \item{return_fit}{Logical; when \code{TRUE}, \code{lss(method="stglmnet")} returns a
 list containing \code{beta}, fit metadata, and the selected lambda.}
 
-\item{...}{Additional backend options.}
+\item{...}{Certified advanced backend fields such as graph-pooling,
+overlap-strength, fold, and whitening controls. Unknown names are rejected.}
 }
 \value{
 A list with class \code{"fmrilss_stglmnet_options"}.
@@ -60,7 +61,8 @@ A list with class \code{"fmrilss_stglmnet_options"}.
 \description{
 Convenience constructor for the \verb{stglmnet=} list accepted by
 \code{lss(method = "stglmnet")}.
-Unknown fields are allowed via \code{...} for forward compatibility.
+Advanced fields accepted through \code{...} are validated; unknown fields are
+rejected so misspelled scientific controls cannot be silently ignored.
 }
 \examples{
 stglmnet_options(mode = "fixed", lambda = 0.05, alpha = 0.5)

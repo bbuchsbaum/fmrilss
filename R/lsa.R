@@ -15,14 +15,17 @@
 #' @param method Character string specifying the computational method:
 #'   \itemize{
 #'     \item "r" - Pure R implementation using lm.fit
-#'     \item "cpp" - C++ implementation for better performance
+#'     \item "cpp" - Compatibility alias for the numerically identical R
+#'       implementation; no compiled LSA kernel is currently provided
 #'   }
 #'
 #' @return A numeric matrix of size T × V containing the beta estimates for
-#'   each trial regressor (rows) and each voxel (columns).
+#'   each trial regressor (rows) and each voxel (columns). Supplied trial and
+#'   voxel names must be complete and unique; unnamed inputs receive canonical
+#'   `Trial_i` and `Voxel_i` names.
 #'
 #' @details
-#' LSA fits the model: Y = X*beta + Z*gamma + error, where all trial regressors
+#' LSA fits the model \eqn{Y = X \beta + Z \gamma + \epsilon}, where all trial regressors
 #' in X are estimated simultaneously. This is in contrast to LSS, which fits
 #' each trial separately while treating other trials as nuisance regressors.
 #'
@@ -56,6 +59,18 @@ lsa <- function(Y, X, Z = NULL, Nuisance = NULL,
   # Input validation (reuse logic from lss function)
   if (!is.matrix(Y)) Y <- as.matrix(Y)
   if (!is.matrix(X)) X <- as.matrix(X)
+  if (!is.numeric(Y) || nrow(Y) < 1L || ncol(Y) < 1L) {
+    stop("Y must be a non-empty numeric matrix", call. = FALSE)
+  }
+  if (!is.numeric(X) || nrow(X) < 1L || ncol(X) < 1L) {
+    stop("X must be a non-empty numeric matrix", call. = FALSE)
+  }
+  if (any(is.infinite(Y), na.rm = TRUE)) stop("Y contains infinite values", call. = FALSE)
+  if (any(is.infinite(X), na.rm = TRUE)) stop("X contains infinite values", call. = FALSE)
+  trial_names <- .validate_or_default_names(colnames(X), ncol(X), "Trial_", "X column names")
+  voxel_names <- .validate_or_default_names(colnames(Y), ncol(Y), "Voxel_", "Y column names")
+  colnames(X) <- trial_names
+  colnames(Y) <- voxel_names
   
   # Handle Nuisance parameter (alias for Z)
   if (is.null(Z) && !is.null(Nuisance)) {
@@ -65,6 +80,9 @@ lsa <- function(Y, X, Z = NULL, Nuisance = NULL,
   # Ensure Z is a matrix if provided
   if (!is.null(Z) && !is.matrix(Z)) {
     Z <- as.matrix(Z)
+  }
+  if (!is.null(Z) && (!is.numeric(Z) || any(is.infinite(Z), na.rm = TRUE))) {
+    stop("Z must be a numeric matrix without infinite values", call. = FALSE)
   }
   
   # Dimension checks
@@ -101,8 +119,8 @@ lsa <- function(Y, X, Z = NULL, Nuisance = NULL,
   )
   
   # Step 3: Add dimension names
-  rownames(result) <- colnames(X)
-  colnames(result) <- colnames(Y)
+  rownames(result) <- trial_names
+  colnames(result) <- voxel_names
   
   return(result)
 }
@@ -135,4 +153,4 @@ lsa <- function(Y, X, Z = NULL, Nuisance = NULL,
   # For now, fall back to R implementation
   # Could implement C++ version later if needed
   .lsa_r(Y, X, Z)
-} 
+}

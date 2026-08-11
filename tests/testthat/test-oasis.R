@@ -122,7 +122,11 @@ test_that("OASIS returns SEs when requested", {
   }
   Y <- X %*% matrix(rnorm(ncol(X) * V, sd = 0.5), ncol = V) + matrix(rnorm(T * V), T, V)
 
-  out <- lss(Y, X = X, method = "oasis", oasis = list(return_se = TRUE))
+  out <- lss(
+    Y, X = X, method = "oasis",
+    oasis = list(return_se = TRUE, ridge_mode = "absolute",
+                 ridge_x = 0, ridge_b = 0)
+  )
   expect_true(is.list(out) && all(c("beta","se") %in% names(out)))
   expect_equal(dim(out$beta), dim(out$se))
   expect_true(all(is.finite(out$se)))

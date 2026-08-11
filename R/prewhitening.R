@@ -30,10 +30,23 @@
 #'     \item{whiten_plan}{fmriAR plan object for diagnostics}
 #'     \item{applied}{Logical: Whether whitening was applied}
 #'   }
-#' @importFrom utils modifyList
 #' @keywords internal
-.prewhiten_data <- function(Y, X = NULL, Z = NULL, Nuisance = NULL,
-                           prewhiten = list()) {
+#' @noRd
+.resolve_prewhiten_options <- function(prewhiten = list(), internal = TRUE) {
+  .validate_option_names(
+    prewhiten, .prewhiten_option_names(internal = internal), "prewhiten"
+  )
+  required_if_named <- c(
+    "method", "p", "q", "p_max", "pooling", "exact_first", "compute_residuals"
+  )
+  null_fields <- required_if_named[
+    required_if_named %in% names(prewhiten) &
+      vapply(required_if_named, function(nm) is.null(prewhiten[[nm]]), logical(1))
+  ]
+  if (length(null_fields)) {
+    stop("prewhiten option(s) may not be NULL: ", paste(null_fields, collapse = ", "),
+         call. = FALSE)
+  }
 
   # Set defaults
   defaults <- list(
@@ -51,8 +64,51 @@
   # Merge with user options
   opts <- modifyList(defaults, prewhiten)
 
+  opts$method <- match.arg(opts$method, c("none", "ar", "arma"))
+  opts$pooling <- match.arg(opts$pooling, c("global", "voxel", "run", "parcel"))
+  opts$exact_first <- match.arg(opts$exact_first, c("ar1", "none"))
+  opts$compute_residuals <- .as_scalar_logical(
+    opts$compute_residuals, "prewhiten$compute_residuals"
+  )
+  if (!identical(opts$p, "auto")) {
+    opts$p <- .as_positive_integer(opts$p, "prewhiten$p")
+  }
+  opts$q <- .as_nonnegative_integer(opts$q, "prewhiten$q")
+  opts$p_max <- .as_positive_integer(opts$p_max, "prewhiten$p_max")
+  if (opts$method == "arma" && opts$q == 0L) {
+    stop("prewhiten$q must be positive when method = 'arma'", call. = FALSE)
+  }
+  if (opts$method == "ar" && opts$q != 0L) {
+    stop("prewhiten$q must be 0 when method = 'ar'", call. = FALSE)
+  }
+  if (opts$pooling == "run" &&
+      (is.null(opts$runs) || !length(opts$runs) || anyNA(opts$runs))) {
+    stop("prewhiten$runs must be supplied and complete when pooling = 'run'",
+         call. = FALSE)
+  }
+  if (opts$pooling == "parcel" &&
+      (is.null(opts$parcels) || !length(opts$parcels) || anyNA(opts$parcels))) {
+    stop("prewhiten$parcels must be supplied and complete when pooling = 'parcel'",
+         call. = FALSE)
+  }
+  if (!is.null(opts$runs)) {
+    opts$runs <- .as_integer_ids(opts$runs, "prewhiten$runs")
+  }
+  if (!is.null(opts$parcels)) {
+    opts$parcels <- .as_integer_ids(opts$parcels, "prewhiten$parcels")
+  }
+  opts
+}
+
+#' @importFrom utils modifyList
+#' @keywords internal
+.prewhiten_data <- function(Y, X = NULL, Z = NULL, Nuisance = NULL,
+                           prewhiten = list()) {
+
+  opts <- .resolve_prewhiten_options(prewhiten, internal = TRUE)
+
   # Early exit if no whitening requested
-  if (opts$method == "none" || is.null(opts$method)) {
+  if (opts$method == "none") {
     return(list(
       Y_whitened = Y,
       X_whitened = X,
@@ -69,12 +125,21 @@
   n_vox <- ncol(Y)
 
   pool_mode <- opts$pooling
-  if (length(pool_mode) == 0L || is.na(pool_mode[1])) {
-    pool_mode <- "global"
-  } else {
-    pool_mode <- tolower(pool_mode[1])
+  if (pool_mode == "run" && length(opts$runs) != n_time) {
+    stop("prewhiten$runs must have length nrow(Y)", call. = FALSE)
   }
-  pool_mode <- match.arg(pool_mode, c("global", "voxel", "run", "parcel"))
+  if (pool_mode == "parcel" && length(opts$parcels) != n_vox) {
+    stop("prewhiten$parcels must have length ncol(Y)", call. = FALSE)
+  }
+  if (pool_mode %in% c("voxel", "parcel") &&
+      any(!vapply(list(X, Z, Nuisance), is.null, logical(1)))) {
+    stop(
+      "pooling='", pool_mode, "' estimates voxel-specific whitening operators, ",
+      "which cannot be applied to a shared design matrix. Use pooling='global' ",
+      "or pooling='run', or fit each voxel/parcel with its matching filtered design.",
+      call. = FALSE
+    )
+  }
   if (pool_mode == "voxel") {
     if (!is.null(opts$parcels)) {
       warning("prewhiten$parcels is ignored when pooling='voxel'; using one parcel per voxel.")
@@ -88,7 +153,7 @@
   } else {
     plan_parcels <- as.integer(plan_parcels)
     if (length(plan_parcels) != n_vox) {
-      plan_parcels <- rep(plan_parcels, length.out = n_vox)
+      stop("prewhiten$parcels must have length ncol(Y)", call. = FALSE)
     }
   }
   parcel_ids <- function(n_cols) {
@@ -142,18 +207,22 @@
     resid <- Y
   }
 
-  # Fit noise model using fmriAR
-  whiten_plan <- fmriAR::fit_noise(
-    resid = resid,
-    runs = opts$runs,
-    method = opts$method,
-    p = opts$p,
-    q = opts$q,
-    p_max = opts$p_max,
-    exact_first = opts$exact_first,
-    pooling = opts$pooling,
-    parcels = opts$parcels
-  )
+  # Fit the noise model unless a caller is deliberately reusing one plan
+  # across several algebraically equivalent stages of the same estimator.
+  whiten_plan <- opts$.whiten_plan
+  if (is.null(whiten_plan)) {
+    whiten_plan <- fmriAR::fit_noise(
+      resid = resid,
+      runs = opts$runs,
+      method = opts$method,
+      p = opts$p,
+      q = opts$q,
+      p_max = opts$p_max,
+      exact_first = opts$exact_first,
+      pooling = opts$pooling,
+      parcels = opts$parcels
+    )
+  }
 
   # Apply whitening to all matrices
   # fmriAR requires both X and Y, so we use a dummy X if needed

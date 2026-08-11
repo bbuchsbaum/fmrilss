@@ -412,7 +412,9 @@ test_that(".lss_oasis return_se returns list with se", {
   X <- matrix(rnorm(n_time * n_trials), n_time, n_trials)
 
   result <- fmrilss:::.lss_oasis(Y = Y, X = X,
-                                  oasis = list(K = 1, return_se = TRUE))
+                                  oasis = list(K = 1, return_se = TRUE,
+                                               ridge_mode = "absolute",
+                                               ridge_x = 0, ridge_b = 0))
 
   expect_true(is.list(result))
   expect_true("beta" %in% names(result))

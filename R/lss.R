@@ -2,16 +2,20 @@
 #'
 #' Computes trial-wise beta estimates using the Least Squares Separate approach
 #' of Mumford et al. (2012). This method fits a separate GLM for each trial,
-#' with the trial of interest and all other trials as separate regressors.
+#' with the trial of interest plus a single regressor formed by summing all
+#' other trials in a one-basis design. A K-basis OASIS model uses one summed
+#' other-trial regressor per basis function.
 #'
 #' @param Y A numeric matrix of size n × V where n is the number of timepoints
 #'   and V is the number of voxels/variables
-#' @param X A numeric matrix of size n × T where T is the number of trials.
-#'   Each column represents the design for one trial
-#' @param Z A numeric matrix of size n × F representing experimental regressors
-#'   to include in all trial-wise models. These are regressors we want to model
-#'   and get beta estimates for, but not trial-wise (e.g., intercept, condition
-#'   effects, block effects). If NULL, an intercept-only design is used. Defaults to NULL
+#' @param X A numeric matrix of size n × T for a one-basis design, with one
+#'   column per trial. A raw K-basis OASIS design has n × (T K) columns and
+#'   additionally requires `oasis$K`, `oasis$ntrials`, and an explicit
+#'   `oasis$trial_basis_map`.
+#' @param Z A numeric matrix of size n × F representing common fixed regressors
+#'   included in every trial-wise model (e.g., intercept, condition effects,
+#'   block effects). Their coefficients are not returned. If NULL, an
+#'   intercept-only design is used. Defaults to NULL.
 #' @param Nuisance A numeric matrix of size n × N representing nuisance regressors
 #'   to be projected out before LSS analysis (e.g., motion parameters, physiological
 #'   noise). If NULL, no nuisance projection is performed. Defaults to NULL
@@ -39,20 +43,27 @@
 #'   package, or \code{NULL} (no whitening, the default).
 #'   See Details and \code{\link{prewhiten_options}} for the full list.
 #'
-#' @return A numeric matrix of size T × V containing the trial-wise beta estimates.
-#'   Note: Currently only returns estimates for the trial regressors (X). Beta
-#'   estimates for the experimental regressors (Z) are computed but not returned.
+#' @return Normally, a numeric matrix of trial-wise beta estimates: T × V for
+#'   a one-basis design or (T K) × V for OASIS with K basis functions. With
+#'   OASIS `return_diag = TRUE` or `return_se = TRUE`, returns
+#'   `list(beta, diag?, se?)`; `beta` and `se` have the same row-by-voxel shape.
+#'   One-basis diagnostics contain length-T vectors `d`, `alpha`, and `s`;
+#'   multi-basis diagnostics contain K × K × T arrays `D`, `C`, and `E`.
+#'   Coefficients for common regressors `Z` are not returned. Multi-basis beta
+#'   and SE matrices carry the canonical `trial_basis_map` attribute.
 #'
 #' @details
 #' The LSS approach fits a separate GLM for each trial, where each model includes:
 #' \itemize{
 #'   \item The trial of interest (from column i of X)
-#'   \item All other trials combined (sum of all other columns of X) 
-#'   \item Experimental regressors (Z matrix) - these are modeled to get beta estimates but not trial-wise
+#'   \item For a one-basis design, all other trials combined into one summed
+#'     regressor. A K-basis OASIS model uses a K-column summed block.
+#'   \item Common fixed regressors (Z matrix), whose coefficients are not returned
 #' }
 #' 
-#' If Nuisance regressors are provided, they are first projected out from both
-#' Y and X using standard linear regression residualization.
+#' If Nuisance regressors are provided, the rank-revealed combined span
+#' `cbind(Z, Nuisance)` is projected from both Y and X before fitting. Without a
+#' separate Nuisance matrix, Z remains explicitly in every trial-wise model.
 #' 
 #' When using method="oasis", the following options are available in the oasis list
 #' (see also \code{\link{oasis_options}} for a validated constructor):
@@ -62,7 +73,8 @@
 #'     \code{hrf}, and optionally \code{span}), and optionally \code{others} (list of other conditions
 #'     to be modeled as nuisances). When provided, X can be NULL and will be constructed automatically.
 #'   \item \code{K}: Explicit basis dimension for multi-basis HRF models (e.g., 3 for SPMG3).
-#'     If not provided, it's auto-detected from X dimensions or defaults to 1 for single-basis HRFs.
+#'     A raw multi-basis \code{X} also requires \code{ntrials} and
+#'     \code{trial_basis_map}; an ordinary raw \code{X} is otherwise interpreted as K=1.
 #'   \item \code{ridge_mode}: Either "fractional" (default) or "absolute". In absolute mode,
 #'     ridge_x and ridge_b are used directly as regularization parameters. In fractional mode,
 #'     they represent fractions of the mean design energy for adaptive regularization.
@@ -72,16 +84,18 @@
 #'   \item \code{ridge_b}: Ridge parameter for the aggregator regressor (default 0.05).
 #'     Controls
 #'     regularization strength for the sum of all other trials.
-#'   \item \code{return_se}: Logical, whether to return standard errors (default FALSE). When TRUE,
-#'     returns a list with \code{beta} (trial estimates) and \code{se} (standard errors) components.
+#'   \item \code{return_se}: Logical, whether to return model-based standard errors (default FALSE).
+#'     This is available only for unpenalized OASIS without estimated prewhitening.
 #'   \item \code{return_diag}: Logical, whether to return design diagnostics (default FALSE).
 #'     When TRUE, includes diagnostic information about the design matrix structure.
 #'   \item \code{block_cols}: Integer, voxel block size for memory-efficient processing (default 4096).
 #'     Larger values use more memory but may be faster for systems with sufficient RAM.
-#'   \item \code{ntrials}: Explicit number of trials (used when K > 1 to determine output dimensions).
-#'     If not provided, calculated as ncol(X) / K.
-#'   \item \code{hrf_grid}: Vector of HRF indices for grid-based HRF selection (advanced use).
-#'     Allows testing multiple HRF shapes simultaneously.
+#'   \item \code{ntrials}: Required number of trials when a raw K > 1 design is supplied.
+#'   \item \code{trial_basis_map}: Required data frame for a raw K > 1 design,
+#'     with one row per X column and fields \code{column}, \code{trial}, and \code{basis}.
+#'   \item \code{design_spec$hrf_grid}: Candidate HRFs for grid-based selection
+#'     within an event-built design. A top-level \code{oasis$hrf_grid} field is
+#'     invalid and rejected.
 #' }
 #'
 #' \strong{Prewhitening (temporal autocorrelation correction):}
@@ -122,13 +136,14 @@
 #'       \item{\code{"global"}}{(default) A single set of AR coefficients is
 #'         estimated from the median autocorrelation across all voxels.
 #'         Fast and usually adequate.}
-#'       \item{\code{"voxel"}}{Fit a separate AR model per voxel.  Most
-#'         accurate but slow; consider \code{"parcel"} instead.}
+#'       \item{\code{"voxel"}}{Fit a separate AR model per voxel. Shared-design
+#'         \code{lss()} calls reject this mode because each voxel would require
+#'         its own matching filtered design.}
 #'       \item{\code{"run"}}{Fit one AR model per run (requires \code{runs}).
 #'         Useful when noise structure differs between runs.}
 #'       \item{\code{"parcel"}}{Fit one AR model per parcel (requires
-#'         \code{parcels}). Good compromise between \code{"global"} and
-#'         \code{"voxel"}.}
+#'         \code{parcels}). Shared-design \code{lss()} calls reject this mode
+#'         until parcel-specific filtered designs are fitted separately.}
 #'     }
 #'   \item \code{runs}: Integer vector of length \code{nrow(Y)} giving
 #'     run/block labels. Required for \code{pooling = "run"} and recommended
@@ -156,10 +171,6 @@
 #'   # Per-run AR(1) for multi-run data
 #'   prewhiten = list(method = "ar", p = 1, pooling = "run",
 #'                    runs = blockids)
-#'
-#'   # Parcel-based AR with atlas labels
-#'   prewhiten = list(method = "ar", p = 1, pooling = "parcel",
-#'                    parcels = atlas_labels)
 #'
 #'   # Or use the validated constructor:
 #'   prewhiten = prewhiten_options(method = "ar", p = 1, pooling = "run",
@@ -215,7 +226,9 @@
 #'                               ridge_mode = "fractional"))
 #'
 #' result_with_se <- lss(Y, X, method = "oasis",
-#'                      oasis = list(return_se = TRUE))
+#'                      oasis = list(return_se = TRUE,
+#'                                   ridge_mode = "absolute",
+#'                                   ridge_x = 0, ridge_b = 0))
 #' beta_estimates <- result_with_se$beta
 #' standard_errors <- result_with_se$se
 #'
@@ -257,6 +270,11 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   
   method <- match.arg(method)
 
+  if (!is.null(prewhiten)) {
+    trusted_plan <- inherits(prewhiten, "fmrilss_internal_prewhiten")
+    prewhiten <- .resolve_prewhiten_options(prewhiten, internal = trusted_plan)
+  }
+
   if (method == "cpp_optimized") {
     block_size <- .as_positive_integer(block_size, "block_size")
   }
@@ -294,6 +312,10 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   if (!is.matrix(Y) || !is.numeric(Y)) {
     stop("Y must be a numeric matrix")
   }
+  if (nrow(Y) < 1L || ncol(Y) < 1L) {
+    stop("Y must have at least one timepoint and one voxel")
+  }
+  if (any(!is.finite(Y))) stop("Y contains non-finite values")
   if (!is.null(Z) && (!is.matrix(Z) || !is.numeric(Z) || nrow(Z) != nrow(Y))) {
     stop("Z must be a numeric matrix with the same number of rows as Y")
   }
@@ -305,9 +327,21 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   if (!is.matrix(X) || !is.numeric(X)) {
     stop("X must be a numeric matrix")
   }
+  if (nrow(X) < 1L || ncol(X) < 1L) {
+    stop("X must have at least one timepoint and one trial regressor")
+  }
+  if (any(!is.finite(X))) stop("X contains non-finite values")
+  if (!is.null(Z) && any(!is.finite(Z))) stop("Z contains non-finite values")
+  if (!is.null(Nuisance) && any(!is.finite(Nuisance))) {
+    stop("Nuisance contains non-finite values")
+  }
   if (nrow(Y) != nrow(X)) {
     stop("Y and X must have the same number of rows (timepoints)")
   }
+  trial_names <- .validate_or_default_names(colnames(X), ncol(X), "Trial_", "X column names")
+  voxel_names <- .validate_or_default_names(colnames(Y), ncol(Y), "Voxel_", "Y column names")
+  colnames(X) <- trial_names
+  colnames(Y) <- voxel_names
   
   # Set up default experimental regressors (intercept) if not provided
   if (is.null(Z)) {
@@ -352,17 +386,8 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   )
   
   # Add row and column names if available
-  if (!is.null(colnames(X))) {
-    rownames(result) <- colnames(X)
-  } else {
-    rownames(result) <- paste0("Trial_", 1:ncol(X))
-  }
-  
-  if (!is.null(colnames(Y))) {
-    colnames(result) <- colnames(Y)
-  } else {
-    colnames(result) <- paste0("Voxel_", 1:ncol(Y))
-  }
+  rownames(result) <- trial_names
+  colnames(result) <- voxel_names
   
   return(result)
 }
@@ -374,11 +399,17 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
     return(list(Y_residual = Y, X_residual = X))
   }
 
-  # Robust residualization via QR. Using qr.resid avoids NA propagation when
-  # X_nuisance is rank-deficient (e.g., duplicate intercept in Z and Nuisance).
+  # Robust residualization via the estimated-rank QR basis. qr.resid() may
+  # retain arbitrary completion directions for rank-deficient designs (for
+  # example, duplicate intercept or motion columns) and over-project.
   qrX <- qr(X_nuisance)
-  Y_residual <- qr.resid(qrX, Y)
-  X_residual <- qr.resid(qrX, X)
+  basis <- if (qrX$rank > 0L) {
+    qr.Q(qrX)[, seq_len(qrX$rank), drop = FALSE]
+  } else {
+    matrix(numeric(), nrow(X_nuisance), 0L)
+  }
+  Y_residual <- Y - basis %*% crossprod(basis, Y)
+  X_residual <- X - basis %*% crossprod(basis, X)
 
   list(Y_residual = Y_residual, X_residual = X_residual)
 }
@@ -475,8 +506,13 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
 .Q_project <- function(X) {
   ## returns Q = I − X (XᵀX)⁻¹ Xᵀ   without allocating I
   qrX <- qr(X)
-  Q   <- diag(nrow(X))              # allocate once
-  Q   <- Q - tcrossprod(qr.Q(qrX))   # Q = I – QQᵀ   (orthonormal Q from QR)
+  basis <- if (qrX$rank > 0L) {
+    qr.Q(qrX)[, seq_len(qrX$rank), drop = FALSE]
+  } else {
+    matrix(numeric(), nrow(X), 0L)
+  }
+  Q   <- diag(nrow(X))                # allocate once
+  Q   <- Q - tcrossprod(basis)        # Q = I – QQᵀ for col(X)
   Q
 }
 
@@ -628,8 +664,10 @@ get_data_matrix <- function(dset) {
 #'
 #' @details
 #' This function uses QR decomposition for numerical stability instead of
-#' computing the Moore-Penrose pseudoinverse directly. The resulting matrix
-#' Q can be applied to data to remove the influence of confound regressors.
+#' computing the Moore-Penrose pseudoinverse directly. Only the estimated-rank
+#' QR basis is used, so redundant confound columns do not over-project. The
+#' resulting matrix Q can be applied to data to remove the influence of
+#' confound regressors.
 #'
 #' @examples
 #' \donttest{

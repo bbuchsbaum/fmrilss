@@ -21,6 +21,8 @@
 ^scripts$
 ^\.rcmdcheck_result.*\.rds$
 ^\.planning($|/)
+^\.mote($|/)
+^vignettes/\.build\.timestamp$
 ^figure$
 ^\.albersdown\.bak($|/)
 ^fmrilss_.*\.tar\.gz$

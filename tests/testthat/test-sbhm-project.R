@@ -162,7 +162,7 @@ test_that("sbhm_project produces zero amplitudes when orthogonal", {
   expect_true(all(abs(amps) < 1e-12))
 })
 
-test_that("sbhm_project is finite when alpha_hat has zero columns", {
+test_that("sbhm_project rejects unidentified zero coordinates", {
   set.seed(902)
   r <- 3
   ntrials <- 6
@@ -171,7 +171,27 @@ test_that("sbhm_project is finite when alpha_hat has zero columns", {
   beta_rt <- array(rnorm(r * ntrials * V), dim = c(r, ntrials, V))
   alpha_hat <- matrix(0, nrow = r, ncol = V)
 
-  amps <- sbhm_project(beta_rt, alpha_hat)
-  expect_true(all(is.finite(amps)))
-  expect_true(all(amps == 0))
+  expect_error(
+    sbhm_project(beta_rt, alpha_hat),
+    "zero-norm voxel coordinate"
+  )
+})
+
+test_that("sbhm_project aligns named basis and voxel identities", {
+  beta_rt <- array(
+    c(2, 0, 4, 0, 0, 3, 0, 6),
+    dim = c(2, 2, 2),
+    dimnames = list(c("b1", "b2"), c("t1", "t2"), c("v1", "v2"))
+  )
+  alpha <- matrix(
+    c(1, 0, 0, 1), 2, 2,
+    dimnames = list(c("b1", "b2"), c("v1", "v2"))
+  )
+  reference <- sbhm_project(beta_rt, alpha)
+  permuted <- sbhm_project(beta_rt, alpha[c("b2", "b1"), c("v2", "v1")])
+  expect_identical(permuted, reference)
+  expect_error(sbhm_project(beta_rt, unname(alpha)), "names must be supplied")
+  duplicated <- alpha
+  colnames(duplicated) <- c("v1", "v1")
+  expect_error(sbhm_project(beta_rt, duplicated), "complete, unique, and identical")
 })

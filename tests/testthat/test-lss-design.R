@@ -52,6 +52,32 @@ test_that("lss_design basic functionality", {
   expect_true(is.matrix(beta))
 })
 
+test_that("lss_design rejects forged design specs and malformed controls", {
+  skip_if_not_installed("fmridesign")
+  skip_if_not_installed("fmrihrf")
+
+  sframe <- fmrihrf::sampling_frame(blocklens = 60, TR = 1)
+  trials <- data.frame(onset = c(5, 20, 35), run = 1)
+  emod <- fmridesign::event_model(
+    onset ~ fmridesign::trialwise(basis = "spmg1"),
+    data = trials,
+    block = ~run,
+    sampling_frame = sframe
+  )
+  Y <- matrix(rnorm(60 * 2), 60, 2)
+  forged <- list(
+    sframe = sframe,
+    cond = list(onsets = c(10, 30), hrf = fmrihrf::HRF_SPMG3)
+  )
+
+  expect_error(lss_design(Y, emod, validate = 1), "validate must be TRUE or FALSE")
+  expect_error(lss_design(Y, emod, oasis = list(K = 1.9)), "positive integer")
+  expect_error(
+    lss_design(Y, emod, oasis = list(design_spec = forged)),
+    "must not be supplied"
+  )
+})
+
 test_that("lss_design with baseline_model", {
   skip_if_not_installed("fmridesign")
   skip_if_not_installed("fmrihrf")
@@ -131,6 +157,45 @@ test_that("lss_design multi-run handling", {
 
   expect_equal(nrow(beta), 6)  # 6 trials across 2 runs
   expect_equal(ncol(beta), 50)
+})
+
+test_that("lss_design validates supplied scan-level block identities", {
+  skip_if_not_installed("fmridesign")
+  skip_if_not_installed("fmrihrf")
+
+  sframe <- fmrihrf::sampling_frame(blocklens = c(30, 30), TR = 1)
+  trials <- data.frame(onset = c(5, 15, 5, 15), run = rep(1:2, each = 2))
+  emod <- fmridesign::event_model(
+    onset ~ fmridesign::trialwise(basis = "spmg1"),
+    data = trials,
+    block = ~run,
+    sampling_frame = sframe
+  )
+  Y <- matrix(rnorm(60 * 2), 60, 2)
+
+  expect_error(lss_design(Y, emod, blockids = 1:2), "one run identifier per scan")
+  expect_error(lss_design(Y, emod, blockids = rep(c(1.9, 2.1), each = 30)),
+               "exact integer identifiers")
+  bad_na <- rep(1:2, each = 30)
+  bad_na[10] <- NA_integer_
+  expect_error(lss_design(Y, emod, blockids = bad_na), "exact integer identifiers")
+  expect_error(lss_design(Y, emod, blockids = rep(1:2, 30)), "run boundaries")
+  expect_error(
+    lss_design(Y, emod, blockids = c(rep(1, 29), rep(2, 31))),
+    "run boundaries"
+  )
+  expect_no_error(lss_design(Y, emod, blockids = rep(c(10, 20), each = 30)))
+
+  expect_error(
+    lss_design(
+      Y, emod,
+      prewhiten = list(method = "ar", p = 1, runs = rep(1:2, 30))
+    ),
+    "prewhiten\\$runs must match"
+  )
+  expect_no_error(
+    lss_design(Y, emod, prewhiten = list(method = "ar", p = 1))
+  )
 })
 
 test_that("lss_design multi-run with baseline", {
@@ -332,7 +397,7 @@ test_that("lss_design equivalent to manual lss() call", {
   Z <- as.matrix(cbind(bm_term_mats$drift, bm_term_mats$block))
   beta2 <- lss(Y, X, Z, method = "oasis")
 
-  expect_equal(beta1, beta2, tolerance = 1e-10)
+  expect_lt(max(abs(beta1 - beta2)), 1e-10)
 })
 
 test_that("lss_design with ridge regularization", {
@@ -406,10 +471,32 @@ test_that("lss_design warns about collinearity", {
 
   Y <- matrix(rnorm(50 * 10), 50, 10)
 
-  # May warn about collinearity
+  # The implicit OASIS default is already positively penalized.
   expect_warning(
     beta <- lss_design(Y, emod, method = "oasis"),
+    NA
+  )
+
+  # Explicit zero is still unpenalized and must not suppress the diagnostic.
+  expect_warning(
+    lss_design(
+      Y, emod, method = "oasis",
+      oasis = list(
+        ridge_mode = "absolute", ridge_x = 0, ridge_b = 0
+      )
+    ),
     "collinearity.*ridge",
     ignore.case = TRUE
+  )
+
+  # A genuinely positive penalty makes the warning's ridge suggestion moot.
+  expect_warning(
+    lss_design(
+      Y, emod, method = "oasis",
+      oasis = list(
+        ridge_mode = "fractional", ridge_x = 0.05, ridge_b = 0.05
+      )
+    ),
+    NA
   )
 })

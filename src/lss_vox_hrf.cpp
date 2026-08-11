@@ -35,7 +35,7 @@ NumericMatrix lss_engine_vox_hrf_cpp(
     const NumericMatrix& Y,              // n_time x n_vox
     const NumericMatrix& coeffs,         // K x n_vox
     const List& basis_convolved,         // length K; each n_time x n_trials
-    const NumericMatrix& Z               // n_time x pz (>=1; intercept allowed)
+    const NumericMatrix& Z               // n_time x pz (pz may be zero)
 ) {
   const int n_time   = Y.nrow();
   const int n_vox    = Y.ncol();
@@ -46,7 +46,6 @@ NumericMatrix lss_engine_vox_hrf_cpp(
   // Validate list and sizes early
   std::vector<NumericMatrix> Dk = as_matrix_list(basis_convolved, n_time, n_trials);
   if (coeffs.ncol() != n_vox) stop("coeffs must be [K x n_vox] with n_vox matching Y");
-  if (pz < 1) stop("Z must have at least one column (e.g., intercept).");
 
   NumericMatrix betas(n_trials, n_vox);
 

@@ -97,7 +97,10 @@ events_df <- data.frame(onset = onsets, duration = 0, condition = "A")
 
 message("Timing voxel-wise HRF estimation + LSS...")
 bench$voxhrf <- system.time({
-  est <- estimate_voxel_hrf(Y, events = events_df, basis = basis_vox, nuisance_regs = NULL)
+  est <- estimate_voxel_hrf(
+    Y, events = events_df, basis = basis_vox,
+    nuisance_regs = NULL, sframe = sframe
+  )
   betas_vox <- lss_with_hrf(Y, events = events_df, hrf_estimates = est, engine = "R", verbose = FALSE)
 })
 cat("Voxel-wise HRF time (sec): ", bench$voxhrf[[3]], "\n")
@@ -110,4 +113,3 @@ if (nrow(res_sbhm$amplitude) == nrow(amps_true)) {
   cors <- suppressWarnings(cor(as.vector(res_sbhm$amplitude), as.vector(amps_true)))
   cat(sprintf("Amplitude correlation (SBHM vs truth): %.3f\n", cors))
 }
-

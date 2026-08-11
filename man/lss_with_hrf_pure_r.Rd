@@ -13,7 +13,8 @@ lss_with_hrf_pure_r(
   Z = NULL,
   Nuisance = NULL,
   verbose = FALSE,
-  method = c("r", "cpp", "cpp_arma", "cpp_omp")
+  method = c("r", "cpp", "cpp_arma", "cpp_omp"),
+  basis_convolved = NULL
 )
 }
 \arguments{
@@ -38,6 +39,9 @@ if NULL, an intercept (column of 1s) is used.}
 \item{method}{character: "r" (default, pure R), "cpp" (C++ backend),
 "cpp_arma" (Armadillo backend), or "cpp_omp" (OpenMP parallel backend).
 Falls back automatically: cpp_omp -> cpp_arma -> cpp -> r.}
+
+\item{basis_convolved}{Optional precomputed list of K matrices, each
+n_time x n_trials. When supplied, the onset-index construction is bypassed.}
 }
 \value{
 numeric matrix (n_trials x n_vox) of trial-wise beta estimates
@@ -51,9 +55,8 @@ as a linear combination of K basis kernels sampled on the TR grid.
 \itemize{
 \item The trial-of-interest (Xi) and the sum of all other trials (Xother) are
 included in each per-trial GLM.
-\item If \code{Nuisance} is supplied, it is projected out of \strong{Y} and the trial
-regressors before LSS (standard residualization). Experimental regressors
-\code{Z} are \emph{not} residualized, matching \code{lss()} documentation.
+\item \code{Y} and the trial regressors are residualized against the complete
+\code{cbind(Z, Nuisance)} span, matching the full-model/FWL contract in \code{lss()}.
 \item If \code{Z} is \code{NULL}, an intercept-only design is used.
 }
 }

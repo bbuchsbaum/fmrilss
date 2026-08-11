@@ -16,7 +16,8 @@
 #'   - `extras`: optional list of additional arguments passed to `hrf_library`.
 #' @param library_H Optional precomputed TxK matrix of candidate HRFs, already
 #'   aligned to the TR grid `tgrid` (or `sframe`). Mutually exclusive with `library_spec`.
-#' @param r Target rank for the shared basis (default 6). Clipped to `min(T, K)`.
+#' @param r Positive integer target rank for the shared basis (default 6).
+#'   Requests above the numerical library rank are clipped with a warning.
 #' @param sframe Optional `fmrihrf::sampling_frame`, used to derive the global time
 #'   grid when `tgrid` is not provided.
 #' @param tgrid Optional numeric vector of global times (in seconds). If provided,
@@ -39,7 +40,8 @@
 #'   - `tgrid`: the global time grid used (seconds)
 #'   - `span`: span used for reference HRF
 #'   - `ref`: list with `alpha_ref` (length r) and `name`
-#'   - `meta`: list with `r`, `K`, `normalize`, `baseline`
+#'   - `meta`: rank, normalization, candidate identity, full singular values,
+#'     numerical rank, and retained total-energy fraction
 #'
 #' @examples
 #' \donttest{
@@ -70,6 +72,26 @@ sbhm_build <- function(library_spec = NULL,
                        shifts = NULL,
                        ref = c("mean","spmg1")) {
   ref <- match.arg(ref)
+  r_num <- suppressWarnings(as.numeric(r))
+  if (length(r_num) != 1L || !is.finite(r_num) || r_num < 1 || r_num != round(r_num)) {
+    stop("r must be one positive integer", call. = FALSE)
+  }
+  r <- as.integer(r_num)
+  span <- suppressWarnings(as.numeric(span))
+  if (length(span) != 1L || !is.finite(span) || span <= 0) {
+    stop("span must be one positive finite value", call. = FALSE)
+  }
+  if (!is.logical(normalize) || length(normalize) != 1L || is.na(normalize)) {
+    stop("normalize must be TRUE or FALSE", call. = FALSE)
+  }
+  if (!is.null(baseline) &&
+      (length(baseline) != 2L || !is.numeric(baseline) || any(!is.finite(baseline)) ||
+       baseline[1L] > baseline[2L])) {
+    stop("baseline must be NULL or two ordered finite times", call. = FALSE)
+  }
+  if (!is.null(shifts) && (!is.numeric(shifts) || any(!is.finite(shifts)))) {
+    stop("shifts must contain finite numeric values", call. = FALSE)
+  }
   if (is.null(library_spec) == is.null(library_H)) {
     stop("Provide exactly one of library_spec or library_H")
   }
@@ -80,6 +102,9 @@ sbhm_build <- function(library_spec = NULL,
   } else {
     if (is.null(sframe)) stop("Provide sframe or tgrid")
     times <- fmrihrf::samples(sframe, global = TRUE)
+  }
+  if (!length(times) || any(!is.finite(times)) || any(diff(times) <= 0)) {
+    stop("tgrid must be a finite, strictly increasing time grid", call. = FALSE)
   }
 
   # 1) Build/evaluate library matrix H (TxK)
@@ -111,6 +136,17 @@ sbhm_build <- function(library_spec = NULL,
     if (inherits(H, "Matrix")) H <- as.matrix(H)
     if (!is.matrix(H)) H <- cbind(H)
   }
+  if (!is.numeric(H) || nrow(H) < 1L || ncol(H) < 1L || any(!is.finite(H))) {
+    stop("the HRF library must be a non-empty finite numeric matrix", call. = FALSE)
+  }
+  candidate_names <- colnames(H)
+  if (is.null(candidate_names)) {
+    candidate_names <- paste0("candidate_", seq_len(ncol(H)))
+  }
+  if (anyNA(candidate_names) || any(!nzchar(candidate_names)) || anyDuplicated(candidate_names)) {
+    stop("HRF library candidate names must be complete and unique", call. = FALSE)
+  }
+  colnames(H) <- candidate_names
 
   # 2) Optional time-shifts: augment columns by linear interpolation on tgrid
   if (!is.null(shifts) && length(shifts) > 0) {
@@ -124,6 +160,11 @@ sbhm_build <- function(library_spec = NULL,
     }
     shifted_list <- lapply(shifts, function(s) add_shift_block(H, s))
     H <- cbind(H, do.call(cbind, shifted_list))
+    shifted_names <- unlist(lapply(shifts, function(s) {
+      paste0(candidate_names, "_shift_", format(s, trim = TRUE, scientific = FALSE))
+    }), use.names = FALSE)
+    candidate_names <- make.unique(c(candidate_names, shifted_names))
+    colnames(H) <- candidate_names
   }
 
   # 3) Baseline removal within window and L2 normalization per column
@@ -133,27 +174,40 @@ sbhm_build <- function(library_spec = NULL,
       H <- sweep(H, 2L, colMeans(H[idx, , drop = FALSE]), "-")
     }
   }
+  norms <- sqrt(colSums(H^2))
+  scale_ref <- max(norms, 1)
+  if (any(!is.finite(norms)) || any(norms <= .Machine$double.eps * scale_ref)) {
+    stop("every HRF library candidate must have non-zero finite energy", call. = FALSE)
+  }
   if (isTRUE(normalize)) {
-    H <- sweep(H, 2L, sqrt(colSums(H^2)) + 1e-8, "/")
+    H <- sweep(H, 2L, norms, "/")
   }
 
   # 4) SVD -> shared basis (rank r)
-  r_eff <- min(r, nrow(H), ncol(H))
-  sv <- La.svd(H, nu = r_eff, nv = r_eff)
-  # Sanity check: detect degenerate libraries (e.g., identical columns)
-  if (r_eff >= 2) {
-    if (!is.null(sv$d) && length(sv$d) >= 2) {
-      if (sv$d[2] <= (1e-8 * sv$d[1])) {
-        warning("HRF library appears nearly rank-1 (second singular value ~ 0). " ,
-                "Check that `library_spec$fun` closes over its parameters. For example:\n",
-                "  fun <- function(shape, rate) as_hrf(function(t) hrf_gamma(t, shape=shape, rate=rate), span=32)")
-      }
-    }
+  max_rank <- min(nrow(H), ncol(H))
+  sv_all <- La.svd(H, nu = min(r, max_rank), nv = min(r, max_rank))
+  tol <- max(dim(H)) * .Machine$double.eps * max(sv_all$d)
+  numerical_rank <- sum(sv_all$d > tol)
+  if (numerical_rank < 1L) {
+    stop("the HRF library has numerical rank zero", call. = FALSE)
   }
+  r_eff <- min(r, numerical_rank)
+  if (r > numerical_rank) {
+    warning(
+      sprintf("Requested rank %d exceeds the library numerical rank %d; using rank %d",
+              r, numerical_rank, r_eff),
+      call. = FALSE
+    )
+  }
+  sv <- sv_all
   B  <- sv$u[, seq_len(r_eff), drop = FALSE]
   S  <- sv$d[seq_len(r_eff)]
   Vt <- sv$vt[seq_len(r_eff), , drop = FALSE]
   A  <- diag(S, r_eff, r_eff) %*% Vt  # r x K
+  colnames(B) <- paste0("basis_", seq_len(r_eff))
+  names(S) <- colnames(B)
+  rownames(A) <- colnames(B)
+  colnames(A) <- candidate_names
 
   # 5) Reference alpha for shrinkage/matching
   alpha_ref <- switch(ref,
@@ -176,7 +230,18 @@ sbhm_build <- function(library_spec = NULL,
     A = A,
     tgrid = times,
     span = span,
-    ref = list(alpha_ref = as.numeric(alpha_ref), name = ref),
-    meta = list(r = r_eff, K = ncol(A), normalize = normalize, baseline = baseline)
+    ref = list(alpha_ref = stats::setNames(as.numeric(alpha_ref), colnames(B)), name = ref),
+    meta = list(
+      r = r_eff,
+      requested_r = r,
+      numerical_rank = numerical_rank,
+      K = ncol(A),
+      normalize = normalize,
+      normalization = if (isTRUE(normalize)) "discrete-l2" else "none",
+      baseline = baseline,
+      candidate_names = candidate_names,
+      singular_values_full = sv_all$d,
+      retained_energy_fraction = sum(S^2) / sum(sv_all$d^2)
+    )
   )
 }

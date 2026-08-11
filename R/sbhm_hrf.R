@@ -23,8 +23,16 @@
 #'
 #' @export
 sbhm_hrf <- function(B, tgrid, span) {
-  stopifnot(is.matrix(B), is.numeric(B), is.numeric(tgrid))
+  if (!is.matrix(B) || !is.numeric(B) || !is.numeric(tgrid) ||
+      nrow(B) < 2L || ncol(B) < 1L || any(!is.finite(B)) ||
+      any(!is.finite(tgrid))) {
+    stop("B and tgrid must define a non-empty finite numeric basis", call. = FALSE)
+  }
   if (nrow(B) != length(tgrid)) stop("nrow(B) must equal length(tgrid)")
+  span <- suppressWarnings(as.numeric(span))
+  if (length(span) != 1L || !is.finite(span) || span <= 0) {
+    stop("span must be one positive finite value", call. = FALSE)
+  }
   r <- ncol(B)
   tgrid <- as.numeric(tgrid)
 
@@ -33,6 +41,9 @@ sbhm_hrf <- function(B, tgrid, span) {
   if (!all(ord == seq_along(tgrid))) {
     tgrid <- tgrid[ord]
     B <- B[ord, , drop = FALSE]
+  }
+  if (any(diff(tgrid) <= 0)) {
+    stop("tgrid values must be unique and strictly increasing", call. = FALSE)
   }
   nT <- length(tgrid)
 

@@ -4,7 +4,7 @@
 \alias{.sbhm_prewhiten}
 \title{Optionally prewhiten Y, regs (stacked), intercept and nuisance}
 \usage{
-.sbhm_prewhiten(Y, regs, Zint, Nuisance, prewhiten)
+.sbhm_prewhiten(Y, regs, Zint, Nuisance, prewhiten, X_other = NULL)
 }
 \description{
 Optionally prewhiten Y, regs (stacked), intercept and nuisance
