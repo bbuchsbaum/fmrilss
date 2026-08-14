@@ -18,9 +18,9 @@ test_that("VOXHRF with AR1 whitening returns finite betas", {
         cond = list(onsets = onsets, hrf = fmrihrf::HRF_SPMG3, span = 30)
       ),
       hrf_mode = "voxel_ridge",
-      whiten = "ar1",
       lambda_shape = 0
-    )
+    ),
+    prewhiten = list(method = "ar", p = 1L)
   )
 
   expect_true(is.matrix(beta))
@@ -369,5 +369,7 @@ test_that("Manual AR(1) prewhiten equals internal prewhiten in VOXHRF path", {
   )
 
   # Compare within tight tolerance
-  expect_equal(beta_manual, beta_internal, tolerance = 1e-8)
+  expect_equal(as.numeric(beta_manual), as.numeric(beta_internal), tolerance = 1e-8)
+  expect_equal(dim(beta_manual), dim(beta_internal))
+  expect_s3_class(attr(beta_internal, "whiten_plan"), "fmriAR_plan")
 })

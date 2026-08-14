@@ -52,6 +52,32 @@ test_that("lss_design basic functionality", {
   expect_true(is.matrix(beta))
 })
 
+test_that("lss_design supports non-OASIS methods for one-basis designs", {
+  skip_if_not_installed("fmridesign")
+  skip_if_not_installed("fmrihrf")
+
+  set.seed(1602)
+  sframe <- fmrihrf::sampling_frame(blocklens = 80, TR = 2)
+  trials <- data.frame(onset = c(10, 30, 50), run = 1)
+  emod <- fmridesign::event_model(
+    onset ~ fmridesign::trialwise(basis = "spmg1"),
+    data = trials,
+    block = ~run,
+    sampling_frame = sframe
+  )
+  Y <- matrix(rnorm(80 * 3), 80, 3)
+  X <- as.matrix(fmridesign::design_matrix(emod))
+
+  via_model <- lss_design(Y, emod, method = "naive", validate = FALSE)
+  via_matrix <- lss(Y, X, method = "naive")
+  expect_equal(as.numeric(via_model), as.numeric(via_matrix), tolerance = 0)
+  expect_equal(dim(via_model), dim(via_matrix))
+  expect_error(
+    lss_design(Y, emod, method = "not-a-method"),
+    "lss_design\\(\\) method must be one of"
+  )
+})
+
 test_that("lss_design rejects forged design specs and malformed controls", {
   skip_if_not_installed("fmridesign")
   skip_if_not_installed("fmrihrf")
@@ -194,8 +220,9 @@ test_that("lss_design validates supplied scan-level block identities", {
     "prewhiten\\$runs must match"
   )
   expect_no_error(
-    lss_design(Y, emod, prewhiten = list(method = "ar", p = 1))
+    whitened <- lss_design(Y, emod, prewhiten = list(method = "ar", p = 1))
   )
+  expect_s3_class(attr(whitened, "whiten_plan"), "fmriAR_plan")
 })
 
 test_that("lss_design multi-run with baseline", {
@@ -310,6 +337,10 @@ test_that("lss_design detects multi-basis K", {
   )
 
   expect_equal(nrow(beta), 15)  # 5 trials × 3 basis = 15
+  expect_error(
+    lss_design(Y, emod, method = "naive"),
+    "multi-basis event models only with method = 'oasis'"
+  )
 })
 
 test_that("lss_design manual K specification", {
@@ -362,6 +393,12 @@ test_that("lss_design attaches metadata", {
   expect_true(!is.null(attr(beta, "baseline_model")))
   expect_true(!is.null(attr(beta, "sampling_frame")))
   expect_equal(attr(beta, "method"), "lss_design")
+
+  unchecked <- lss_design(Y, emod, bmodel, method = "oasis", validate = FALSE)
+  expect_identical(attr(unchecked, "event_model"), emod)
+  expect_identical(attr(unchecked, "baseline_model"), bmodel)
+  expect_identical(attr(unchecked, "sampling_frame"), sframe)
+  expect_equal(attr(unchecked, "method"), "lss_design")
 })
 
 test_that("lss_design equivalent to manual lss() call", {

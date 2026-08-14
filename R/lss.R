@@ -11,7 +11,10 @@
 #' @param X A numeric matrix of size n × T for a one-basis design, with one
 #'   column per trial. A raw K-basis OASIS design has n × (T K) columns and
 #'   additionally requires `oasis$K`, `oasis$ntrials`, and an explicit
-#'   `oasis$trial_basis_map`.
+#'   `oasis$trial_basis_map`. When `X` is an unmodified multi-basis
+#'   `fmridesign::design_matrix()` with one event term, its column metadata is
+#'   used to infer that identity contract and canonicalize rows to trial-major,
+#'   basis-within-trial order.
 #' @param Z A numeric matrix of size n × F representing common fixed regressors
 #'   included in every trial-wise model (e.g., intercept, condition effects,
 #'   block effects). Their coefficients are not returned. If NULL, an
@@ -35,7 +38,7 @@
 #' @param oasis A list of options for the OASIS method (ridge, SE, design
 #'   construction, etc.).
 #'   See Details and \code{\link{oasis_options}} for the full list.
-#'   \strong{Note:} \code{oasis$whiten} is deprecated and ignored.
+#'   \strong{Note:} \code{oasis$whiten} is deprecated and ignored with a warning.
 #'   Use the \code{prewhiten} parameter instead for all temporal whitening.
 #' @param stglmnet A list of options for the `method = "stglmnet"` backend.
 #'   See Details and \code{\link{stglmnet_options}} for the common fields.
@@ -50,7 +53,10 @@
 #'   One-basis diagnostics contain length-T vectors `d`, `alpha`, and `s`;
 #'   multi-basis diagnostics contain K × K × T arrays `D`, `C`, and `E`.
 #'   Coefficients for common regressors `Z` are not returned. Multi-basis beta
-#'   and SE matrices carry the canonical `trial_basis_map` attribute.
+#'   and SE matrices carry the canonical `trial_basis_map` attribute. When
+#'   estimated prewhitening is active, the actual fitted `fmriAR_plan` is
+#'   available as `attr(result, "whiten_plan")` (and on `result$beta` for
+#'   structured returns).
 #'
 #' @details
 #' The LSS approach fits a separate GLM for each trial, where each model includes:
@@ -74,7 +80,9 @@
 #'     to be modeled as nuisances). When provided, X can be NULL and will be constructed automatically.
 #'   \item \code{K}: Explicit basis dimension for multi-basis HRF models (e.g., 3 for SPMG3).
 #'     A raw multi-basis \code{X} also requires \code{ntrials} and
-#'     \code{trial_basis_map}; an ordinary raw \code{X} is otherwise interpreted as K=1.
+#'     \code{trial_basis_map}. An unmodified multi-basis
+#'     \code{fmridesign::design_matrix()} with one event term is recognized
+#'     from its metadata; an ordinary raw \code{X} is otherwise interpreted as K=1.
 #'   \item \code{ridge_mode}: Either "fractional" (default) or "absolute". In absolute mode,
 #'     ridge_x and ridge_b are used directly as regularization parameters. In fractional mode,
 #'     they represent fractions of the mean design energy for adaptive regularization.
@@ -158,6 +166,21 @@
 #'   \item \code{compute_residuals}: Logical (default TRUE). When TRUE,
 #'     OLS residuals from the full design are computed before fitting the
 #'     noise model.  Set to FALSE only if Y is already residualized.
+#'   \item \code{design}: Optional numeric design matrix whose projection
+#'     produced those residuals. Supplying it opts in to fmriAR's correction
+#'     for downward bias in residual autocovariance. When
+#'     \code{compute_residuals = TRUE}, it must span the same columns as the
+#'     full \code{X}/\code{Z}/\code{Nuisance} design, including the intercept
+#'     that fmrilss adds when none is already represented.
+#'   \item \code{acvf_correction}: Optional correction matrix or list of
+#'     matrices from \code{fmriAR::acvf_bias_matrix()}, used instead of
+#'     \code{design} when reusing a correction across datasets. The two fields
+#'     are mutually exclusive.
+#'   \item \code{correction_max_lag}: Positive integer lag budget used when
+#'     \code{design} is supplied (default 25). The correction is intended for
+#'     high-pass-filtered designs; without high-pass filtering, the required
+#'     lag budget can become impractically large. See
+#'     \code{fmriAR::fit_noise()} for details.
 #' }
 #'
 #' \strong{Typical prewhiten recipes:}
@@ -279,9 +302,12 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
     block_size <- .as_positive_integer(block_size, "block_size")
   }
   
-  # Drop legacy oasis$whiten: ignore and warn once if provided
+  # Drop legacy oasis$whiten: ignore it and warn if explicitly provided
   if (method == "oasis" && !is.null(oasis$whiten)) {
-    message("Note: oasis$whiten is deprecated and ignored. Use the prewhiten parameter instead.")
+    warning(
+      "oasis$whiten is deprecated and ignored; use the prewhiten parameter instead.",
+      call. = FALSE
+    )
   }
 
   # Fast-path to OASIS: it has its own coercion/validation and supports Matrix inputs
@@ -353,8 +379,10 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   .check_zero_regressors(X)
   
   # Step 1: Apply prewhitening if requested
+  whiten_plan <- NULL
   if (!is.null(prewhiten) && !is.null(prewhiten$method) && prewhiten$method != "none") {
     whitened <- .prewhiten_data(Y, X, Z, Nuisance, prewhiten)
+    whiten_plan <- whitened$whiten_plan
     Y <- whitened$Y_whitened
     X <- whitened$X_whitened
     if (!is.null(whitened$Z_whitened)) Z <- whitened$Z_whitened
@@ -388,8 +416,8 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   # Add row and column names if available
   rownames(result) <- trial_names
   colnames(result) <- voxel_names
-  
-  return(result)
+
+  .attach_whiten_plan(result, whiten_plan)
 }
 
 # Helper function to project out nuisance regressors

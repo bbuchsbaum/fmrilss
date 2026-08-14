@@ -14,8 +14,9 @@
 #'   and nuisance regressors. If NULL, basic baseline intercepts are
 #'   auto-injected: per-run intercepts derived from `blockids` (or the
 #'   sampling frame) are used to ensure proper baseline modeling.
-#' @param method LSS method to use. Currently only "oasis" is supported for
-#'   event_model integration.
+#' @param method LSS method to use. All methods accepted by [lss()] are
+#'   supported for a one-basis trialwise event model. Multi-basis event models
+#'   require `method = "oasis"`.
 #' @param oasis List of OASIS-specific options: ridge regularization
 #'   (\code{ridge_x}, \code{ridge_b}, \code{ridge_mode}), standard errors
 #'   (\code{return_se}), etc.  See \code{\link{oasis_options}} and the
@@ -41,8 +42,11 @@
 #'   (trial × basis)-by-voxel matrix for multi-basis HRFs. When OASIS
 #'   `return_diag = TRUE` or `return_se = TRUE`, returns
 #'   `list(beta, diag?, se?)` with the matrix/list shapes documented in [lss()].
+#'   Multi-basis rows are always trial-major with basis varying within trial.
 #'   Adapter metadata are attached to the returned object; multi-basis beta and
-#'   SE matrices retain the canonical `trial_basis_map`.
+#'   SE matrices retain the canonical `trial_basis_map`. With active estimated
+#'   prewhitening, `attr(result, "whiten_plan")` records the fitted
+#'   `fmriAR_plan`.
 #'
 #' @details
 #' \strong{Design Specification:}
@@ -89,6 +93,12 @@
 #' \code{prewhiten$runs} vector is allowed only when it encodes those same
 #' boundaries. The event model's \code{blockids} usually has one value per event
 #' and is not the required scan-level vector.
+#' Residual-autocovariance bias correction remains an explicit opt-in:
+#' \code{lss_design()} does not silently populate \code{prewhiten$design}.
+#' If supplied, it must be the assembled residual-forming design, including
+#' trialwise, fixed event, baseline, nuisance, and intercept columns as
+#' applicable. This preserves fmriAR's requirement that the correction design
+#' be the one that actually produced the residuals.
 #' See \code{\link{lss}} and \code{\link{prewhiten_options}} for full details.
 #'
 #' \strong{Validation:}
@@ -188,8 +198,18 @@ lss_design <- function(Y,
          call. = FALSE)
   }
 
-  # Currently only OASIS method supported
-  method <- match.arg(method, "oasis")
+  method_choices <- c(
+    "r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive",
+    "oasis", "stglmnet"
+  )
+  if (!is.character(method) || length(method) != 1L || is.na(method) ||
+      !method %in% method_choices) {
+    stop(
+      "lss_design() method must be one of: ",
+      paste(sprintf("'%s'", method_choices), collapse = ", "),
+      call. = FALSE
+    )
+  }
 
   # ---- Extract Components ----
 
@@ -252,6 +272,13 @@ lss_design <- function(Y,
   prepared <- .prepare_fmridesign_lss(event_dm, event_model)
   X <- prepared$X
   event_fixed <- prepared$fixed
+  if (prepared$K > 1L && method != "oasis") {
+    stop(
+      "lss_design() supports multi-basis event models only with ",
+      "method = 'oasis'; use OASIS or build a one-basis event model.",
+      call. = FALSE
+    )
+  }
   if (prepared$K > 1L) {
     if (!is.null(oasis$K) && oasis$K != prepared$K) {
       stop("oasis$K disagrees with the fmridesign basis metadata", call. = FALSE)

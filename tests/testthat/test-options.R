@@ -92,6 +92,7 @@ test_that("prewhiten_options creates valid options with defaults", {
 
   expect_s3_class(opts, "fmrilss_prewhiten_options")
   expect_s3_class(opts, "list")
+  expect_named(opts, fmrilss:::.prewhiten_option_names(internal = FALSE))
 
   # Check defaults
   expect_equal(opts$method, "none")
@@ -103,6 +104,9 @@ test_that("prewhiten_options creates valid options with defaults", {
   expect_null(opts$parcels)
   expect_equal(opts$exact_first, "ar1")
   expect_true(opts$compute_residuals)
+  expect_null(opts$design)
+  expect_null(opts$acvf_correction)
+  expect_equal(opts$correction_max_lag, 25L)
 })
 
 test_that("prewhiten_options accepts custom values", {
@@ -127,6 +131,18 @@ test_that("prewhiten_options accepts custom values", {
   expect_equal(opts$parcels, c(1, 2, 1, 2))
   expect_equal(opts$exact_first, "none")
   expect_false(opts$compute_residuals)
+})
+
+test_that("prewhiten_options accepts residual-bias correction controls", {
+  opts <- prewhiten_options(
+    method = "ar",
+    design = diag(4),
+    correction_max_lag = 12L
+  )
+
+  expect_equal(opts$design, diag(4))
+  expect_null(opts$acvf_correction)
+  expect_equal(opts$correction_max_lag, 12L)
 })
 
 test_that("prewhiten_options validates method", {
@@ -161,6 +177,7 @@ test_that("prewhiten_options rejects lossy or malformed controls", {
   expect_error(prewhiten_options(p_max = 5.9), "p_max must be a positive integer")
   expect_error(prewhiten_options(p = 1.5), "p must be a positive integer")
   expect_error(prewhiten_options(compute_residuals = 1), "must be TRUE or FALSE")
+  expect_error(prewhiten_options(correction_max_lag = 5.5), "positive integer")
   expect_error(prewhiten_options(method = "arma", q = 0), "q must be a positive integer")
   expect_error(prewhiten_options(method = "ar", q = 1), "q must be 0")
   expect_error(prewhiten_options(pooling = "run"), "runs must be supplied")
@@ -168,6 +185,28 @@ test_that("prewhiten_options rejects lossy or malformed controls", {
   expect_error(
     prewhiten_options(pooling = "parcel", parcels = c(1.9, 2.1)),
     "exact integer identifiers"
+  )
+  expect_error(
+    prewhiten_options(method = "ar", design = diag(3), acvf_correction = diag(3)),
+    "either design or acvf_correction"
+  )
+  expect_error(
+    prewhiten_options(method = "ar", design = matrix("x", 2, 2)),
+    "finite numeric matrix"
+  )
+  expect_error(
+    prewhiten_options(method = "ar", acvf_correction = matrix(1, 2, 3)),
+    "finite square numeric matrices"
+  )
+  expect_error(
+    prewhiten_options(method = "arma", q = 1L, design = diag(3)),
+    "requires method = 'ar'"
+  )
+  expect_error(
+    prewhiten_options(
+      method = "ar", pooling = "parcel", parcels = 1:3, design = diag(3)
+    ),
+    "requires pooling = 'global' or 'run'"
   )
 })
 
@@ -193,6 +232,21 @@ test_that("execution paths revalidate direct option lists", {
   expect_error(
     lss(Y, X, prewhiten = list(method = "ar", p = 1.5)),
     "prewhiten\\$p must be a positive integer"
+  )
+  expect_no_error(
+    lss(
+      Y, X, method = "oasis",
+      prewhiten = list(
+        method = "ar", p = 1L, design = cbind(1, X),
+        correction_max_lag = 5L
+      )
+    )
+  )
+  expect_no_error(
+    lss(
+      Y, X, method = "oasis",
+      prewhiten = prewhiten_options(method = "ar", p = 1L)
+    )
   )
 })
 

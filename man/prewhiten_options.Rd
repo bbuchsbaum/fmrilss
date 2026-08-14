@@ -13,7 +13,10 @@ prewhiten_options(
   runs = NULL,
   parcels = NULL,
   exact_first = c("ar1", "none"),
-  compute_residuals = TRUE
+  compute_residuals = TRUE,
+  design = NULL,
+  acvf_correction = NULL,
+  correction_max_lag = 25L
 )
 }
 \arguments{
@@ -36,6 +39,19 @@ for \code{pooling = "parcel"}; execution requires one value per voxel.}
 \item{exact_first}{\code{"ar1"} or \code{"none"}.}
 
 \item{compute_residuals}{Logical.}
+
+\item{design}{Optional numeric design matrix whose projection produced the
+residuals used to estimate the noise model. Supplying it opts in to
+fmriAR's residual-autocovariance bias correction. It must represent the
+same column space as the design used for residualization.}
+
+\item{acvf_correction}{Optional bias-correction matrix, or list of matrices,
+produced by \code{fmriAR::acvf_bias_matrix()}. This is a cached alternative to
+\code{design}; the two options are mutually exclusive.}
+
+\item{correction_max_lag}{Positive integer lag budget used when \code{design} is
+supplied. See \code{fmriAR::fit_noise()} for the computational and filtering
+requirements of the correction.}
 }
 \value{
 A list with class \code{"fmrilss_prewhiten_options"}.

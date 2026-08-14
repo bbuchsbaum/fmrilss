@@ -139,12 +139,12 @@ beta_full <- lss(Y, X, Z = Z, Nuisance = Nuisance,
 cat("  Dimensions:", dim(beta_full), "\n\n")
 
 # ============================================================================
-# Backward Compatibility
+# Deprecated syntax
 # ============================================================================
 
-# Example 11: Old syntax still works (with deprecation warning)
-cat("Example 11: Backward compatibility (old syntax)\n")
-suppressMessages({
+# Example 11: Old syntax warns and is ignored
+cat("Example 11: Deprecated syntax is ignored\n")
+suppressWarnings({
   beta_old <- lss(Y, X, method = "oasis",
                  oasis = list(whiten = "ar1"))
 })

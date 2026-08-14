@@ -209,3 +209,20 @@ test_that("sbhm_build validates library_spec structure", {
     "library_spec must be a list with elements fun"
   )
 })
+
+test_that("create_lwu_grid composes with sbhm_build library_spec", {
+  skip_if_not_installed("fmrihrf")
+
+  sframe <- fmrihrf::sampling_frame(blocklens = 60, TR = 1)
+  grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
+  expect_s3_class(grid, "fmrilss_lwu_grid")
+
+  built <- sbhm_build(
+    library_spec = list(fun = fmrihrf::hrf_lwu, pgrid = grid, span = 32),
+    r = 2,
+    sframe = sframe
+  )
+  expect_equal(nrow(built$B), 60L)
+  expect_equal(ncol(built$B), 2L)
+  expect_equal(built$meta$K, nrow(grid$parameters))
+})

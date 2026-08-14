@@ -9,7 +9,8 @@
 #' @param library_spec Either NULL (when `library_H` is provided) or a list with:
 #'   - `fun`: a function compatible with `fmrihrf::hrf_library(fun, pgrid, ...)`
 #'            that returns an `fmrihrf` HRF object when called with parameters.
-#'   - `pgrid`: a data.frame of parameter combinations (see examples).
+#'   - `pgrid`: a data.frame of parameter combinations (see examples), or the
+#'     object returned by [create_lwu_grid()].
 #'   - `span`: numeric, HRF span in seconds (default `span`).
 #'   - `precision`: numeric, evaluation precision (default 0.1 sec).
 #'   - `method`: evaluation method for `fmrihrf::evaluate()` (default "conv").
@@ -112,6 +113,26 @@ sbhm_build <- function(library_spec = NULL,
     H <- as.matrix(library_H)
     if (nrow(H) != length(times)) stop("library_H rows must match length(tgrid)")
   } else {
+    if (is.list(library_spec) &&
+        inherits(library_spec$pgrid, "fmrilss_lwu_grid")) {
+      library_spec$pgrid <- library_spec$pgrid$parameters
+      if (identical(library_spec$fun, fmrihrf::hrf_lwu)) {
+        lwu_span <- library_spec$span %||% span
+        library_spec$fun <- local({
+          span_value <- lwu_span
+          function(tau, sigma, rho) {
+            fmrihrf::as_hrf(
+              fmrihrf::hrf_lwu,
+              name = "LWU",
+              span = span_value,
+              params = list(
+                tau = tau, sigma = sigma, rho = rho, normalize = "height"
+              )
+            )
+          }
+        })
+      }
+    }
     if (!is.list(library_spec) || !is.function(library_spec$fun) || !is.data.frame(library_spec$pgrid)) {
       stop("library_spec must be a list with elements fun (function) and pgrid (data.frame)")
     }

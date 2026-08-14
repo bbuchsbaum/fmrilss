@@ -31,6 +31,7 @@
 #' @noRd
 .lss_oasis <- function(Y, X = NULL, Z = NULL, Nuisance = NULL, oasis = list(), prewhiten = NULL) {
   X_was_supplied <- !is.null(X)
+  X_col_metadata <- attr(X, "col_metadata")
   # Coerce to base matrices early & validate ---------------------------------
   Y        <- .as_base_matrix(Y)
   X        <- .as_base_matrix(X)
@@ -188,6 +189,16 @@
     }
   }
 
+  if (X_was_supplied && is.null(oasis$K) && is.null(oasis$ntrials) &&
+      is.null(oasis$trial_basis_map) && !is.null(X_col_metadata)) {
+    inferred <- .infer_fmridesign_trial_basis_map(X, X_col_metadata)
+    if (!is.null(inferred)) {
+      oasis$K <- inferred$K
+      oasis$ntrials <- inferred$ntrials
+      oasis$trial_basis_map <- inferred$map
+    }
+  }
+
   # 2) Detect K (basis dimension)
   K <- oasis$K %||% {
     detected_K <- 1L
@@ -229,8 +240,10 @@
   N_nuis <- cbind(if (!is.null(Z)) Z, if (!is.null(Nuisance)) Nuisance, X_other)
 
   # 4) Whitening hook (optional)
+  whiten_plan <- NULL
   if (!is.null(prewhiten) && is.list(prewhiten) && (prewhiten$method %||% "none") != "none") {
     whitened <- .prewhiten_data(Y, X, NULL, N_nuis, prewhiten)
+    whiten_plan <- whitened$whiten_plan
     Y <- whitened$Y_whitened
     X <- whitened$X_whitened
     if (!is.null(whitened$Nuisance_whitened)) N_nuis <- whitened$Nuisance_whitened
@@ -313,9 +326,14 @@
       basis_convolved = basis_convolved,
       Z = common_fit
     )
-    return(.set_beta_dimnames(beta_mat,
-                              trial_names = .default_trial_names(nrow(beta_mat)),
-                              voxel_names = colnames(Y)))
+    return(.attach_whiten_plan(
+      .set_beta_dimnames(
+        beta_mat,
+        trial_names = .default_trial_names(nrow(beta_mat)),
+        voxel_names = colnames(Y)
+      ),
+      whiten_plan
+    ))
   }
 
   # 5) Branch based on K
@@ -447,7 +465,7 @@
     out
   }
   if (!isTRUE(oasis$return_se) && !isTRUE(oasis$return_diag)) {
-    return(name_rows_cols(B))
+    return(.attach_whiten_plan(name_rows_cols(B), whiten_plan))
   }
 
   # 7) Optional: SEs and diagnostics
@@ -554,7 +572,63 @@
     }
     out$se <- name_rows_cols(out$se)
   }
-  out
+  .attach_whiten_plan(out, whiten_plan)
+}
+
+# Infer a safe multi-basis identity map from an unmodified fmridesign matrix.
+# fmridesign currently emits basis-major columns, while fmrilss returns the
+# canonical trial-major/basis-within-trial layout.
+.infer_fmridesign_trial_basis_map <- function(X, metadata) {
+  metadata <- as.data.frame(metadata)
+  if (nrow(metadata) != ncol(X) || !"term_tag" %in% names(metadata)) {
+    stop("fmridesign col_metadata is inconsistent with X", call. = FALSE)
+  }
+  term_tags <- unique(as.character(metadata$term_tag))
+  term_tags <- term_tags[!is.na(term_tags) & nzchar(term_tags)]
+  if (length(term_tags) != 1L) {
+    stop(
+      "A fmridesign X with multiple event terms cannot be inferred safely; ",
+      "use lss_design() or supply an explicit trial-only X and ",
+      "oasis$trial_basis_map.",
+      call. = FALSE
+    )
+  }
+  column_names <- colnames(X)
+  if (is.null(column_names) || anyNA(column_names) || any(!nzchar(column_names)) ||
+      anyDuplicated(column_names)) {
+    stop("fmridesign X must have complete unique column names", call. = FALSE)
+  }
+  has_basis_suffix <- grepl("_b[0-9]+$", column_names)
+  if (!any(has_basis_suffix)) return(NULL)
+  if (!all(has_basis_suffix)) {
+    stop("fmridesign X has inconsistent basis suffixes", call. = FALSE)
+  }
+  basis <- as.integer(sub("^.*_b([0-9]+)$", "\\1", column_names))
+  trial_name <- sub("_b[0-9]+$", "", column_names)
+  trial_levels <- unique(trial_name)
+  K <- max(basis)
+  if (!identical(sort(unique(basis)), seq_len(K))) {
+    stop("fmridesign X basis suffixes must cover a contiguous sequence", call. = FALSE)
+  }
+  trial <- match(trial_name, trial_levels)
+  key <- paste(trial, basis, sep = "\r")
+  if (anyDuplicated(key) || length(key) != length(trial_levels) * K) {
+    stop("fmridesign X does not form a complete trial-by-basis mapping", call. = FALSE)
+  }
+  output_name <- paste(
+    trial_name, paste0("basis_", basis), sep = ":"
+  )
+  list(
+    K = K,
+    ntrials = length(trial_levels),
+    map = data.frame(
+      column = column_names,
+      trial = trial,
+      basis = basis,
+      output_name = output_name,
+      stringsAsFactors = FALSE
+    )
+  )
 }
 
 .validate_oasis_trial_basis_map <- function(X, map, K, ntrials) {

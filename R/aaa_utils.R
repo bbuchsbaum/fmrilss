@@ -85,9 +85,22 @@
 .prewhiten_option_names <- function(internal = FALSE) {
   out <- c(
     "method", "p", "q", "p_max", "pooling", "runs", "parcels",
-    "exact_first", "compute_residuals"
+    "exact_first", "compute_residuals", "design", "acvf_correction",
+    "correction_max_lag"
   )
   if (internal) c(out, ".whiten_plan") else out
+}
+
+#' Attach the fitted fmriAR plan to an estimator result
+#' @keywords internal
+#' @noRd
+.attach_whiten_plan <- function(result, whiten_plan) {
+  if (is.null(whiten_plan)) return(result)
+  attr(result, "whiten_plan") <- whiten_plan
+  if (is.list(result) && !is.null(result$beta)) {
+    attr(result$beta, "whiten_plan") <- whiten_plan
+  }
+  result
 }
 
 #' Validate supplied identities or generate canonical names

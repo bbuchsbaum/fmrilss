@@ -19,7 +19,7 @@ Imports:
     MASS,
     Rcpp (>= 0.12.0),
     fmrihrf (>= 0.3.0),
-    fmriAR (>= 0.3.2),
+    fmriAR (>= 0.3.3),
     bigmemory,
     ggplot2,
     glmnet

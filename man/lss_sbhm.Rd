@@ -121,7 +121,7 @@ assembling an OASIS \code{design_spec}.
   sframe <- sampling_frame(blocklens = Tlen, TR = 1)
   H <- cbind(exp(-seq(0, 30, length.out = Tlen)/5),
              exp(-seq(0, 30, length.out = Tlen)/7))
-  sbhm <- sbhm_build(library_H = H, r = 4, sframe = sframe, normalize = TRUE)
+  sbhm <- sbhm_build(library_H = H, r = 2, sframe = sframe, normalize = TRUE)
   onsets <- seq(8, 140, by = 12)
   design_spec <- list(sframe = sframe, cond = list(onsets = onsets, duration = 0, span = 30))
   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
@@ -132,7 +132,7 @@ assembling an OASIS \code{design_spec}.
   Y[,1] <- Y[,1] + Xr \%*\% alpha_true
   out <- lss_sbhm(Y, sbhm, design_spec)
   out2 <- lss_sbhm(Y, sbhm, design_spec,
-                  match = list(topK = 3, soft_blend = TRUE),
+                  match = list(topK = 2, soft_blend = TRUE),
                   return = "amplitude")
   names(out)
 }

@@ -22,7 +22,8 @@ sbhm_build(
 \itemize{
 \item \code{fun}: a function compatible with \code{fmrihrf::hrf_library(fun, pgrid, ...)}
 that returns an \code{fmrihrf} HRF object when called with parameters.
-\item \code{pgrid}: a data.frame of parameter combinations (see examples).
+\item \code{pgrid}: a data.frame of parameter combinations (see examples), or the
+object returned by \code{\link[=create_lwu_grid]{create_lwu_grid()}}.
 \item \code{span}: numeric, HRF span in seconds (default \code{span}).
 \item \code{precision}: numeric, evaluation precision (default 0.1 sec).
 \item \code{method}: evaluation method for \code{fmrihrf::evaluate()} (default "conv").

@@ -153,7 +153,9 @@ generate_lwu_data <- function(onsets,
 #' @param n_tau Number of tau values in grid
 #' @param n_sigma Number of sigma values in grid
 #' @param n_rho Number of rho values in grid
-#' @return List of HRF models and their parameters
+#' @return An object of class `"fmrilss_lwu_grid"`: a list containing the HRF
+#'   functions in `hrfs` and their parameter data frame in `parameters`. The
+#'   object can be supplied directly as `library_spec$pgrid` to [sbhm_build()].
 #' @examples
 #' grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
 #' nrow(grid$parameters)
@@ -193,10 +195,10 @@ create_lwu_grid <- function(tau_range = c(4, 8),
     attr(hrf_list[[i]], "span") <- 30
   }
   
-  return(list(
-    hrfs = hrf_list,
-    parameters = grid
-  ))
+  structure(
+    list(hrfs = hrf_list, parameters = grid),
+    class = c("fmrilss_lwu_grid", "list")
+  )
 }
 
 #' Fit OASIS with HRF Grid Search

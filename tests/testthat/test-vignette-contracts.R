@@ -849,7 +849,7 @@ test_that("fmridesign mapping is trial-major and validation invariant", {
   opts <- list(K = 3, ntrials = nrow(trials), ridge_mode = "absolute",
                ridge_x = 0, ridge_b = 0)
   expect_warning(
-    checked <- suppressMessages(lss_design(
+  checked <- suppressMessages(lss_design(
       Y, emod, oasis = opts, validate = TRUE
     )),
     "collinearity.*ridge",
@@ -874,6 +874,19 @@ test_that("fmridesign mapping is trial-major and validation invariant", {
   direct <- lss(Y, X_direct, method = "oasis", oasis = opts)
   expect_lte(max(abs(checked - direct)), contract_tol(direct))
   expect_match(rownames(checked)[1], "basis_1$")
+
+  inferred <- lss(
+    Y,
+    fmridesign::design_matrix(emod),
+    method = "oasis",
+    oasis = list(ridge_mode = "absolute", ridge_x = 0, ridge_b = 0)
+  )
+  expect_lte(max(abs(checked - inferred)), contract_tol(inferred))
+  expect_identical(rownames(inferred), rownames(checked))
+  expect_identical(
+    attr(inferred, "trial_basis_map")[, c("trial", "basis", "output_name")],
+    attr(checked, "trial_basis_map")[, c("trial", "basis", "output_name")]
+  )
 })
 
 test_that("fmridesign non-trial event terms are fixed rather than targets", {

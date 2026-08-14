@@ -13,6 +13,18 @@
   - ARMA models: `method = "arma"` for complex noise structures
 - Works with all LSS methods (r_optimized, cpp_optimized, oasis, etc.)
 - Leverages fmriAR's optimized C++ implementations with OpenMP
+- `prewhiten_options()` now forwards fmriAR 0.3.3's opt-in residual-
+  autocovariance bias-correction controls: `design`, `acvf_correction`, and
+  `correction_max_lag`.
+- Applied prewhitening now records the fitted `fmriAR_plan` in the result's
+  `whiten_plan` attribute.
+- `lss()` recognizes an unmodified multi-basis fmridesign design matrix and
+  returns the same canonical trial-major rows as `lss_design()`.
+- `lss_design()` supports every `lss()` estimator for one-basis designs and
+  gives an actionable error when a non-OASIS estimator is used with a
+  multi-basis model.
+- `create_lwu_grid()` output now composes directly with
+  `sbhm_build(library_spec = list(..., pgrid = grid))`.
 
 #### API changes
 - The legacy `oasis$whiten` option is deprecated and ignored. Use the top-level
@@ -36,7 +48,7 @@
   blocked-loop contracts.
 
 ### Dependencies
-- Added `fmriAR (>= 0.3.2)` to Imports.
+- Added `fmriAR (>= 0.3.3)` to Imports.
 - Raised the minimum R version to 4.0, matching the imported `fmriAR` package.
 
 ### Maintenance

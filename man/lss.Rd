@@ -24,7 +24,10 @@ and V is the number of voxels/variables}
 \item{X}{A numeric matrix of size n × T for a one-basis design, with one
 column per trial. A raw K-basis OASIS design has n × (T K) columns and
 additionally requires \code{oasis$K}, \code{oasis$ntrials}, and an explicit
-\code{oasis$trial_basis_map}.}
+\code{oasis$trial_basis_map}. When \code{X} is an unmodified multi-basis
+\code{fmridesign::design_matrix()} with one event term, its column metadata is
+used to infer that identity contract and canonicalize rows to trial-major,
+basis-within-trial order.}
 
 \item{Z}{A numeric matrix of size n × F representing common fixed regressors
 included in every trial-wise model (e.g., intercept, condition effects,
@@ -53,7 +56,7 @@ processing, only applicable when \code{method = "cpp_optimized"}. Defaults to 96
 \item{oasis}{A list of options for the OASIS method (ridge, SE, design
 construction, etc.).
 See Details and \code{\link{oasis_options}} for the full list.
-\strong{Note:} \code{oasis$whiten} is deprecated and ignored.
+\strong{Note:} \code{oasis$whiten} is deprecated and ignored with a warning.
 Use the \code{prewhiten} parameter instead for all temporal whitening.}
 
 \item{stglmnet}{A list of options for the \code{method = "stglmnet"} backend.
@@ -71,7 +74,10 @@ OASIS \code{return_diag = TRUE} or \code{return_se = TRUE}, returns
 One-basis diagnostics contain length-T vectors \code{d}, \code{alpha}, and \code{s};
 multi-basis diagnostics contain K × K × T arrays \code{D}, \code{C}, and \code{E}.
 Coefficients for common regressors \code{Z} are not returned. Multi-basis beta
-and SE matrices carry the canonical \code{trial_basis_map} attribute.
+and SE matrices carry the canonical \code{trial_basis_map} attribute. When
+estimated prewhitening is active, the actual fitted \code{fmriAR_plan} is
+available as \code{attr(result, "whiten_plan")} (and on \code{result$beta} for
+structured returns).
 }
 \description{
 Computes trial-wise beta estimates using the Least Squares Separate approach
@@ -102,7 +108,9 @@ Must contain: \code{sframe} (sampling frame), \code{cond} (list with \code{onset
 to be modeled as nuisances). When provided, X can be NULL and will be constructed automatically.
 \item \code{K}: Explicit basis dimension for multi-basis HRF models (e.g., 3 for SPMG3).
 A raw multi-basis \code{X} also requires \code{ntrials} and
-\code{trial_basis_map}; an ordinary raw \code{X} is otherwise interpreted as K=1.
+\code{trial_basis_map}. An unmodified multi-basis
+\code{fmridesign::design_matrix()} with one event term is recognized
+from its metadata; an ordinary raw \code{X} is otherwise interpreted as K=1.
 \item \code{ridge_mode}: Either "fractional" (default) or "absolute". In absolute mode,
 ridge_x and ridge_b are used directly as regularization parameters. In fractional mode,
 they represent fractions of the mean design energy for adaptive regularization.
@@ -186,6 +194,21 @@ likelihood; \code{"none"} drops the first observation instead.
 \item \code{compute_residuals}: Logical (default TRUE). When TRUE,
 OLS residuals from the full design are computed before fitting the
 noise model.  Set to FALSE only if Y is already residualized.
+\item \code{design}: Optional numeric design matrix whose projection
+produced those residuals. Supplying it opts in to fmriAR's correction
+for downward bias in residual autocovariance. When
+\code{compute_residuals = TRUE}, it must span the same columns as the
+full \code{X}/\code{Z}/\code{Nuisance} design, including the intercept
+that fmrilss adds when none is already represented.
+\item \code{acvf_correction}: Optional correction matrix or list of
+matrices from \code{fmriAR::acvf_bias_matrix()}, used instead of
+\code{design} when reusing a correction across datasets. The two fields
+are mutually exclusive.
+\item \code{correction_max_lag}: Positive integer lag budget used when
+\code{design} is supplied (default 25). The correction is intended for
+high-pass-filtered designs; without high-pass filtering, the required
+lag budget can become impractically large. See
+\code{fmriAR::fit_noise()} for details.
 }
 
 \strong{Typical prewhiten recipes:}

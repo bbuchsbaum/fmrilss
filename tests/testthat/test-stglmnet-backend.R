@@ -57,6 +57,29 @@ test_that("stglmnet return_fit exposes selected lambda and beta matrix", {
   expect_true(inherits(fit$cv, "fmrilss_cv_stglmnet"))
 })
 
+test_that("stglmnet records the fitted prewhitening plan", {
+  skip_if_not_installed("glmnet")
+  skip_if_not_installed("fmriAR", minimum_version = "0.3.3")
+
+  set.seed(4163)
+  n <- 80
+  p <- 6
+  X <- matrix(rnorm(n * p), n, p)
+  Y <- matrix(rnorm(n * 2), n, 2)
+  result <- lss(
+    Y,
+    X,
+    method = "stglmnet",
+    stglmnet = stglmnet_options(
+      mode = "fixed", alpha = 0, lambda = 0.1, return_fit = TRUE
+    ),
+    prewhiten = list(method = "ar", p = 1L)
+  )
+
+  expect_s3_class(attr(result, "whiten_plan"), "fmriAR_plan")
+  expect_identical(attr(result$beta, "whiten_plan"), attr(result, "whiten_plan"))
+})
+
 test_that("pool_to_mean preserves ridge solutions under isotropic penalties", {
   skip_if_not_installed("glmnet")
 

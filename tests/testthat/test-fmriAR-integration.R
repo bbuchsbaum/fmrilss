@@ -34,6 +34,83 @@ test_that("fmriAR integration works with basic AR(1) whitening", {
   expect_equal(nrow(result), n_trials)
   expect_equal(ncol(result), n_voxels)
   expect_true(all(is.finite(result)))
+  expect_s3_class(attr(result, "whiten_plan"), "fmriAR_plan")
+  expect_identical(attr(result, "whiten_plan")$order, c(p = 1L, q = 0L))
+})
+
+test_that("fmriAR residual-bias correction controls are forwarded", {
+  skip_if_not_installed("fmriAR", minimum_version = "0.3.3")
+
+  set.seed(1515)
+  n_time <- 120L
+  n_voxels <- 6L
+  design <- cbind(
+    intercept = 1,
+    poly(seq_len(n_time), degree = 3),
+    matrix(rnorm(n_time * 12L), nrow = n_time)
+  )
+
+  raw <- matrix(0, nrow = n_time, ncol = n_voxels)
+  innovations <- matrix(rnorm(n_time * n_voxels), nrow = n_time)
+  raw[1, ] <- innovations[1, ]
+  for (i in 2:n_time) {
+    raw[i, ] <- 0.5 * raw[i - 1L, ] + innovations[i, ]
+  }
+  resid <- qr.resid(qr(design), raw)
+
+  expected <- fmriAR::fit_noise(
+    resid = resid,
+    method = "ar",
+    p = 1L,
+    p_max = 6L,
+    exact_first = "ar1",
+    pooling = "global",
+    design = design,
+    correction_max_lag = 8L
+  )
+  uncorrected <- fmriAR::fit_noise(
+    resid = resid,
+    method = "ar",
+    p = 1L,
+    p_max = 6L,
+    exact_first = "ar1",
+    pooling = "global"
+  )
+  observed <- fmrilss:::.prewhiten_data(
+    resid,
+    prewhiten = list(
+      method = "ar",
+      p = 1L,
+      compute_residuals = FALSE,
+      design = design,
+      correction_max_lag = 8L
+    )
+  )$whiten_plan
+
+  expect_equal(observed$phi, expected$phi, tolerance = 0)
+  expect_gt(abs(observed$phi[[1L]] - uncorrected$phi[[1L]]), 1e-6)
+
+  correction <- fmriAR::acvf_bias_matrix(design, max_lag = 8L)
+  cached_expected <- fmriAR::fit_noise(
+    resid = resid,
+    method = "ar",
+    p = 1L,
+    p_max = 6L,
+    exact_first = "ar1",
+    pooling = "global",
+    acvf_correction = correction
+  )
+  cached_observed <- fmrilss:::.prewhiten_data(
+    resid,
+    prewhiten = list(
+      method = "ar",
+      p = 1L,
+      compute_residuals = FALSE,
+      acvf_correction = correction
+    )
+  )$whiten_plan
+
+  expect_equal(cached_observed$phi, cached_expected$phi, tolerance = 0)
 })
 
 test_that("omitted prewhitening method resolves to documented AR default", {
@@ -212,14 +289,9 @@ test_that("fmriAR integration with OASIS method", {
   expect_equal(nrow(result), n_trials)
   expect_equal(ncol(result), n_voxels)
 
-  # Compare with old syntax (should give similar results)
-  result_old <- lss(Y, X, method = "oasis",
-                   oasis = list(whiten = "ar1"))
-  expect_true(is.matrix(result_old))
-  expect_equal(dim(result), dim(result_old))
 })
 
-test_that("backward compatibility with oasis$whiten is maintained", {
+test_that("legacy oasis$whiten warns and is ignored", {
   skip_if_not_installed("fmriAR")
 
   set.seed(987)
@@ -236,13 +308,12 @@ test_that("backward compatibility with oasis$whiten is maintained", {
     }
   }
 
-  # Old syntax should still work (with deprecation message)
-  expect_message(
+  unwhitened <- lss(Y, X, method = "oasis")
+  expect_warning(
     result <- lss(Y, X, method = "oasis", oasis = list(whiten = "ar1")),
-    "deprecated"
+    "deprecated and ignored"
   )
-  expect_true(is.matrix(result))
-  expect_equal(nrow(result), n_trials)
+  expect_equal(result, unwhitened, tolerance = 0)
 })
 
 test_that("prewhiten parameter works with all LSS methods", {

@@ -27,7 +27,9 @@ create_lwu_grid(
 \item{n_rho}{Number of rho values in grid}
 }
 \value{
-List of HRF models and their parameters
+An object of class \code{"fmrilss_lwu_grid"}: a list containing the HRF
+functions in \code{hrfs} and their parameter data frame in \code{parameters}. The
+object can be supplied directly as \code{library_spec$pgrid} to \code{\link[=sbhm_build]{sbhm_build()}}.
 }
 \description{
 Generates a grid of LWU HRF models with varying parameters

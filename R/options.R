@@ -207,6 +207,16 @@ oasis_options <- function(
 #'   for `pooling = "parcel"`; execution requires one value per voxel.
 #' @param exact_first `"ar1"` or `"none"`.
 #' @param compute_residuals Logical.
+#' @param design Optional numeric design matrix whose projection produced the
+#'   residuals used to estimate the noise model. Supplying it opts in to
+#'   fmriAR's residual-autocovariance bias correction. It must represent the
+#'   same column space as the design used for residualization.
+#' @param acvf_correction Optional bias-correction matrix, or list of matrices,
+#'   produced by `fmriAR::acvf_bias_matrix()`. This is a cached alternative to
+#'   `design`; the two options are mutually exclusive.
+#' @param correction_max_lag Positive integer lag budget used when `design` is
+#'   supplied. See `fmriAR::fit_noise()` for the computational and filtering
+#'   requirements of the correction.
 #'
 #' @return A list with class `"fmrilss_prewhiten_options"`.
 #' @examples
@@ -222,7 +232,10 @@ prewhiten_options <- function(
   runs = NULL,
   parcels = NULL,
   exact_first = c("ar1", "none"),
-  compute_residuals = TRUE
+  compute_residuals = TRUE,
+  design = NULL,
+  acvf_correction = NULL,
+  correction_max_lag = 25L
 ) {
   method <- match.arg(method)
   pooling <- match.arg(pooling)
@@ -236,6 +249,9 @@ prewhiten_options <- function(
   q <- .as_nonnegative_integer(q, "q")
   p_max <- .as_positive_integer(p_max, "p_max")
   compute_residuals <- .as_scalar_logical(compute_residuals, "compute_residuals")
+  correction_max_lag <- .as_positive_integer(
+    correction_max_lag, "correction_max_lag"
+  )
   if (method == "arma" && q == 0L) {
     stop("q must be a positive integer when method = 'arma'", call. = FALSE)
   }
@@ -260,8 +276,14 @@ prewhiten_options <- function(
     runs = runs,
     parcels = parcels,
     exact_first = exact_first,
-    compute_residuals = compute_residuals
+    compute_residuals = compute_residuals,
+    design = design,
+    acvf_correction = acvf_correction,
+    correction_max_lag = correction_max_lag
   )
+  opts <- .resolve_prewhiten_options(opts, internal = FALSE)
+  option_names <- .prewhiten_option_names(internal = FALSE)
+  opts <- stats::setNames(lapply(option_names, function(nm) opts[[nm]]), option_names)
   class(opts) <- c("fmrilss_prewhiten_options", "list")
   opts
 }

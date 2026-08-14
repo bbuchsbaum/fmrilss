@@ -29,8 +29,9 @@ and nuisance regressors. If NULL, basic baseline intercepts are
 auto-injected: per-run intercepts derived from \code{blockids} (or the
 sampling frame) are used to ensure proper baseline modeling.}
 
-\item{method}{LSS method to use. Currently only "oasis" is supported for
-event_model integration.}
+\item{method}{LSS method to use. All methods accepted by \code{\link[=lss]{lss()}} are
+supported for a one-basis trialwise event model. Multi-basis event models
+require \code{method = "oasis"}.}
 
 \item{oasis}{List of OASIS-specific options: ridge regularization
 (\code{ridge_x}, \code{ridge_b}, \code{ridge_mode}), standard errors
@@ -62,8 +63,11 @@ Normally a trial-by-voxel beta matrix, or a
 (trial × basis)-by-voxel matrix for multi-basis HRFs. When OASIS
 \code{return_diag = TRUE} or \code{return_se = TRUE}, returns
 \verb{list(beta, diag?, se?)} with the matrix/list shapes documented in \code{\link[=lss]{lss()}}.
+Multi-basis rows are always trial-major with basis varying within trial.
 Adapter metadata are attached to the returned object; multi-basis beta and
-SE matrices retain the canonical \code{trial_basis_map}.
+SE matrices retain the canonical \code{trial_basis_map}. With active estimated
+prewhitening, \code{attr(result, "whiten_plan")} records the fitted
+\code{fmriAR_plan}.
 }
 \description{
 Perform Least Squares Separate (LSS) analysis using event_model and
@@ -116,6 +120,12 @@ infers the scan-level run segmentation from the sampling frame. An explicit
 \code{prewhiten$runs} vector is allowed only when it encodes those same
 boundaries. The event model's \code{blockids} usually has one value per event
 and is not the required scan-level vector.
+Residual-autocovariance bias correction remains an explicit opt-in:
+\code{lss_design()} does not silently populate \code{prewhiten$design}.
+If supplied, it must be the assembled residual-forming design, including
+trialwise, fixed event, baseline, nuisance, and intercept columns as
+applicable. This preserves fmriAR's requirement that the correction design
+be the one that actually produced the residuals.
 See \code{\link{lss}} and \code{\link{prewhiten_options}} for full details.
 
 \strong{Validation:}

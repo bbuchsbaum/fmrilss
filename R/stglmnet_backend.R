@@ -787,8 +787,10 @@
     }
   }
 
+  whiten_plan <- NULL
   if (!is.null(prewhiten_spec) && !is.null(prewhiten_spec$method) && prewhiten_spec$method != "none") {
     whitened <- .prewhiten_data(Y, X, Z, Nuisance, prewhiten_spec)
+    whiten_plan <- whitened$whiten_plan
     Y <- whitened$Y_whitened
     X <- whitened$X_whitened
     if (!is.null(whitened$Z_whitened)) Z <- whitened$Z_whitened
@@ -870,11 +872,14 @@
   colnames(beta) <- voxel_names[seq_len(ncol(beta))]
 
   if (!isTRUE(opts$return_fit)) {
-    return(beta)
+    return(.attach_whiten_plan(beta, whiten_plan))
   }
 
-  structure(
-    list(beta = beta, fit = fit_obj, cv = cv_obj, lambda = s, mode = opts$mode),
-    class = "fmrilss_stglmnet_result"
+  .attach_whiten_plan(
+    structure(
+      list(beta = beta, fit = fit_obj, cv = cv_obj, lambda = s, mode = opts$mode),
+      class = "fmrilss_stglmnet_result"
+    ),
+    whiten_plan
   )
 }

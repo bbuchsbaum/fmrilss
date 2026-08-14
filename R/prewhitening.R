@@ -20,6 +20,9 @@
 #'     \item{parcels}{Integer vector: Parcel memberships for parcel-based pooling}
 #'     \item{exact_first}{Character: "ar1" or "none" for exact AR(1) scaling}
 #'     \item{compute_residuals}{Logical: Whether to compute residuals first (default TRUE)}
+#'     \item{design}{Optional design matrix for residual-autocovariance bias correction}
+#'     \item{acvf_correction}{Optional cached bias-correction matrix or list of matrices}
+#'     \item{correction_max_lag}{Positive integer lag budget for bias correction}
 #'   }
 #' @return List containing:
 #'   \describe{
@@ -37,7 +40,8 @@
     prewhiten, .prewhiten_option_names(internal = internal), "prewhiten"
   )
   required_if_named <- c(
-    "method", "p", "q", "p_max", "pooling", "exact_first", "compute_residuals"
+    "method", "p", "q", "p_max", "pooling", "exact_first",
+    "compute_residuals", "correction_max_lag"
   )
   null_fields <- required_if_named[
     required_if_named %in% names(prewhiten) &
@@ -58,7 +62,10 @@
     runs = NULL,
     parcels = NULL,
     exact_first = "ar1",
-    compute_residuals = TRUE
+    compute_residuals = TRUE,
+    design = NULL,
+    acvf_correction = NULL,
+    correction_max_lag = 25L
   )
 
   # Merge with user options
@@ -75,6 +82,9 @@
   }
   opts$q <- .as_nonnegative_integer(opts$q, "prewhiten$q")
   opts$p_max <- .as_positive_integer(opts$p_max, "prewhiten$p_max")
+  opts$correction_max_lag <- .as_positive_integer(
+    opts$correction_max_lag, "prewhiten$correction_max_lag"
+  )
   if (opts$method == "arma" && opts$q == 0L) {
     stop("prewhiten$q must be positive when method = 'arma'", call. = FALSE)
   }
@@ -96,6 +106,54 @@
   }
   if (!is.null(opts$parcels)) {
     opts$parcels <- .as_integer_ids(opts$parcels, "prewhiten$parcels")
+  }
+  if (!is.null(opts$design) && !is.null(opts$acvf_correction)) {
+    stop(
+      "prewhiten must supply either design or acvf_correction, not both",
+      call. = FALSE
+    )
+  }
+  if (!is.null(opts$design)) {
+    opts$design <- .as_base_matrix(opts$design)
+    valid_design <- is.matrix(opts$design) && is.numeric(opts$design) &&
+      nrow(opts$design) > 0L && ncol(opts$design) > 0L &&
+      !anyNA(opts$design) && all(is.finite(opts$design))
+    if (!valid_design) {
+      stop("prewhiten$design must be a finite numeric matrix", call. = FALSE)
+    }
+    storage.mode(opts$design) <- "double"
+  }
+  if (!is.null(opts$acvf_correction)) {
+    correction_list <- if (is.matrix(opts$acvf_correction)) {
+      list(opts$acvf_correction)
+    } else if (is.list(opts$acvf_correction) && length(opts$acvf_correction)) {
+      opts$acvf_correction
+    } else {
+      stop(
+        "prewhiten$acvf_correction must be a matrix or non-empty list of matrices",
+        call. = FALSE
+      )
+    }
+    valid_correction <- vapply(correction_list, function(x) {
+      is.matrix(x) && is.numeric(x) && nrow(x) > 0L && nrow(x) == ncol(x) &&
+        !anyNA(x) && all(is.finite(x))
+    }, logical(1))
+    if (!all(valid_correction)) {
+      stop(
+        "prewhiten$acvf_correction must contain finite square numeric matrices",
+        call. = FALSE
+      )
+    }
+  }
+  correction_requested <- !is.null(opts$design) || !is.null(opts$acvf_correction)
+  if (correction_requested && opts$method != "ar") {
+    stop("prewhiten residual-bias correction requires method = 'ar'", call. = FALSE)
+  }
+  if (correction_requested && !opts$pooling %in% c("global", "run")) {
+    stop(
+      "prewhiten residual-bias correction requires pooling = 'global' or 'run'",
+      call. = FALSE
+    )
   }
   opts
 }
@@ -123,6 +181,10 @@
   if (!is.matrix(Y)) Y <- as.matrix(Y)
   n_time <- nrow(Y)
   n_vox <- ncol(Y)
+
+  if (!is.null(opts$design) && nrow(opts$design) != n_time) {
+    stop("prewhiten$design must have one row per timepoint in Y", call. = FALSE)
+  }
 
   pool_mode <- opts$pooling
   if (pool_mode == "run" && length(opts$runs) != n_time) {
@@ -220,7 +282,10 @@
       p_max = opts$p_max,
       exact_first = opts$exact_first,
       pooling = opts$pooling,
-      parcels = opts$parcels
+      parcels = opts$parcels,
+      design = opts$design,
+      acvf_correction = opts$acvf_correction,
+      correction_max_lag = opts$correction_max_lag
     )
   }
 
