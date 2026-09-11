@@ -582,8 +582,16 @@ check_tr <- function(TR) {
     duration = c(0, 1.2, 0, 2.1, 0.6),
     condition = "A"
   )
-  hrf_check <- make_unit_peak_hrf(0, 1)
-  X_check <- trial_design(events_check, hrf_check, sframe_check)
+  # Match the certified vignette-contract fixture: build the public pipeline's
+  # trial basis, then scale by the unit-peak coefficient so the generating
+  # design agrees with estimate_voxel_hrf()/lss_with_hrf().
+  basis_check <- HRF_SPMG1
+  built_check <- fmrilss:::.voxhrf_trial_basis(
+    events_check, basis_check, sframe_check
+  )
+  shape_check <- fmrilss:::.normalize_voxel_hrf_coefficients(
+    matrix(1, 1, 1), basis_check, span = 30
+  )$coefficients[1, 1]
   truth_check <- cbind(rep(2, nrow(events_check)), rep(4, nrow(events_check)))
   fixed_check <- cbind(trend = seq(-1, 1, length.out = n_time_check))
   nuisance_check <- cbind(
@@ -591,13 +599,13 @@ check_tr <- function(TR) {
     cosine = cos(seq_len(n_time_check) / 17)
   )
   common_check <- cbind(1, fixed_check, nuisance_check)
-  response_check <- X_check %*% truth_check +
+  response_check <- (built_check$X * shape_check) %*% truth_check +
     common_check %*% matrix(
       rnorm(ncol(common_check) * 2), ncol(common_check), 2
     )
   colnames(response_check) <- c("voxel_2", "voxel_4")
   estimate_check <- estimate_voxel_hrf(
-    response_check, events_check, HRF_SPMG1,
+    response_check, events_check, basis_check,
     nuisance_regs = nuisance_check, fixed_regs = fixed_check,
     sframe = sframe_check
   )
