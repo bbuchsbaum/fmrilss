@@ -23,10 +23,12 @@ static int glms_threads(int n) {
 
 // numpy.interp(x, xp, fp) for increasing xp (ties resolved to the last match).
 static double np_interp(double x, const double* xp, const double* fp, int n) {
-  if (std::isnan(x)) return NA_REAL;
-  if (x <= xp[0]) return (x == xp[0] || n == 1) ? fp[0] : fp[0];
+  if (n == 0 || !std::isfinite(x) || !std::isfinite(xp[0]) ||
+      !std::isfinite(xp[n - 1])) return NA_REAL;
+  if (x < xp[0] || n == 1) return fp[0];
   if (x >= xp[n - 1]) return fp[n - 1];
   int j = int(std::upper_bound(xp, xp + n, x) - xp) - 1;  // xp[j] <= x < xp[j+1]
+  if (j < 0 || j >= n - 1) return NA_REAL;
   if (xp[j] == x) return fp[j];
   const double slope = (fp[j + 1] - fp[j]) / (xp[j + 1] - xp[j]);
   return slope * (x - xp[j]) + fp[j];
@@ -42,6 +44,7 @@ NumericMatrix glms_frac_alpha_grid(const NumericMatrix& newlen,
                                    const NumericVector& fracs,
                                    int n_threads = 1) {
   const int G = newlen.nrow(), V = newlen.ncol(), F = fracs.size();
+  if (G == 0 || grid.size() != G) Rcpp::stop("grid must match the nonempty rows of newlen");
   arma::mat res(F, V);
   std::vector<double> fp(G);
   for (int g = 0; g < G; ++g) fp[g] = std::log(1.0 + grid[G - 1 - g]);
@@ -51,9 +54,15 @@ NumericMatrix glms_frac_alpha_grid(const NumericMatrix& newlen,
   for (int v = 0; v < V; ++v) {
     std::vector<double> xp(G);
     const double top = nl(0, v);
-    for (int g = 0; g < G; ++g) xp[g] = nl(G - 1 - g, v) / top;
+    bool valid = std::isfinite(top) && top > 0.0;
+    if (valid) {
+      for (int g = 0; g < G; ++g) {
+        xp[g] = nl(G - 1 - g, v) / top;
+        valid = valid && std::isfinite(xp[g]);
+      }
+    }
     for (int f = 0; f < F; ++f) {
-      double t = np_interp(fr[f], xp.data(), fp.data(), G);
+      double t = valid ? np_interp(fr[f], xp.data(), fp.data(), G) : NA_REAL;
       res(f, v) = std::exp(t) - 1.0;
     }
   }

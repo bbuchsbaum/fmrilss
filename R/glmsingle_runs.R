@@ -23,16 +23,20 @@
 # Normalise the design into per-run onset indices (0-based TRs) and condition
 # ids. Accepts GLMsingle-style 0/1 matrices (time x conditions, one per run)
 # or an events data frame with columns run, onset (seconds) and condition.
-.glms_parse_design <- function(design, n_time, tr) {
+.glms_parse_design <- function(design, n_time, tr, run_ids = NULL) {
   R <- length(n_time)
   if (is.data.frame(design)) {
     need <- c("run", "onset", "condition")
     if (!all(need %in% names(design))) {
       stop("design data frame needs columns: run, onset, condition", call. = FALSE)
     }
-    run_ids <- unique(design$run)
-    run_code <- match(design$run, sort(run_ids))
-    if (length(run_ids) != R) stop("design must describe the same number of runs as Y", call. = FALSE)
+    if (anyNA(design$run)) stop("design run IDs must not be missing", call. = FALSE)
+    if (is.null(run_ids)) {
+      run_ids <- sort(unique(design$run))
+      if (length(run_ids) != R) stop("design must describe the same number of runs as Y", call. = FALSE)
+    }
+    run_code <- match(design$run, run_ids)
+    if (anyNA(run_code)) stop("design run IDs must match the run IDs of Y", call. = FALSE)
     on_tr <- design$onset / tr
     if (any(abs(on_tr - round(on_tr)) > 1e-6)) {
       stop("glmsingle() requires onsets on the TR grid (onset / tr must be an integer)", call. = FALSE)

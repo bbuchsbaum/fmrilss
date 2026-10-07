@@ -2,6 +2,16 @@
 
 ## fmrilss (development version)
 
+### GLMsingle fixes
+
+- Match event run IDs to matrix data in run order, including nonascending IDs.
+- Guard fractional-ridge interpolation against zero/nonfinite norms and
+  retain regularization when the design has zero eigenvalues.
+- Handle constant or single-voxel R^2 distributions in automatic thresholding,
+  and skip threshold estimation when denoising is disabled.
+- Limit noise PCs to the available rank across runs; empty and rank-zero
+  pools use zero PCs instead of arbitrary eigenvectors.
+
 ### New: `glmsingle()`
 
 - `glmsingle()` implements GLMsingle (Prince et al., 2022): an ON-OFF model,

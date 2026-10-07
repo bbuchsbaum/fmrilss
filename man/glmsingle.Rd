@@ -45,7 +45,9 @@ x voxel matrix with \code{runs} giving the run of each row.}
 \item{design}{Either a list of time x condition 0/1 matrices, one per run
 (GLMsingle's format; a 1 marks a trial onset), or a data frame with
 columns \code{run}, \code{onset} (seconds; must be on the TR grid) and
-\code{condition}. Repeated conditions drive the cross-validation.}
+\code{condition}. Repeated conditions drive the cross-validation.
+For matrix \code{Y}, event run IDs are matched to \code{runs} in data order.
+For list \code{Y}, ascending event run IDs correspond to the list order.}
 
 \item{tr}{Repetition time in seconds.}
 
@@ -66,7 +68,9 @@ HRF is used for every voxel).}
 \item{fracs}{Ridge fractions in (0, 1] to evaluate. A single value skips
 cross-validation and uses that fraction.}
 
-\item{n_pcs}{Maximum number of noise PCs to evaluate.}
+\item{n_pcs}{Maximum number of noise PCs to evaluate. Capped, with a
+warning, at the available noise-pool rank across runs. Empty or
+rank-zero pools use zero PCs and skip PC-count cross-validation.}
 
 \item{pcstop}{Stopping factor for choosing the number of PCs. A value
 \verb{<= 0} uses \code{-pcstop} PCs without cross-validation.}
@@ -88,7 +92,9 @@ fraction of it; voxels brighter than their product may enter the noise
 pool.}
 
 \item{brain_r2}{ON-OFF R^2 (percent) below which bright voxels enter the
-noise pool. Default: estimated tail threshold.}
+noise pool. Default: estimated tail threshold. With fewer than two
+distinct finite ON-OFF R^2 values, uses the common value (or zero if
+none are finite). Thresholds are only estimated when denoising is used.}
 
 \item{brain_exclude}{Optional logical vector of voxels to exclude from the
 noise pool (\code{FALSE} excludes).}

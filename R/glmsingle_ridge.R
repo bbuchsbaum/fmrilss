@@ -210,9 +210,13 @@
   if (identical(method, "exact")) {
     return(glms_frac_alpha_exact(a2, sp$s2_all, fracs, .glms_nt()))
   }
+  if (!any(sp$s2_all > 0)) return(matrix(NaN, length(fracs), ncol(a2)))
   grid <- .glms_alpha_grid(sp$s2_all)
   s2 <- sqrt(sp$s2_all)^2
   sclg_sq <- (outer(grid, s2, function(g, s) s / (s + g)))^2
+  # Null-space coefficients are zero, including at alpha = 0. Do not let
+  # their 0/0 shrinkage contaminate every voxel's coefficient norm.
+  sclg_sq[, s2 == 0] <- 0
   newlen <- sqrt(sclg_sq %*% a2)
   glms_frac_alpha_grid(newlen, grid, fracs, .glms_nt())
 }

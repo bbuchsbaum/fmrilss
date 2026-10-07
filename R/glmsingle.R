@@ -54,6 +54,8 @@
 #'   (GLMsingle's format; a 1 marks a trial onset), or a data frame with
 #'   columns `run`, `onset` (seconds; must be on the TR grid) and
 #'   `condition`. Repeated conditions drive the cross-validation.
+#'   For matrix `Y`, event run IDs are matched to `runs` in data order.
+#'   For list `Y`, ascending event run IDs correspond to the list order.
 #' @param tr Repetition time in seconds.
 #' @param stimdur Trial duration in seconds.
 #' @param runs Run identifier per row of `Y` when `Y` is a single matrix.
@@ -65,7 +67,9 @@
 #' @param want_fracridge Fit the fractional ridge model (type D).
 #' @param fracs Ridge fractions in (0, 1] to evaluate. A single value skips
 #'   cross-validation and uses that fraction.
-#' @param n_pcs Maximum number of noise PCs to evaluate.
+#' @param n_pcs Maximum number of noise PCs to evaluate. Capped, with a
+#'   warning, at the available noise-pool rank across runs. Empty or
+#'   rank-zero pools use zero PCs and skip PC-count cross-validation.
 #' @param pcstop Stopping factor for choosing the number of PCs. A value
 #'   `<= 0` uses `-pcstop` PCs without cross-validation.
 #' @param xval_scheme List of integer vectors of runs held out together in
@@ -80,7 +84,9 @@
 #'   fraction of it; voxels brighter than their product may enter the noise
 #'   pool.
 #' @param brain_r2 ON-OFF R^2 (percent) below which bright voxels enter the
-#'   noise pool. Default: estimated tail threshold.
+#'   noise pool. Default: estimated tail threshold. With fewer than two
+#'   distinct finite ON-OFF R^2 values, uses the common value (or zero if
+#'   none are finite). Thresholds are only estimated when denoising is used.
 #' @param brain_exclude Optional logical vector of voxels to exclude from the
 #'   noise pool (`FALSE` excludes).
 #' @param pc_r2_cutoff ON-OFF R^2 above which voxels summarise the PC-count
@@ -209,13 +215,14 @@ glmsingle <- function(Y, design, tr, stimdur,
 
   # ---- inputs and geometry -------------------------------------------------
   Ylist <- .glms_split_runs(Y, runs)
+  run_ids <- if (is.list(Y) && !is.data.frame(Y)) NULL else unique(runs)
   R <- length(Ylist)
   n_time <- vapply(Ylist, nrow, integer(1))
   n_vox <- ncol(Ylist[[1]])
   if (any(vapply(Ylist, function(y) !all(is.finite(range(y))), logical(1)))) {
     stop("Y contains non-finite values", call. = FALSE)
   }
-  parsed <- .glms_parse_design(design, n_time, tr)
+  parsed <- .glms_parse_design(design, n_time, tr, run_ids)
   geom <- .glms_geometry(parsed, n_time, tr, session_indicator, xval_scheme)
   if (!geom$n_trials) stop("design contains no trials", call. = FALSE)
 
@@ -285,7 +292,9 @@ glmsingle <- function(Y, design, tr, stimdur,
     tick("typeab")
 
     thresh <- NULL
-    if (is.null(brain_r2) || is.null(pc_r2_cutoff)) thresh <- .glms_tail_threshold(b$onoffR2)
+    if (want_glmdenoise && (is.null(brain_r2) || is.null(pc_r2_cutoff))) {
+      thresh <- .glms_tail_threshold(b$onoffR2)
+    }
     brain_r2 <- brain_r2 %||% thresh
     pc_r2_cutoff <- pc_r2_cutoff %||% thresh
 

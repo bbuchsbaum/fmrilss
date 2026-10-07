@@ -74,6 +74,13 @@
   })
   out <- list(pcregressors = pcs, noisepool = noisepool, pcnum = 0L,
               xvaltrend = NULL, glmbadness = NULL, pcvoxels = NULL)
+  available <- min(vapply(pcs, ncol, integer(1)))
+  if (n_pcs > available) {
+    warning(sprintf("Limiting n_pcs to %d (noise-pool rank across runs).", available),
+            call. = FALSE)
+    n_pcs <- available
+  }
+  if (!available) return(out)
   if (pcstop <= 0) {
     out$pcnum <- as.integer(min(-pcstop, n_pcs))
     return(out)

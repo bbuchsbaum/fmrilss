@@ -38,16 +38,23 @@
 # leading eigenvectors scaled to unit standard deviation (ddof = 1).
 .glms_noise_pcs <- function(Yr, pool, Qp, n_pcs, chunk_size) {
   n_time <- nrow(Yr)
-  C <- matrix(0, n_time, n_time)
   idx <- which(pool)
+  if (!length(idx)) return(matrix(0, n_time, 0L))
+  C <- matrix(0, n_time, n_time)
   for (blk in split(idx, ceiling(seq_along(idx) / chunk_size))) {
-    Z <- .glms_resid(Yr[, blk, drop = FALSE], Qp)
+    Z <- Yr[, blk, drop = FALSE]
+    Z <- sweep(Z, 2L, colMeans(Z))
+    scale <- sqrt(colSums(Z^2))
+    Z <- .glms_resid(Z, Qp)
     nrm <- sqrt(colSums(Z^2))
-    nrm[nrm == 0] <- 1
-    Z <- sweep(Z, 2L, nrm, "/")
+    keep <- nrm > sqrt(.Machine$double.eps) * scale
+    if (!any(keep)) next
+    Z <- sweep(Z[, keep, drop = FALSE], 2L, nrm[keep], "/")
     C <- C + tcrossprod(Z)
   }
   e <- eigen(C, symmetric = TRUE)
-  U <- e$vectors[, seq_len(min(n_pcs + 1L, n_time)), drop = FALSE]
+  rank <- sum(e$values > n_time * .Machine$double.eps * max(e$values))
+  if (!rank) return(matrix(0, n_time, 0L))
+  U <- e$vectors[, seq_len(min(n_pcs + 1L, rank)), drop = FALSE]
   sweep(U, 2L, apply(U, 2L, stats::sd), "/")
 }

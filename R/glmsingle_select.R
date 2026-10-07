@@ -118,6 +118,10 @@
 # right-hand Gaussian falls to 0.5.
 .glms_tail_threshold <- function(v, maxsz = 1e6) {
   v <- v[is.finite(v)]
+  # A mixture is unidentified without variation. Use the common R^2 (zero
+  # if none is finite); the strict pool/selection inequalities still apply.
+  if (!length(v)) return(0)
+  if (all(v == v[1L])) return(v[1L])
   if (length(v) > maxsz) v <- v[round(seq(1, length(v), length.out = maxsz))]
   fit <- .glms_gmm2(v)
   rng <- .glms_robustrange(v)
