@@ -17,3 +17,6 @@ vignettes/*.html
 vignettes/*.R
 vignettes/.build.timestamp
 __pycache__/
+
+.worktrees/
+.dashboard/

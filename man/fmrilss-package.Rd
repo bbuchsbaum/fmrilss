@@ -44,7 +44,7 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Brad Buchsbaum \email{brad.buchsbaum@gmail.com}
+\strong{Maintainer}: Brad Buchsbaum \email{brad.buchsbaum@gmail.com} (\href{https://orcid.org/0000-0002-1108-4866}{ORCID})
 
 }
 \keyword{internal}

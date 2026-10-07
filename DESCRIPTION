@@ -5,7 +5,8 @@ Version: 0.2.0
 Authors@R: person(given = "Brad",
                   family = "Buchsbaum",
                   role = c("aut", "cre"),
-                  email = "brad.buchsbaum@gmail.com")
+                  email = "brad.buchsbaum@gmail.com",
+                  comment = c(ORCID = "0000-0002-1108-4866"))
 Description: Implements efficient least squares separate (LSS) analysis for
     functional magnetic resonance imaging (fMRI) data, following Mumford et al.
     (2012) <doi:10.1016/j.neuroimage.2011.08.076>. LSS estimates trial-by-trial
