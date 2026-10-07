@@ -1,7 +1,7 @@
 # Fast GLMsingle in fmrilss: due diligence and implementation plan
 
-**Status:** plan v3.1. It incorporates external review 1 (disposition log in
-§8) and the maintainer's policy decisions (§9).
+**Status:** plan v3.2. It incorporates external review 1 (disposition log in
+§8) and the maintainer's decisions (§9).
 **Reference implementation:** GLMsingle Python, `cvnlab/GLMsingle` at
 `1ab54a6` (2025-11-09, current HEAD), with `fracridge` 3.0.
 **Evidence:** `.planning/glmsingle_checks/`
@@ -19,10 +19,11 @@ substantially faster. Estimator changes are a separate, gated research track
 
 | Decision | Resolution |
 |---|---|
-| Where it lives | **fmrilss.** It shares the Rcpp/Armadillo/OpenMP toolchain, the fmrihrf/fmridesign integration, and the test and bench infrastructure |
+| Where it lives | **fmrilss, implemented in R.** Speed comes from algorithmic restructuring executed through R's BLAS/LAPACK-backed matrix operations (`crossprod`, `tcrossprod`, `chol`, `backsolve`, `svd`/`eigen`). Rcpp is used only if Phase 6 profiling finds an R-level loop that BLAS cannot absorb, and then only for that kernel. Python is a test-time reference only: no runtime dependency and no reticulate. It shares the fmrihrf/fmridesign integration and the test and bench infrastructure |
+| API style | **One function, documented arguments.** All settings are arguments of `glmsingle()`, documented in its roxygen. There is no options constructor and no policy sets. Where a behaviour has variants, it is a `match.arg()` argument whose first (default) value is the best choice |
 | Parity target | **Python GLMsingle at `1ab54a6`.** It can be scripted without a licence and includes Python's latest fix (`19e6617`). MATLAB-only later commits are audited in §2.4 |
 | PC-count CV on the selection subset only | **Yes, by default.** Estimates are unchanged. The full-volume `glmbadness` diagnostic is available on request. Both a lean-output and a matched-output mode are benchmarked (task 7.3) |
-| Upstream quirks (§2.3) | **Default = the most sensible behaviour, not bug-for-bug parity.** Where upstream is internally inconsistent or the two ports disagree (S3, S6), fmrilss uses the defensible choice by default. `policy = "upstream"` reproduces pinned Python exactly, for comparisons and for the parity tests (§3.4, §9) |
+| Upstream quirks (§2.3) | **Default = the most sensible behaviour, not bug-for-bug parity.** Where upstream is internally inconsistent or the two ports disagree (S3, S6), the default argument value is the defensible choice. The alternative value reproduces pinned Python, and parity tests set those arguments explicitly (§3.4, §9) |
 
 ## 1. Bottom line
 
@@ -106,7 +107,7 @@ operative qualification.** What changed in v3:
 ### 2.3 Source-compatibility findings
 
 Each finding is verified against `1ab54a6`, gets a fixture (task 0.3), and has
-a policy in §3.4.
+a handling rule in §3.4.
 
 | ID | Behaviour in pinned source | Consequence for us | Found by |
 |---|---|---|---|
@@ -137,81 +138,107 @@ a policy in §3.4.
    thin, and every stage boundary can inject Python intermediates.
 2. **Geometry, voxel statistics and selection are separate objects with
    declared lifetimes** (§3.6).
-3. **fmrilss conventions:** time × voxel `Y` with run identity from a
-   `sampling_frame` or run ids, trials × voxel betas, an `*_options()`
-   constructor, and the existing validators. GLMsingle names are kept for
-   options and output fields.
-4. **Numerical policy is a named module** (§3.4), not a set of scattered
-   choices. Every rank decision, singular case and degenerate divisor goes
-   through it.
-5. **Hot kernels are in C++.** Orchestration and selection logic stay in R.
-   No new hard dependencies.
+3. **fmrilss conventions:**
+   - time × voxel `Y` with run identity from a `sampling_frame` or run ids;
+   - trials × voxel betas;
+   - snake_case arguments, validated with the existing `.as_*` helpers;
+   - every argument documented in `glmsingle()`'s roxygen, which includes a
+     table mapping each argument to its GLMsingle name;
+   - output fields keep GLMsingle names (`betasmd`, `HRFindex`, `FRACvalue`, …)
+     so results map across directly.
+4. **Fixed numerical behaviour lives in one internal file**
+   (`glmsingle_numerics.R`, §3.4): rank rules, singular handling and the
+   autoscale operator. These are not user options.
+5. **Pure R first.** All kernels are written as blocked matrix algebra in R,
+   so BLAS does the heavy lifting. Rcpp only enters through Phase 6, with
+   profiling evidence. No new hard dependencies.
 
 ### 3.2 Module layout
 
 ```
-R/glmsingle.R            glmsingle(), glmsingle_design(): public API, staged orchestration
-R/glmsingle_options.R    glmsingle_options() (defaults from glmsingle/defaults.py)
-R/glmsingle_policy.R     numerical policies (§3.4): rank rules, singular handling, zerodiv, autoscale operator
+R/glmsingle.R            glmsingle() (all arguments documented here), glmsingle_design(); staged orchestration
+R/glmsingle_numerics.R   internal fixed numerics (§3.4): rank rule, singular handling, autoscale operator
 R/glmsingle_runs.R       run geometry: onset TRs, trial↔run↔condition↔session maps, folds
 R/glmsingle_hrf.R        HRF library: vendored TSV, stimdur conv, pchip→TR, peak-normalise, exact support
-R/glmsingle_nuisance.R   per-run bases (policy-aware), PC derivation via tiled covariance
-R/glmsingle_stats.R      wrappers for data-pass kernels; sufficient-statistic R²
+R/glmsingle_nuisance.R   per-run bases, PC derivation via tiled crossprod covariance
+R/glmsingle_stats.R      data pass: filter-bank XᵀY, QᵀY, norms (blocked BLAS); sufficient-statistic R²
 R/glmsingle_ridge.R      run-blocked OLS/fracridge path, pooled grid + interpolation
 R/glmsingle_select.R     compiled CV, tail threshold, select_noise_regressors, autoscale
 R/glmsingle_methods.R    "glmsingle_fit": print/summary/coef/as.matrix
-src/glmsingle_kernels.cpp  filter-bank XᵀY, QᵀY, syrk covariance, block spectral path, prefix maps
-src/blocked_products.h     shared residualise-and-multiply helper (also OASIS)
 inst/extdata/glmsingle_hrflibrary.tsv   vendored, BSD-3 (inst/COPYRIGHTS)
 tools/glmsingle_ref/       pinned Python env + fixture writer (Rbuildignored)
 tests/testthat/helper-glmsingle.R        fixture reader, simulator, compact float64 spec references
 ```
 
-Dependency order: `options → policy → runs → hrf → nuisance → stats → ridge →
-select → glmsingle()`. Budget: about 1,300 lines of R and about 500 of C++,
-excluding tests. Split any file approaching 400 lines.
+Dependency order: `numerics → runs → hrf → nuisance → stats → ridge → select →
+glmsingle()`. Budget: about 1,600 lines of R, excluding tests. Split any file approaching 400 lines.
 
 ### 3.3 Reuse map
 
 | Existing | Use | Action |
 |---|---|---|
-| `.voxhrf_orthonormal_span()` (R/voxel_hrf.R) | Orthonormal bases | Promote to `.orthonormal_span(X, policy = c("qr", "glmsingle"))` in aaa_utils. `"qr"` keeps current behaviour for the existing callers; `"glmsingle"` implements S1 |
-| `oasis_AtY_SY_blocked`, `oasisk_compute_RY_norm2` | Blocked residualise-and-multiply | Extract into `blocked_products.h`. OASIS migrates separately, gated by its tests |
-| `.as_*` validators, `.validate_option_names`, `oasis_options()` pattern | Options | Reuse / follow |
+| `.voxhrf_orthonormal_span()` (R/voxel_hrf.R) | Orthonormal bases | Promote to `.orthonormal_span(X, rank_rule = c("qr", "normalized_gram"))` in aaa_utils. `"qr"` keeps current behaviour for the existing callers; `"normalized_gram"` implements S1 |
+| `oasis_AtY_SY_blocked` (C++) | Pattern for blocked residualise-and-multiply | Mirror the blocking pattern in R (`crossprod` on column blocks). No C++ sharing unless Phase 6 adds a kernel |
+| `.as_*` validators | Argument validation | Reuse |
 | `.set_beta_dimnames`, `.default_trial_names` | Output naming | Reuse |
 | `lss_design()` + `.validate_design_models()` | `glmsingle_design()` fmridesign front-end | Mirror it; error if onsets are off the TR grid |
 | `fmrihrf::sampling_frame/blocklens/blockids`; `fmrihrf::evaluate` | Run structure; non-parity user HRF libraries | Reuse |
-| Makevars OpenMP; `bench/` conventions | Threading; benchmark script | Reuse |
+| `bench/` conventions | Benchmark script | Reuse. Threading comes from the BLAS (e.g. OpenBLAS/MKL threads); benchmarks report the BLAS used |
 | `.item_safe_solve()` | — | Not used: its chol→svd→pinv fallbacks contradict S2/S4 |
 | `generate_rapid_design()` | — | Not used: continuous onsets, global `set.seed` |
 | fmriAR prewhitening | — | Out of scope. The nuisance layer leaves a hook |
 | `lss()` dispatch | — | Separate entry point (conditions, runs, sessions, four model types) |
 
-### 3.4 Numerical policy (`glmsingle_policy.R`)
+### 3.4 `glmsingle()` arguments and fixed numerics
 
-There are two policy sets, selected with `glmsingle_options(policy = )`:
+**Signature sketch.** Defaults come from `glmsingle/defaults.py` unless noted.
+For variant arguments, the first value is the default and the best choice.
 
-* **`"fmrilss"` (default):** pinned behaviour everywhere, except where pinned
-  behaviour is inconsistent or the ports disagree (S3, S6, GMM floor). There
-  the defensible choice is used.
-* **`"upstream"`:** reproduces pinned Python `1ab54a6` exactly, including S3,
-  S6 and the unregularised GMM. It is used for parity testing and for users
-  who need to match existing GLMsingle outputs.
+```r
+glmsingle(
+  Y, onsets, conditions, runs, tr, stimdur,   # or via glmsingle_design()
+  hrf_library = NULL,            # NULL = GLMsingle library
+  want_library = TRUE, want_glmdenoise = TRUE, want_fracridge = TRUE,
+  fracs = seq(1, 0.05, by = -0.05), n_pcs = 10, pcstop = 1.05,
+  xval_scheme = NULL, session_indicator = NULL,
+  extra_regressors = NULL, max_poly_deg = NULL,
+  brain_thresh = c(99, 0.1), brain_r2 = NULL,
+  pc_r2_cutoff = NULL, pc_r2_cutoff_mask = NULL,
+  want_percent_bold = TRUE, want_autoscale = TRUE,
+  extras_in_denoise = c("always", "with_pcs"),   # S3
+  zero_sd_cv        = c("zero", "python"),       # S6
+  singular          = c("error", "pinv"),        # S2
+  frac_alpha        = c("fracridge", "exact"),   # §1 correction 1
+  full_glmbadness = FALSE,
+  memory_limit_gb = 4, verbose = TRUE
+)
+```
 
-The policy set used is recorded in `fit$options`. Individual policies can be
-overridden for diagnostics.
+**Variant arguments.** Each is documented in `@param` with its rationale and
+the GLMsingle behaviour it differs from.
 
-| Policy | `"fmrilss"` (default) | `"upstream"` |
-|---|---|---|
-| Nuisance rank (S1) | Drop exact-zero columns; normalise; SVD of the normalised design with cutoff equivalent to `pinv(rcond = 1e-15)` on the Gram, i.e. singular values of X below `sqrt(1e-15)·s_max` are dropped | Same |
-| Extras in PC-CV and C/D (S3) | **Always included:** nuisance basis `[poly, extras, PCs₁..k]` for every k, including k = 0, the CV reference, and final C/D | Python: extras only when k > 0 |
-| Trial OLS singularity (S2) | Drop exact-zero columns, then Cholesky; on failure, error with a diagnostic naming the colliding trials. `"pinv"` opt-in | Same |
-| Tail-threshold GMM | Deterministic EM, 3 fixed restarts, eps variance floor (MATLAB `91e5b7e`) | Thresholds injected from fixtures, since Python's GMM is unseeded |
-| Autoscale (S4) | Normalised-Gram pinv on `[β_f, 1]`, `h[0] < 0 → (1, 0)` | Same |
-| Divisor (S6) | **Zero for all candidates:** zero-SD voxels contribute nothing to CV, as in MATLAB | Emulate Python's in-place `zerodiv` mutation |
-| Precision | float64 throughout; per-run mean-centring of `Y` before products (exact under polynomial projection, and it reduces cancellation in `XᵀY − (XᵀQ)(QᵀY)`) | — |
-| Gram construction | Form the residualised design `A_r = X_r − Q(QᵀX_r)` explicitly per run (voxel-independent, cheap), with `G = AᵀA`. This avoids the `XᵀX − (XᵀQ)(XᵀQ)ᵀ` cancellation. Use a per-block QR/SVD path when `κ(A_r)` exceeds a threshold | — |
-| Conditioning diagnostics | Record `κ(A_r)` per run/HRF, decision margins, and the policy used, in `fit$diagnostics` | — |
+| Argument | Default (best choice) | Alternative | Notes |
+|---|---|---|---|
+| `extras_in_denoise` (S3) | `"always"`: nuisance basis `[poly, extras, PCs₁..k]` for every k, including the k = 0 CV reference and final C/D | `"with_pcs"`: pinned Python (extras only when k > 0) | Rationale in §9 |
+| `zero_sd_cv` (S6) | `"zero"`: zero-SD voxels contribute nothing to CV (MATLAB semantics) | `"python"`: emulate the in-place `zerodiv` mutation | |
+| `singular` (S2) | `"error"`: drop exact-zero columns, then Cholesky; on failure, error naming the colliding trials | `"pinv"`: minimum-norm, with a warning | |
+| `frac_alpha` | `"fracridge"`: pooled grid + log-interpolation, as upstream | `"exact"`: root-solve the fraction equation | `"exact"` is research (8.6) |
+| `full_glmbadness` | `FALSE`: PC CV on the selection subset only | `TRUE`: all voxels (diagnostic) | Estimates identical either way |
+
+Thresholds (`brain_r2`, `pc_r2_cutoff`) are ordinary arguments. Parity tests pass
+Python's recorded values, so no special mode is needed for Python's unseeded
+GMM.
+
+**Fixed numerics** (`glmsingle_numerics.R`; internal, not user options):
+
+| Item | Behaviour |
+|---|---|
+| Nuisance rank (S1) | Drop exact-zero columns; normalise; drop singular values of the normalised design below `sqrt(1e-15)·s_max` (≡ upstream `pinv` of the normalised Gram) |
+| Tail-threshold GMM | Deterministic EM, 3 fixed restarts, eps variance floor (MATLAB `91e5b7e`) |
+| Autoscale (S4) | Normalised-Gram pinv on `[β_f, 1]`, `h[0] < 0 → (1, 0)` |
+| Precision | double throughout; per-run mean-centring of `Y` before products (exact under polynomial projection, and it reduces cancellation in `XᵀY − (XᵀQ)(QᵀY)`) |
+| Gram construction | Residualised design `A_r = X_r − Q(QᵀX_r)` formed explicitly per run (voxel-independent, cheap), with `G = crossprod(A_r)`; per-block QR/SVD path when `κ(A_r)` exceeds a threshold |
+| Diagnostics | `κ(A_r)` per run/HRF, decision margins, and the variant arguments used, in `fit$diagnostics` |
 
 ### 3.5 Staged execution
 
@@ -254,9 +281,10 @@ equivalence** and **statistical accuracy**.
 
 **References.** These are mutually checking:
 - **(R1)** Pinned Python with recorded intermediates. This is the source of
-  truth for behaviour. Unpatched, it is the reference for `policy = "upstream"`.
-  With the reviewed `fmrilss_policy.patch` applied, it is the reference for
-  the default (task 0.3).
+  truth for behaviour. Unpatched, it is the reference for runs with the
+  Python-compatible argument values (`extras_in_denoise = "with_pcs"`,
+  `zero_sd_cv = "python"`). With the reviewed `fmrilss_defaults.patch` applied,
+  it is the reference for the defaults (task 0.3).
 - **(R2)** Compact float64 spec references in `helper-glmsingle.R`: explicit
   stacked designs, literal `calcbadness` loops, per-fraction `fracridge`, dense
   projectors. These are test-only.
@@ -264,7 +292,7 @@ equivalence** and **statistical accuracy**.
   residual orthogonality, and rank diagnostics.
 
 R2 agreeing with our fast path does not prove R1 parity. Both R2 and R3 are
-written from the source and the policy table, and are reviewed against R1
+written from the source and §3.4, and are reviewed against R1
 fixtures.
 
 **Tolerances are conditioning-aware.** For a quantity computed from run block
@@ -333,9 +361,10 @@ Each task is about one reviewable commit with a done-criterion. Phases 2–5 are
   (i) a constant-response voxel (S6) and a constant-candidate autoscale (S4);
   (j) a zero-variance/all-zero voxel.
   Fixtures are under 2 MB each. Each scenario is written twice:
-  - by **pinned Python**, which is the reference for `policy = "upstream"`;
-  - by **pinned Python plus `tools/glmsingle_ref/fmrilss_policy.patch`**, which
-    is the reference for the default policy. The patch is minimal and reviewed:
+  - by **pinned Python**, the reference for the Python-compatible argument
+    values;
+  - by **pinned Python plus `tools/glmsingle_ref/fmrilss_defaults.patch`**, the
+    reference for the defaults. The patch is minimal and reviewed:
     extras are included at every k, and `zerodiv` copies its divisor.
 
   Scenarios without extras or zero-SD voxels give identical outputs under both,
@@ -347,15 +376,17 @@ Each task is about one reviewable commit with a done-criterion. Phases 2–5 are
   TRs × 50k voxels, and on the GLMsingle example data if available.
   *Done when* the numbers are in `bench/results/glmsingle_baseline.md`.
 - **0.6 Policy and contract freeze.** Review §3.4 and §4 against the fixtures
-  and set `c₆₄` and `c₃₂`. *Done when* the policy table is signed off.
+  and set `c₆₄` and `c₃₂`. *Done when* §3.4 is signed off.
 
 ### Phase 1: groundwork
 
-- **1.1** `.orthonormal_span(policy = )` promotion. Existing tests stay green;
+- **1.1** `.orthonormal_span(rank_rule = )` promotion. Existing tests stay green;
   an S1 fixture test is added.
-- **1.2** Extract `blocked_products.h`. The OASIS tests stay green.
-- **1.3** `glmsingle_options()` and `glmsingle_policy.R`, with unit tests for
-  each policy against the S1–S6 fixtures.
+- **1.2** `glmsingle_numerics.R` (rank rule, singular handling, autoscale
+  operator), with unit tests against the S1, S2 and S4 fixtures.
+- **1.3** `glmsingle()` argument skeleton: signature, roxygen for every
+  argument (including the GLMsingle name mapping and the rationale for each
+  variant default), and validation with the `.as_*` helpers. Stages are stubs.
 
 ### Phase 2: slice 1, fixed HRF and fixed nuisance → type D
 
@@ -363,7 +394,7 @@ The HRF index and `pcnum` are injected from fixtures.
 
 - **2.1** Run geometry (designSINGLE trial order, `validcolumns`, `stimix`,
   folds, repeat checks).
-- **2.2** Nuisance bases for a given k under the S3 policy. The residualised
+- **2.2** Nuisance bases for a given k, honouring `extras_in_denoise`. The residualised
   designs `A_r`.
 - **2.3** Run-blocked OLS and the `fracridge` path: pooled spectra, global
   grid, interpolation, `tol` zeroing, and an opt-in `exact_alpha`.
@@ -376,7 +407,7 @@ The HRF index and `pcnum` are injected from fixtures.
 
 - **3.1** HRF library port with exact support (vs R1 at 1e-6 on float32
   values).
-- **3.2** Filter-bank `X_hᵀY` kernel (vs dense at the R2 tolerance).
+- **3.2** Filter-bank `X_hᵀY` in R: per onset, `bank (H×L) %*% Y[window, tile]`, accumulated into an `H×n×V_tile` array (vs dense at the R2 tolerance).
 - **3.3** Sufficient-statistic R²/R2run and score-only selection (forward
   solve), with winner reconstruction.
 - *Gate:* type B parity. HRF-index decisions are certified or reported.
@@ -405,7 +436,8 @@ The HRF index and `pcnum` are injected from fixtures.
 Profile first (task 7.3 tooling), then choose from:
 - PC-prefix maps or rank-one updates (with a cancellation guard and fallback);
 - filter-bank batching vs GEMM;
-- OpenMP over tiles;
+- BLAS threading and tile size;
+- Rcpp for a specific R-level loop, only if profiling shows BLAS cannot absorb it (candidate: the per-onset filter-bank loop);
 - CV-row-only reconstruction.
 
 Each change must keep every Phase 2–4 gate green.
@@ -423,8 +455,7 @@ Each change must keep every Phase 2–4 gate green.
   and diagnostics, same thread count, same input precision, I/O excluded on
   both sides. Per-stage time and peak RSS at 1 and N threads, in lean and
   matched-output modes. *Target:* ≥ 5× end to end at 1 thread.
-- **7.4** Optional OASIS migration to `blocked_products.h`.
-- **7.5 Docs:** vignette (usage, a "Differences from GLMsingle" section listing every `"fmrilss"` vs `"upstream"` policy, parity evidence, timing), pkgdown,
+- **7.5 Docs:** vignette (usage, a "Differences from GLMsingle" section listing every variant argument and its Python-compatible value, parity evidence, timing), pkgdown,
   NEWS, `inst/COPYRIGHTS` (GLMsingle BSD-3, fracridge BSD-2).
 - **7.6** `R CMD check` clean; the GLMsingle test suite runs in under 60 s.
 
@@ -447,10 +478,10 @@ resampling modes, figures, hdf5.
 |---|---|
 | Python float32 unstable on ill-conditioned designs | Reference-unstable class; report rather than assert; float64 spec references (R2/R3) are the algebraic gate |
 | Global decisions cascade (threshold → pool → PCs → pcnum) | Stage-conditional parity plus traced end-to-end divergences |
-| Shared misreading of the source in R2 and the fast path | R1 fixtures for every policy edge (0.3 c, h–j); policy table reviewed in 0.6 |
+| Shared misreading of the source in R2 and the fast path | R1 fixtures for every edge case (0.3 c, h–j); §3.4 reviewed in 0.6 |
 | Speedup below target because unoptimised stages dominate | Per-stage baseline (0.5) and profiling-driven Phase 6 |
 | Memory blow-up from retained statistics | Per-tile lifetimes (§3.6); `memory_limit_gb` |
-| Upstream changes | Pinned commit in the fixture manifest; re-audit on releases. Default-policy deviations are documented in the vignette |
+| Upstream changes | Pinned commit in the fixture manifest; re-audit on releases. Default deviations from Python are documented in the vignette |
 
 ## 7. Evidence index
 
@@ -473,8 +504,8 @@ resampling modes, figures, hdf5.
 | 2 | Interpolation correction valid; calibrate α globally across runs | **Accepted** (already in v2); exact α stays opt-in research (8.6) |
 | 3 | Blanket float32/float64 tolerances invalid | **Accepted.** §4 rewritten. Reproduced: 2.96% at κ≈686, and float32 meaningless at κ≈2.5e4 |
 | 4 | A float64 oracle cannot prove Python parity; use three references; margin-based decisions; global decisions | **Accepted** (§4 R1–R3, certified decisions, stage-conditional vs end-to-end) |
-| 5A | Nuisance projector rank policy | **Accepted** (S1, policy) |
-| 5B | `olsmatrix2` uses solve, not `G⁺` | **Accepted** (S2, policy) |
+| 5A | Nuisance projector rank policy | **Accepted** (S1, §3.4) |
+| 5B | `olsmatrix2` uses solve, not `G⁺` | **Accepted** (S2, `singular` argument) |
 | 5C | Extras omitted at zero PCs | **Accepted and extended:** the 0-PC fit is also the CV reference for every k (S3b). Maintainer decision needed (§9) |
 | 5D | Autoscale rank handling; R² before autoscale; zerodiv mutation; type A pooled | **Accepted** (S4–S7) |
 | 6 | Gram cancellation; need a stable fallback | **Accepted.** Explicit residualised design plus conditional QR/SVD (§3.4) |
@@ -496,8 +527,10 @@ already addressed in v2 (`1dcaabf`).
 
 | # | Item | Decision |
 |---|---|---|
-| 1 | **S3 extras policy** | **Always include user extras**, in every PC-CV fit (including the k = 0 reference) and in final C/D. Rationale: (i) user nuisances such as motion are part of the noise model, and dropping them when no PCs are chosen leaves known confounds in the betas; (ii) it keeps the PC models nested (`[poly, extras] ⊂ [poly, extras, PC₁] ⊂ …`), so the CV curve compares like with like and the k = 0 reference is the same model family; (iii) it removes Python's discontinuity between k = 0 and k = 1; (iv) it is consistent with stages A and B, which already use the extras in both ports. MATLAB's "never in C/D" would let the GLMdenoise PCs silently replace user-specified nuisances, which is less defensible. `policy = "upstream"` reproduces Python. The choice is verified by Tier C (7.2) |
+| 1 | **S3 extras handling** (`extras_in_denoise`) | **Always include user extras**, in every PC-CV fit (including the k = 0 reference) and in final C/D. Rationale: (i) user nuisances such as motion are part of the noise model, and dropping them when no PCs are chosen leaves known confounds in the betas; (ii) it keeps the PC models nested (`[poly, extras] ⊂ [poly, extras, PC₁] ⊂ …`), so the CV curve compares like with like and the k = 0 reference is the same model family; (iii) it removes Python's discontinuity between k = 0 and k = 1; (iv) it is consistent with stages A and B, which already use the extras in both ports. MATLAB's "never in C/D" would let the GLMdenoise PCs silently replace user-specified nuisances, which is less defensible. `extras_in_denoise = "with_pcs"` reproduces Python. The choice is verified by Tier C (7.2) |
 | 2 | **S2 singular trial Gram** | Error, as upstream does, with a diagnostic; `"pinv"` opt-in |
 | 3 | **GMM eps floor** (MATLAB `91e5b7e`) | Adopt, with deterministic restarts |
 | 4 | **S6 zero-SD voxels in CV** | Zero for all candidates (MATLAB semantics). Python's in-place divisor mutation is an aliasing artefact that scores constant voxels inconsistently across candidates |
 | 5 | **Upstream issues** | None will be filed. Deviations are documented in the vignette's "Differences from GLMsingle" section |
+| 6 | **Implementation language** | R. Algorithmic restructuring through BLAS-backed matrix operations; Rcpp only for a profiled bottleneck (Phase 6). Python is used only to generate test fixtures |
+| 7 | **API** | A single `glmsingle()` with every setting as a documented argument. Variants are `match.arg()` arguments that default to the best choice. No options object, no policy sets |
