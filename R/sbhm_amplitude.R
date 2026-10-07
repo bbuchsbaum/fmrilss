@@ -25,7 +25,8 @@
   }
   X_stack <- do.call(cbind, regs)
   if (!is.null(X_other)) X_stack <- cbind(X_stack, X_other)
-  pw <- .prewhiten_data(Y, X = X_stack, Z = Zint, Nuisance = Nuisance, prewhiten = prewhiten)
+  pw <- .prewhiten_data(Y, X = X_stack, Z = Zint, Nuisance = Nuisance, prewhiten = prewhiten,
+                        X_noise = cbind(Reduce(`+`, regs), X_other))
   Xw <- pw$X_whitened
   r <- ncol(regs[[1]]); ntrials <- length(regs)
   regs_w <- vector("list", ntrials)
@@ -179,7 +180,8 @@ sbhm_amplitude_lss1 <- function(Y, sbhm, design_spec, alpha_hat,
   if (!is.null(prewhiten)) {
     X_stack <- do.call(cbind, regs)
     if (!is.null(X_other)) X_stack <- cbind(X_stack, X_other)
-    pw <- .prewhiten_data(Y, X = X_stack, Z = Zint, Nuisance = Nuisance, prewhiten = prewhiten)
+    pw <- .prewhiten_data(Y, X = X_stack, Z = Zint, Nuisance = Nuisance, prewhiten = prewhiten,
+                        X_noise = cbind(Reduce(`+`, regs), X_other))
     Y <- pw$Y_whitened
     Zint <- pw$Z_whitened
     Nuisance <- pw$Nuisance_whitened

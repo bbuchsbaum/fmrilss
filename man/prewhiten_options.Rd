@@ -17,7 +17,8 @@ prewhiten_options(
   design = NULL,
   acvf_correction = NULL,
   correction_max_lag = 25L,
-  voxel_bins = 50L
+  voxel_bins = 50L,
+  residual_model = NULL
 )
 }
 \arguments{
@@ -58,6 +59,14 @@ requirements of the correction.}
 \code{pooling = "voxel"} in the weight-matrix LSS methods. Voxels with similar
 residual autocorrelation share one AR model refitted from their pooled
 residuals (default 50).}
+
+\item{residual_model}{Design whose OLS residuals feed the noise model.
+\code{"aggregate"} (the default unless a residual-bias correction is
+requested) keeps the confounds plus one summed regressor per trial group
+or basis function. \code{"full"} uses every trial regressor (the LSA model),
+which in rapid designs with many trials removes so many degrees of
+freedom that the residual autocorrelation is biased strongly downward;
+it is required with \code{design}/\code{acvf_correction}, which correct that bias.}
 }
 \value{
 A list with class \code{"fmrilss_prewhiten_options"}.

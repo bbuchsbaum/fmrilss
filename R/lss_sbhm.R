@@ -316,7 +316,7 @@ lss_sbhm <- function(Y, sbhm, design_spec,
            call. = FALSE)
     }
     master_whitening <- .prewhiten_data(
-      Y, built$X_trials, NULL, nuisance_all, prewhiten
+      Y, built$X_trials, NULL, nuisance_all, prewhiten, X_noise = built$A_agg
     )
     prewhiten$.whiten_plan <- master_whitening$whiten_plan
     class(prewhiten) <- c("fmrilss_internal_prewhiten", "list")

@@ -207,3 +207,54 @@ test_that("voxel and parcel pooling are rejected by generic-whitening methods", 
     "cannot be applied to a shared design matrix"
   )
 })
+
+test_that("aggregate noise residuals avoid the many-trial AR bias", {
+  skip_if_not_installed("fmriAR")
+  set.seed(21)
+  n <- 240
+  n_trials <- 90
+  V <- 200
+  onsets <- sort(sample(3:(n - 18), n_trials))
+  h <- dgamma(0:15, 6, 1) - dgamma(0:15, 16, 1) / 6
+  X <- vapply(onsets, function(o) {
+    s <- numeric(n)
+    s[o] <- 1
+    out <- stats::filter(s, h, sides = 1)
+    out[is.na(out)] <- 0
+    as.numeric(out)
+  }, numeric(n))
+  noise <- apply(matrix(rnorm(n * V), n, V), 2, function(e) {
+    as.numeric(stats::filter(e, 0.4, "recursive"))
+  })
+  Y <- X %*% matrix(rnorm(n_trials * V, 1, 0.3), n_trials, V) + noise
+
+  agg <- lss(Y, X, prewhiten = list(method = "ar", p = 1))
+  full <- lss(Y, X, prewhiten = list(method = "ar", p = 1, residual_model = "full"))
+  phi_agg <- attr(agg, "whiten_plan")$phi[[1]]
+  phi_full <- attr(full, "whiten_plan")$phi[[1]]
+  expect_lt(abs(phi_agg - 0.4), 0.1)
+  # 90 trial columns in 240 scans bias the full-model residual AR estimate
+  expect_lt(phi_full, phi_agg - 0.15)
+
+  # The generic whitening path uses the same noise model
+  ref <- lss(Y, X, method = "naive", prewhiten = list(method = "ar", p = 1))
+  expect_equal(attr(ref, "whiten_plan")$phi[[1]], phi_agg, tolerance = 1e-10)
+})
+
+test_that("residual_model is validated against the bias correction", {
+  expect_identical(
+    fmrilss:::.resolve_prewhiten_options(list(method = "ar"))$residual_model,
+    "aggregate"
+  )
+  expect_identical(
+    fmrilss:::.resolve_prewhiten_options(list(method = "ar", design = diag(3)))$residual_model,
+    "full"
+  )
+  expect_error(
+    fmrilss:::.resolve_prewhiten_options(
+      list(method = "ar", design = diag(3), residual_model = "aggregate")
+    ),
+    "residual_model = 'full'"
+  )
+  expect_error(prewhiten_options(method = "ar", residual_model = "bogus"))
+})

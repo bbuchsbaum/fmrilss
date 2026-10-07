@@ -321,7 +321,11 @@ test_that("voxel-ridge OASIS solves the final LSS model in whitened space", {
     prewhiten = whitening
   )
 
-  pw <- fmrilss:::.prewhiten_data(Y, X, Z, NULL, whitening)
+  # The noise model uses one summed regressor per basis function.
+  X_noise <- vapply(seq_len(K), function(k) {
+    rowSums(X[, seq.int(k, ncol(X), by = K), drop = FALSE])
+  }, numeric(T))
+  pw <- fmrilss:::.prewhiten_data(Y, X, Z, NULL, whitening, X_noise = X_noise)
   qr_nuis <- qr(pw$Z_whitened)
   nuisance_basis <- qr.Q(qr_nuis)[, seq_len(qr_nuis$rank), drop = FALSE]
   vhrf <- fmrilss:::.estimate_voxel_hrf_fast(

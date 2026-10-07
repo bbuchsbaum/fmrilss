@@ -296,7 +296,7 @@ sbhm_prepass <- function(Y, sbhm, design_spec,
 
   # 4) Optional prewhitening (dense Y only in PR2)
   if (!is.null(prewhiten) && is.null(data_fac)) {
-    whitened <- .prewhiten_data(Y, A, NULL, N_nuis, prewhiten)
+    whitened <- .prewhiten_data(Y, A, NULL, N_nuis, prewhiten, X_noise = A)
     Yw <- whitened$Y_whitened
     Aw <- whitened$X_whitened
     Nw <- whitened$Nuisance_whitened

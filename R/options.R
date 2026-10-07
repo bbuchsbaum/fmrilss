@@ -221,6 +221,13 @@ oasis_options <- function(
 #'   `pooling = "voxel"` in the weight-matrix LSS methods. Voxels with similar
 #'   residual autocorrelation share one AR model refitted from their pooled
 #'   residuals (default 50).
+#' @param residual_model Design whose OLS residuals feed the noise model.
+#'   `"aggregate"` (the default unless a residual-bias correction is
+#'   requested) keeps the confounds plus one summed regressor per trial group
+#'   or basis function. `"full"` uses every trial regressor (the LSA model),
+#'   which in rapid designs with many trials removes so many degrees of
+#'   freedom that the residual autocorrelation is biased strongly downward;
+#'   it is required with `design`/`acvf_correction`, which correct that bias.
 #'
 #' @return A list with class `"fmrilss_prewhiten_options"`.
 #' @examples
@@ -240,7 +247,8 @@ prewhiten_options <- function(
   design = NULL,
   acvf_correction = NULL,
   correction_max_lag = 25L,
-  voxel_bins = 50L
+  voxel_bins = 50L,
+  residual_model = NULL
 ) {
   method <- match.arg(method)
   pooling <- match.arg(pooling)
@@ -285,7 +293,8 @@ prewhiten_options <- function(
     design = design,
     acvf_correction = acvf_correction,
     correction_max_lag = correction_max_lag,
-    voxel_bins = voxel_bins
+    voxel_bins = voxel_bins,
+    residual_model = residual_model
   )
   opts <- .resolve_prewhiten_options(opts, internal = FALSE)
   option_names <- .prewhiten_option_names(internal = FALSE)

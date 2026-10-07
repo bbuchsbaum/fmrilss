@@ -9,6 +9,10 @@
 #' @param X Optional design matrix for trials (timepoints x trials)
 #' @param Z Optional experimental design matrix (timepoints x regressors)
 #' @param Nuisance Optional nuisance regressors (timepoints x nuisance)
+#' @param X_noise Optional low-dimensional summary of `X` (for example one
+#'   summed regressor per condition or per basis function) used in place of
+#'   `X` when computing noise-model residuals with
+#'   `residual_model = "aggregate"`. Defaults to `rowSums(X)`.
 #' @param prewhiten List of prewhitening options:
 #'   \describe{
 #'     \item{method}{Character: "ar" (default), "arma", or "none"}
@@ -24,6 +28,7 @@
 #'     \item{acvf_correction}{Optional cached bias-correction matrix or list of matrices}
 #'     \item{correction_max_lag}{Positive integer lag budget for bias correction}
 #'     \item{voxel_bins}{Number of autocorrelation bins for pooling = "voxel"}
+#'     \item{residual_model}{"aggregate" (default) or "full" design for noise residuals}
 #'   }
 #' @return List containing:
 #'   \describe{
@@ -67,7 +72,8 @@
     design = NULL,
     acvf_correction = NULL,
     correction_max_lag = 25L,
-    voxel_bins = 50L
+    voxel_bins = 50L,
+    residual_model = NULL
   )
 
   # Merge with user options
@@ -149,6 +155,17 @@
     }
   }
   correction_requested <- !is.null(opts$design) || !is.null(opts$acvf_correction)
+  # The residual-bias correction describes projection onto the full design,
+  # so it implies full-model residuals; otherwise default to the low-
+  # dimensional aggregate trial model.
+  if (is.null(opts$residual_model)) {
+    opts$residual_model <- if (correction_requested) "full" else "aggregate"
+  }
+  opts$residual_model <- match.arg(opts$residual_model, c("aggregate", "full"))
+  if (correction_requested && opts$residual_model != "full") {
+    stop("prewhiten residual-bias correction requires residual_model = 'full'",
+         call. = FALSE)
+  }
   if (correction_requested && opts$method != "ar") {
     stop("prewhiten residual-bias correction requires method = 'ar'", call. = FALSE)
   }
@@ -164,7 +181,7 @@
 #' @importFrom utils modifyList
 #' @keywords internal
 .prewhiten_data <- function(Y, X = NULL, Z = NULL, Nuisance = NULL,
-                           prewhiten = list()) {
+                           prewhiten = list(), X_noise = NULL) {
 
   opts <- .resolve_prewhiten_options(prewhiten, internal = TRUE)
 
@@ -236,7 +253,14 @@
   if (!is.null(Z)) Z <- as.matrix(Z)
   if (!is.null(X)) X <- as.matrix(X)
   if (!is.null(Nuisance)) Nuisance <- as.matrix(Nuisance)
-  if (opts$compute_residuals) design_full <- cbind(Z, X, Nuisance)
+  if (opts$compute_residuals) {
+    X_model <- if (identical(opts$residual_model, "full")) {
+      X
+    } else {
+      X_noise %||% .aggregate_trials(X)
+    }
+    design_full <- cbind(Z, X_model, Nuisance)
+  }
 
   # Fit the noise model unless a caller is deliberately reusing one plan
   # across several algebraically equivalent stages of the same estimator.

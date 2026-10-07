@@ -40,15 +40,21 @@
 
   plan <- opts$.whiten_plan
   if (is.null(plan)) {
+    X_model <- if (identical(opts$residual_model, "full")) {
+      X
+    } else {
+      .aggregate_trials(X, groups)
+    }
+    noise_design <- cbind(Z, X_model, Nuisance)
     plan <- if (opts$pooling == "voxel") {
       resid <- if (opts$compute_residuals) {
-        .noise_residuals(Y, cbind(Z, X, Nuisance))
+        .noise_residuals(Y, noise_design)
       } else {
         Y
       }
       .fit_binned_voxel_plan(resid, opts)
     } else {
-      .fit_noise_plan(Y, cbind(Z, X, Nuisance), opts)
+      .fit_noise_plan(Y, noise_design, opts)
     }
   }
 
@@ -271,4 +277,26 @@
   bins <- integer(V)
   bins[ord] <- ceiling(seq_len(V) * nrow(centers) / V)
   bins
+}
+
+#' Low-dimensional trial summary for noise-model residuals
+#'
+#' Fitting the noise model to residuals of the full trial-wise (LSA) design
+#' removes up to one degree of freedom per trial; in rapid designs with many
+#' trials this biases the residual autocorrelation strongly downward (often
+#' to negative AR coefficients). The aggregate model keeps the confounds and
+#' one summed regressor per trial group (or per basis function), which is
+#' also what the per-trial LSS models of Nilearn leave in their residuals.
+#'
+#' @param X Trial design (n x T) or NULL.
+#' @param groups NULL or integer codes (length T) for the summed columns.
+#' @return n x G matrix (or NULL).
+#' @keywords internal
+#' @noRd
+.aggregate_trials <- function(X, groups = NULL) {
+  if (is.null(X) || ncol(X) == 0L) return(X)
+  if (is.null(groups)) return(matrix(rowSums(X), ncol = 1L))
+  vapply(sort(unique(groups)), function(g) {
+    rowSums(X[, groups == g, drop = FALSE])
+  }, numeric(nrow(X)))
 }

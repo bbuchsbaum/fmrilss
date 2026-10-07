@@ -216,8 +216,8 @@ parcel labels.  Required for \code{pooling = "parcel"}.
 segment is scaled by \eqn{\sqrt{1 - \phi_1^2}} for the exact
 likelihood; \code{"none"} drops the first observation instead.
 \item \code{compute_residuals}: Logical (default TRUE). When TRUE,
-OLS residuals from the full design are computed before fitting the
-noise model.  Set to FALSE only if Y is already residualized.
+OLS residuals (see \code{residual_model}) are computed before fitting
+the noise model.  Set to FALSE only if Y is already residualized.
 \item \code{design}: Optional numeric design matrix whose projection
 produced those residuals. Supplying it opts in to fmriAR's correction
 for downward bias in residual autocovariance. When
@@ -230,6 +230,12 @@ matrices from \code{fmriAR::acvf_bias_matrix()}, used instead of
 are mutually exclusive.
 \item \code{voxel_bins}: Positive integer number of autocorrelation bins
 for \code{pooling = "voxel"} (default 50).
+\item \code{residual_model}: \code{"aggregate"} (default) estimates the
+noise model from residuals of the confounds plus one summed trial
+regressor per \code{trial_groups} level (or per basis function);
+\code{"full"} uses residuals of the full trial-wise design, whose many
+columns bias the residual autocorrelation downward in rapid designs.
+\code{"full"} is implied by \code{design}/\code{acvf_correction}.
 \item \code{correction_max_lag}: Positive integer lag budget used when
 \code{design} is supplied (default 25). The correction is intended for
 high-pass-filtered designs; without high-pass filtering, the required
