@@ -48,6 +48,15 @@ jobs:
           extra-packages: any::rcmdcheck
           needs: check
 
+      - name: Use released albersdown from CRAN
+        shell: Rscript {0}
+        run: |
+          install.packages("albersdown", repos = "https://cloud.r-project.org", type = "source")
+          stopifnot(
+            packageVersion("albersdown") >= "2.1.0",
+            identical(packageDescription("albersdown")$Repository, "CRAN")
+          )
+
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true

@@ -1,21 +1,13 @@
 ---
 title: 'Shared-basis HRF matching: shapes, score margins, and trial coefficients'
 output:
-  rmarkdown::html_vignette:
-    mathjax: default
+  albersdown::albers_vignette:
+    family: red
+    preset: homage
+    fig_width: 8
+    fig_height: 5
     toc: yes
     toc_depth: 2.0
-    css: albers.css
-    includes:
-      in_header: albers-header.html
-params:
-  family: red
-  preset: homage
-resource_files:
-- albers.css
-- albers.js
-- albers-header.html
-- fonts
 
 vignette: |
   %\VignetteIndexEntry{Shared-basis HRF matching: shapes, score margins, and trial coefficients}
@@ -24,53 +16,24 @@ vignette: |
 ---
 
 ```{r setup-opts, include=FALSE}
-if (requireNamespace("ragg", quietly = TRUE)) {
-  knitr::opts_chunk$set(dev = "ragg_png")
-} else {
-  knitr::opts_chunk$set(dev = "png")
-}
-if (requireNamespace("systemfonts", quietly = TRUE) &&
-    requireNamespace("albersdown", quietly = TRUE)) {
-  albersdown::albers_register_fonts()
-}
-if (requireNamespace("ggplot2", quietly = TRUE) &&
-    requireNamespace("albersdown", quietly = TRUE)) {
-  ggplot2::theme_set(
-    albersdown::theme_albers(family = params$family, preset = params$preset)
-  )
-}
 knitr::opts_chunk$set(
+  fig.retina = 1,
   collapse = TRUE,
   comment = "#>",
-  fig.width = 8,
-  fig.height = 5,
   dpi = 150
 )
 set.seed(811)
 ```
 
-```{r albers-classes, echo=FALSE, results='asis'}
-cat(sprintf(
-  paste0(
-    '<script>document.addEventListener("DOMContentLoaded",function(){',
-    'document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");',
-    'document.body.classList.add("palette-%s","preset-%s");',
-    '});</script>'
-  ),
-  params$family,
-  params$preset
-))
-```
-
 ## What this workflow estimates
 
-This is the final specialist article in the learning path. Read
-`vignette("fmrilss")`, `vignette("oasis_method")`, and
-`vignette("voxel-wise-hrf")` first. The voxel-wise HRF article estimates a
-continuous shape in a small basis. This article instead restricts each voxel to
-a finite library, or to a declared blend of nearby library members.
+Shared-basis HRF matching (SBHM) selects a voxel's HRF from a finite library
+or forms an explicitly requested blend of library members. It provides an
+alternative to the continuous basis fit in `vignette("voxel-wise-hrf")`.
+Read that article, `vignette("fmrilss")`, and `vignette("oasis_method")` first
+for HRF normalization and trial estimation.
 
-SBHM separates two quantities:
+SBHM estimates two quantities separately:
 
 1. a voxel-specific HRF **shape coordinate** in a shared basis; and
 2. a trial-wise **coefficient on the event design built from that shape**.
@@ -83,8 +46,7 @@ duration and amplitude. Changing any of those changes the coefficient scale.
 
 SBHM produces adaptive point estimates. Shape matching, optional blending,
 ridge penalties, and reuse of the same data for shape selection and coefficient
-estimation are not covered by a calibrated standard-error or test-statistic
-contract. Every SBHM amplitude route rejects `return_se = TRUE`.
+estimation are not accounted for by calibrated standard errors or test statistics. Every SBHM amplitude route rejects `return_se = TRUE`.
 
 ```{r imports}
 suppressPackageStartupMessages({
@@ -107,12 +69,12 @@ contract <- data.frame(
 knitr::kable(contract, caption = "The estimands and boundaries used throughout this article.")
 ```
 
-## Build one transparent library
+## Build a candidate library
 
 For a compact computational example, we use a grid of positive gamma curves.
-It is a demonstration library, not a package recommendation and not a claim
-that the grid spans physiological HRFs. A scientific analysis must justify its
-own candidates, preprocessing, and coverage.
+These curves illustrate the computation; they are not intended to cover the
+range of physiological HRFs. For a scientific analysis, choose candidates and
+preprocessing appropriate to the responses you expect.
 
 ```{r build-library}
 TR <- 1
@@ -150,10 +112,10 @@ sbhm <- sbhm_build(
 ### Rank is a declared approximation
 
 `sbhm_build()` performs one decomposition and retains the full singular-value
-spectrum as metadata. The cumulative fraction below uses total squared
-singular-value energy—not the energy of the largest rank we happened to plot.
-Rank four is a modeling choice for this fixture; the table makes its
-approximation error inspectable rather than turning it into a generic rule.
+spectrum as metadata. The cumulative fraction below uses the sum of squared
+singular values across the full spectrum as its denominator. We retain rank
+four for this example; the table shows how much library energy that choice
+preserves.
 
 ```{r rank-court}
 singular_values <- sbhm$meta$singular_values_full
@@ -187,9 +149,9 @@ The shared basis `B` is orthonormal on this sampled grid. The coordinates `A`
 reconstruct the rank-four candidate waveforms as `B %*% A`; basis vectors are
 algebraic modes, not direct estimates of latency, width, or physiology.
 
-## A truth-referenced fixture
+## Simulate known shapes and trial coefficients
 
-The fixture contains twelve voxels. Six use an exact library member and six use
+The simulation contains twelve voxels. Six use an exact library member and six use
 an off-library convex mixture. This tests both interpolation and the limitation
 of hard matching. Trial coefficients vary across trials and voxels. Motion-like
 nuisance signals and independent Gaussian noise are added explicitly.
@@ -261,10 +223,9 @@ Y <- Y_mean + matrix(rnorm(n_time * n_voxels, sd = 0.04), n_time, n_voxels)
 colnames(Y) <- voxel_names
 ```
 
-The main call makes every consequential choice explicit. Zero penalties are
-used so the later direct-GLM oracle has the same estimand. Hard matching is used
-first; soft matching is evaluated separately rather than being hidden in a
-default.
+We first fit with hard matching and zero penalties. Zero penalties allow a
+direct comparison with an unpenalized GLM using the selected shape. Later we
+compare hard matching with soft matching on the same data.
 
 ```{r fit-hard}
 fit_hard <- lss_sbhm(
@@ -303,7 +264,7 @@ output_contract <- data.frame(
     "named event-design scale metadata aligned with amplitude rows"
   )
 )
-knitr::kable(output_contract, caption = "Reader-facing SBHM output contract for the fitted fixture.")
+knitr::kable(output_contract, caption = "SBHM outputs for the simulated data.")
 ```
 
 ```{r output-contract-check, include=FALSE}
@@ -394,7 +355,8 @@ local({
 })
 ```
 
-For the six on-library voxels, exact candidate identity is also judgeable:
+For the six voxels generated from library members, we can also check whether
+the selected index matches the generating index:
 
 ```{r index-secondary}
 exact_index_accuracy <- mean(
@@ -405,11 +367,11 @@ data.frame(OnLibraryExactCandidateAccuracy = exact_index_accuracy)
 
 ## Hard and soft matching answer different questions
 
-Soft matching uses cosine-score softmax weights; those weights are not mixture
-fractions and the score margin is not calibrated confidence. We compare an
-explicit soft policy with the explicit hard fit against the same truth. The
-result is descriptive for this fixture, not a rule that soft matching reduces
-variance or improves interpolation.
+Soft matching blends candidate coordinates using softmax weights derived
+from cosine scores. These weights are not estimates of the mixture fractions
+used to generate the data, and the score margin is not a confidence measure.
+The comparison below shows how hard and soft matching perform in this
+simulation; it does not establish a general advantage for either method.
 
 ```{r fit-soft}
 fit_soft <- lss_sbhm(
@@ -449,7 +411,7 @@ policy_table <- rbind(
 policy_table[-1] <- lapply(policy_table[-1], round, 5)
 knitr::kable(
   policy_table,
-  caption = "Truth-referenced hard and soft results for this fixed fixture."
+  caption = "Hard and soft matching compared with the known simulated shapes and coefficients."
 )
 ```
 
@@ -460,18 +422,20 @@ stopifnot(
 )
 ```
 
-The returned `margin` is simply the top-one minus top-two cosine score. Low
+The returned `margin` is the difference between the highest and second-highest
+cosine scores. Low
 margin can reveal near-ties, but no universal `min_margin` or `blend_margin`
 follows from it. If gating is used, inspect `shape_mode` and
 `fallback_low_conf`; `matched_name` remains the top-scoring candidate, whereas
 `alpha_coords` records the shape actually used.
 
-## Bind the coefficient estimator to an independent GLM
+## Compare trial coefficients with a direct GLM fit
 
 With `amplitude$method = "global_ls"` and zero ridge, the final stage is an
-ordinary trial-wise GLM conditional on the selected shape. The following oracle
-assembles every voxel model independently from the public `fmrihrf` regressors.
-It proves implementation identity; it does not remove shape-selection bias.
+ordinary GLM that fits all trial columns jointly, conditional on the selected
+shape. The comparison below constructs each voxel's model independently using
+public `fmrihrf` regressors. Agreement checks the coefficient calculation for
+these selected shapes; it does not remove shape-selection bias.
 
 ```{r direct-oracle, include=FALSE}
 direct_amplitude <- function(alpha) {
@@ -549,12 +513,13 @@ abline(0, 1, col = "#d7301f", lwd = 2, lty = 2)
 grid()
 ```
 
-## Factorization accelerates only the prepass
+## Use a factorization for the initial shape calculation
 
 `data_fac` represents `Y` as `scores %*% loadings`, where scores are
 \(T \times q\) and loadings are \(q \times V\). The full `Y` is still required by
 `lss_sbhm()` for OASIS and the amplitude stage. The shortcut therefore reduces
-only prepass multiplication; it does not make the full pipeline independent of
+multiplication in the initial shape calculation (the prepass); the full
+pipeline still depends on
 \(V\). Named factor axes must agree between scores and loadings; when `Y` has
 voxel names, loadings must carry the same names and are aligned before use.
 Active prewhitening with `data_fac` fails explicitly because the supplied
@@ -653,7 +618,7 @@ run and uses run-specific intercepts, so an HRF tail cannot cross a run
 boundary. `lss_sbhm_design()` obtains those run identities and heterogeneous
 durations from the unique trialwise `fmridesign` term; non-trial event terms and
 baseline-model columns enter the fixed nuisance span. See
-`vignette("lss_with_fmridesign")` for the event-model identity contract.
+`vignette("lss_with_fmridesign")` for how event models preserve trial identity.
 
 If estimated prewhitening is requested, SBHM applies the same transformation to
 the response, trial basis, other-condition span, and nuisance design in the
@@ -685,16 +650,14 @@ of these labels. Ridge may return symmetric finite coefficients, but it does not
 restore identification. None of the three engines returns calibrated SBHM
 standard errors.
 
-## Takeaways
+## Applying SBHM to your data
 
-SBHM is a constrained shape-selection and coefficient-estimation workflow. Its
-useful compression comes with visible assumptions: the library defines the
-shape space, rank truncation defines the approximation, matching or blending
-defines the voxel waveform, and the supplied event design defines coefficient
-units. Judge the waveform actually used (`alpha_coords`), retain the identity
-maps, and evaluate hard, soft, fallback, ridge, and whitening policies against
-truth or external calibration before using them in a scientific conclusion.
+Choose the library and retained rank by examining the waveforms they can
+represent. Inspect the waveform reconstructed from `alpha_coords`, retain the
+trial and voxel identity maps, and interpret coefficients in the units of the
+supplied event design. Evaluate matching, fallback, ridge, and whitening
+choices against known truth or external calibration suited to your analysis.
 
-This is the end of the vignette learning path. Continue with `?sbhm_build`,
-`?sbhm_match`, `?sbhm_prepass`, `?lss_sbhm`, and `?lss_sbhm_design` for the
-complete API contracts.
+See `?sbhm_build`, `?sbhm_match`, `?sbhm_prepass`, `?lss_sbhm`, and
+`?lss_sbhm_design` for the complete interfaces. For library HRF selection
+combined with GLMdenoise and cross-validated ridge, see `vignette("glmsingle")`.

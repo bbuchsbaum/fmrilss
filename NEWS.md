@@ -36,6 +36,9 @@
 
 ### Vignettes
 
+- Use CRAN albersdown (>= 2.1.0) and its `albers_vignette()` output
+  format; theme assets are embedded from the installed package.
+
 - Recalibrated `fmrilss`, `oasis_method` and `voxel-wise-hrf` for fmrihrf's
   corrected SPMG HRFs (smaller raw scale and a realistic undershoot). Designs
   now use unit-peak HRFs, and checks that were tied to the old kernel are

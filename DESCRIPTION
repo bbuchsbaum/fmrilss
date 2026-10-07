@@ -43,7 +43,7 @@ Suggests:
     fmridesign,
     jsonlite,
     Matrix,
-    albersdown,
+    albersdown (>= 2.1.0),
     ragg,
     systemfonts
 Additional_repositories: https://bbuchsbaum.r-universe.dev

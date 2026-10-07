@@ -1,20 +1,13 @@
 ---
 title: 'Run-aware LSS with fmridesign'
 output:
-  rmarkdown::html_vignette:
+  albersdown::albers_vignette:
+    family: red
+    preset: homage
+    fig_width: 8
+    fig_height: 5
     toc: yes
     toc_depth: 2.0
-    css: albers.css
-    includes:
-      in_header: albers-header.html
-params:
-  family: red
-  preset: homage
-resource_files:
-- albers.css
-- albers.js
-- albers-header.html
-- fonts
 
 vignette: |
   %\VignetteIndexEntry{Run-aware LSS with fmridesign}
@@ -29,42 +22,21 @@ if (!requireNamespace("fmridesign", quietly = TRUE)) {
     "install it before building the article."
   )
 }
-if (requireNamespace("ragg", quietly = TRUE)) {
-  knitr::opts_chunk$set(dev = "ragg_png")
-}
-if (requireNamespace("systemfonts", quietly = TRUE) &&
-    requireNamespace("albersdown", quietly = TRUE)) {
-  albersdown::albers_register_fonts()
-}
 knitr::opts_chunk$set(
+  fig.retina = 1,
   collapse = TRUE,
   comment = "#>",
-  fig.width = 8,
-  fig.height = 5,
   dpi = 150,
   warning = TRUE,
   message = TRUE
 )
 ```
 
-```{r albers-classes, echo = FALSE, results = 'asis'}
-cat(sprintf(
-  paste0(
-    '<script>document.addEventListener("DOMContentLoaded",function(){',
-    'document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");',
-    'document.body.classList.add("palette-%s","preset-%s");',
-    '});</script>'
-  ),
-  params$family,
-  params$preset
-))
-```
-
-`lss_design()` is the run-aware adapter between `fmridesign` event and baseline
-models and the OASIS estimator. Read this after `vignette("fmrilss")` and
-`vignette("oasis_method")`. The adapter is useful when event tables have
-run-relative onsets, the baseline is structured by run, or non-trial event
-terms must remain in the common model.
+`lss_design()` fits LSS directly from `fmridesign` event and baseline models
+using the OASIS backend. Use it when event onsets are relative to each run,
+baseline terms differ by run, or additional event terms must be retained in
+every trial model. Read `vignette("fmrilss")` and `vignette("oasis_method")`
+first for the matrix interface and OASIS options.
 
 This article requires the suggested `fmridesign` package. Load the three
 packages used below before copying the workflow into a fresh session.
@@ -77,7 +49,7 @@ suppressPackageStartupMessages({
 })
 ```
 
-## Know the adapter contract
+## How event and baseline terms enter the model
 
 ```{r contract-table, echo = FALSE}
 contracts <- data.frame(
@@ -101,7 +73,7 @@ knitr::kable(
 )
 ```
 
-The function requires one—and only one—trialwise event term. A parametric or
+The function requires exactly one trialwise event term. A parametric or
 condition-level event term can accompany it, but that term is part of every
 trial's common design. It does not create another set of trial targets.
 
@@ -150,8 +122,8 @@ than assuming that columns arrived in a particular order.
 
 ## Verify the run boundary
 
-The target matrix is block diagonal by run: trials 1--5 have no energy in run
-2, and trials 6--10 have no energy in run 1.
+The target matrix is block diagonal by run: trial columns 1--5 are zero in run
+2, and trial columns 6--10 are zero in run 1.
 
 ```{r public-design-reconstruction, include = FALSE}
 # Reconstruct the adapter contract from public fmridesign outputs. This court
@@ -255,8 +227,9 @@ model is supplied, it inserts run-wise intercepts instead.
 
 The simulation below is correctly specified for every LSS model: target trials
 share a coefficient within each voxel, while drift, run intercepts, motion, and
-the RT modulator all have their own common coefficients. This is an adapter
-court, not evidence about recovery in arbitrary designs.
+the RT modulator all have their own common coefficients. This lets us check
+that the adapter constructs the intended models; it does not establish
+recovery for designs with arbitrary trial effects.
 
 ```{r simulate-data, include = FALSE}
 Z_common <- as.matrix(cbind(
@@ -308,8 +281,8 @@ fit[1:4, ]
 condition-number warning; it does not disable the mandatory trial/basis
 identity mapping. The full trialwise matrix contains `RT_c` as a weighted sum
 of trial columns, so that screening matrix is rank deficient even though each
-target-specific LSS model below is full rank. The independent court checks the
-actual per-target designs and every returned cell.
+target-specific LSS model below is full rank. We check each of those models
+separately and compare every returned coefficient with a direct GLM fit.
 
 ```{r direct-oracle, include = FALSE}
 direct <- matrix(NA_real_, n_trials, n_voxels)
@@ -349,8 +322,9 @@ knitr::kable(
 )
 ```
 
-The zero discrepancy also proves that the RT event term and baseline nuisance
-span entered the model without becoming extra trial rows.
+Agreement with the direct fits confirms, for this example, that the RT event
+term and baseline nuisance regressors entered the intended models without
+creating extra trial rows.
 
 ```{r fixed-term-mutation, include = FALSE}
 direct_without_rt <- matrix(NA_real_, n_trials, n_voxels)
@@ -376,7 +350,7 @@ fit, whose other-trial regressor aggregates trials from both runs. A run-1
 target can therefore change when the run-2 response changes. This is a pooled
 multi-run estimand, not leakage in the event convolution.
 
-The next mutation adds signal only in run 2. It changes the joint fit's run-1
+The next check adds signal only in run 2. It changes the joint fit's run-1
 coefficients, while two explicitly separate run fits leave run 1 unchanged.
 
 ```{r run-pooling-contract, include = FALSE}
@@ -496,8 +470,8 @@ knitr::kable(
 Use one joint call only when that cross-run pooling is the intended LSS model.
 For run-local coefficients, fit each run with its own event and baseline models,
 then restore global event identifiers in both row names and the trial/basis map
-before combining rows, as the helper above does. Run-specific prewhitening does
-not by itself change the pooled other-trial estimand.
+before combining rows. Run-specific prewhitening does not by itself change
+the pooling of other-trial effects.
 
 ## Preserve output identity
 
@@ -522,7 +496,8 @@ identity_map[1:3, c("input_event_id", "trial", "basis", "output_row")]
 ## Multi-basis designs return coefficients, not amplitudes
 
 With SPMG3, `lss_design()` detects three basis columns per trial and returns
-rows in trial-major, basis-minor order. The next simulation is correctly
+three consecutive rows per trial, with basis coefficients ordered within each
+trial. The next simulation is correctly
 specified in that three-dimensional basis and is checked against independent
 full GLMs.
 
@@ -608,9 +583,9 @@ coefficients. The canonical coefficient alone is not a normalized response
 amplitude. Keep all three rows unless a separately defined shape and amplitude
 estimand justifies a reduction.
 
-## Ridge, standard errors, and whitening retain OASIS semantics
+## Ridge, standard errors, and whitening
 
-The adapter does not change the inference contract:
+The same OASIS options and restrictions apply through `lss_design()`:
 
 - `oasis_options()` uses fractional ridge by default.
 - `return_se = TRUE` requires zero ridge, a fixed full-rank design, positive
@@ -619,7 +594,8 @@ The adapter does not change the inference contract:
 
 For multiple runs, whitening needs scan-level segmentation. `lss_design()`
 infers it from the sampling frame. The explicit vector below is equivalent and
-shows the underlying contract; if supplied, it must encode the same boundaries.
+shows the required scan-level labels. If supplied, it must encode the same
+boundaries.
 The event model's `blockids` describe events, not scans, so do not pass that
 shorter vector as `prewhiten$runs`.
 
@@ -641,8 +617,8 @@ fit_whitened <- lss_design(
 )
 ```
 
-This is a recipe, not a recommendation that AR(1) fits every dataset. Choose the
-noise model from residual diagnostics. Shared-design OASIS calls reject voxel-
+AR(1) illustrates the interface. Choose the noise model from residual
+diagnostics for your dataset. Shared-design OASIS calls reject voxel-
 or parcel-specific whitening operators because those require correspondingly
 voxel- or parcel-specific filtered designs.
 
@@ -657,7 +633,7 @@ residualized LSS target model. Mandatory semantic checks remain active
 regardless of the flag: the event design must have metadata, exactly one
 trialwise term, a complete trial/basis rectangle, and stable identities.
 
-Common failures are direct:
+Before fitting, check the following:
 
 - `nrow(Y)` must equal `sum(blocklens(sframe))`.
 - The event and baseline models must use the same sampling frame.
