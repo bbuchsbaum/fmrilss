@@ -209,7 +209,7 @@ knitr::kable(
 )
 ```
 
-```{r true-shape-plot, echo = FALSE, fig.cap="The four simulated HRFs all peak at one, while later voxels have later and wider responses.", fig.alt="Four unit-peak HRF curves. Peak times progress from 3.85 to 6.25 seconds and FWHM increases from 4.45 to 6.05 seconds across voxels 1 through 4."}
+```{r true-shape-plot, echo = FALSE, fig.cap="The four simulated HRFs all peak at one, while later voxels have later and wider responses.", fig.alt=sprintf("Four unit-peak HRF curves. Peak times progress from %.2f to %.2f seconds and FWHM increases from %.2f to %.2f seconds across voxels 1 through 4.", min(true_shape_summary$Peak_time_seconds), max(true_shape_summary$Peak_time_seconds), min(true_shape_summary$FWHM_seconds), max(true_shape_summary$FWHM_seconds))}
 local({
   old_par <- par(bg = "white", mar = c(4, 4, 2, 1))
   on.exit(par(old_par), add = TRUE)
@@ -299,11 +299,25 @@ dispersion-derivative basis functions; the returned weights define a
 reconstructed curve, not three directly interpretable physiological
 measurements.
 
+The basis must also cover the whole response. fmrihrf's built-in `HRF_SPMG1`
+and `HRF_SPMG3` declare a 24-second support, and fmrilss evaluates a basis
+over its declared span, so their post-stimulus undershoot is truncated at
+24 seconds. The simulated responses here last 30 seconds, so the analysis uses
+the same bases with a 30-second span. A truncated basis cannot represent the
+late undershoot, and the missing tail biases trial amplitudes, most for the
+widest responses.
+
+```{r full-span-basis}
+spmg3_30 <- gen_hrf(HRF_SPMG3, span = 30)
+spmg1_30 <- gen_hrf(HRF_SPMG1, span = 30)
+c(builtin_span = attr(HRF_SPMG3, "span"), analysis_span = attr(spmg3_30, "span"))
+```
+
 ```{r estimate-hrf}
 estimated_hrf <- estimate_voxel_hrf(
   calibration_response,
   calibration_events,
-  basis = HRF_SPMG3,
+  basis = spmg3_30,
   nuisance_regs = nuisance_regs,
   fixed_regs = fixed_regs,
   sframe = sframe
@@ -314,7 +328,7 @@ relabeled_events$condition <- rep(c("A", "B"), length.out = nrow(relabeled_event
 relabeled_hrf <- estimate_voxel_hrf(
   calibration_response,
   relabeled_events,
-  basis = HRF_SPMG3,
+  basis = spmg3_30,
   nuisance_regs = nuisance_regs,
   fixed_regs = fixed_regs,
   sframe = sframe
@@ -340,7 +354,7 @@ the zero relabeling discrepancy above binds that contract in this example.
 
 ```{r estimated-shapes, include = FALSE}
 basis_impulse <- regressor(
-  onsets = 0, hrf = HRF_SPMG3, duration = 0, span = 30
+  onsets = 0, hrf = spmg3_30, duration = 0, span = 30
 )
 basis_shapes <- as.matrix(evaluate(
   basis_impulse, shape_time, precision = 0.05, method = "conv"
@@ -377,7 +391,7 @@ knitr::kable(
 )
 ```
 
-```{r estimated-shape-plot, echo = FALSE, fig.cap="Estimated SPMG3 curves closely follow the independently generated unit-peak HRFs; the largest discrepancy is the width of voxel 4.", fig.alt="Four panels compare solid true and dashed estimated unit-peak HRFs. Shape correlations range from about 0.99 to 1.00; voxel 4 has the largest width difference, about 0.85 seconds."}
+```{r estimated-shape-plot, echo = FALSE, fig.cap=sprintf("Estimated SPMG3 curves closely follow the independently generated unit-peak HRFs; the largest width discrepancy is %.2f seconds (%s).", max(abs(shape_summary$FWHM_error_seconds)), shape_summary$Voxel[which.max(abs(shape_summary$FWHM_error_seconds))]), fig.alt=sprintf("Four panels compare solid true and dashed estimated unit-peak HRFs. Shape correlations range from %.3f to %.3f; the largest width difference is %.2f seconds.", min(shape_summary$Correlation), max(shape_summary$Correlation), max(abs(shape_summary$FWHM_error_seconds)))}
 local({
   old_par <- par(
     bg = "white", mfrow = c(2, 2),
@@ -543,11 +557,16 @@ voxel_amplitudes <- data.frame(
   Mean_error = colMeans(fit_r) - true_amplitude
 )
 
+worst_voxel <- which.max(abs(voxel_amplitudes$Mean_error / true_amplitude))
+worst_relative_error <- voxel_amplitudes$Mean_error[worst_voxel] /
+  true_amplitude[worst_voxel]
 stopifnot(
   max(abs(true_hrf_oracle - truth)) < 0.05,
-  amplitude_comparison$RMSE_to_true_amplitude[2] < 0.15,
+  # the estimated shape at least halves the canonical-HRF error ...
   amplitude_comparison$RMSE_to_true_amplitude[2] <
-    amplitude_comparison$RMSE_to_true_amplitude[3]
+    0.5 * amplitude_comparison$RMSE_to_true_amplitude[3],
+  # ... and recovers every voxel's absolute scale to within 10%
+  abs(worst_relative_error) < 0.10
 )
 ```
 
@@ -570,7 +589,14 @@ knitr::kable(
 ```
 
 In this deliberately constructed four-voxel example, the estimated-shape fit
-is closer to truth than the canonical fit. That result diagnoses this fixture;
+is closer to truth than the canonical fit. The largest remaining error is in
+`r voxel_names[worst_voxel]`, whose mean amplitude is off by
+`r sprintf("%.1f%%", 100 * worst_relative_error)` although its reconstructed
+shape correlates `r sprintf("%.3f", shape_summary$Correlation[worst_voxel])`
+with the truth: the three SPMG3 functions approximate a time-dilated HRF only
+locally, and LSS amplitudes are sensitive to small shape errors, especially
+when neighbouring trial responses overlap. The known-HRF oracle shows the
+estimator itself is exact when the shape is right. That result diagnoses this fixture;
 it is not a universal method ranking. Real performance depends on calibration
 quality, basis adequacy, event timing, noise, and nuisance modeling.
 
@@ -607,7 +633,7 @@ check_tr <- function(TR) {
     )
   colnames(response_check) <- c("voxel_2", "voxel_4")
   estimate_check <- estimate_voxel_hrf(
-    response_check, events_check, HRF_SPMG1,
+    response_check, events_check, spmg1_30,
     nuisance_regs = nuisance_check, fixed_regs = fixed_check,
     sframe = sframe_check
   )

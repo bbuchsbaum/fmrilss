@@ -397,7 +397,10 @@ crossover_sd <- sqrt(
   (squared_bias["LSS"] - squared_bias["LSA"]) /
     (variance_factor["LSA"] - variance_factor["LSS"])
 )
-noise_grid <- c(1, crossover_sd, noise_sd)
+# Illustrate both sides of the crossover: half the crossover noise level,
+# the crossover itself, and the noise level used above.
+low_noise_sd <- crossover_sd / 2
+noise_grid <- c(low_noise_sd, crossover_sd, noise_sd)
 sensitivity <- data.frame(
   `Noise SD` = noise_grid,
   `LSS RMSE` = sqrt(squared_bias["LSS"] + noise_grid^2 * variance_factor["LSS"]),
@@ -406,6 +409,8 @@ sensitivity <- data.frame(
 )
 
 stopifnot(
+  is.finite(crossover_sd),
+  crossover_sd < noise_sd,
   qr(X_residual)$rank == n_trials,
   all(is.finite(as.matrix(comparison[, -1]))),
   all(comparison$Variance > 0),
@@ -477,8 +482,8 @@ knitr::kable(
 )
 ```
 
-At noise SD 1, LSA has lower RMSE; at the illustrated SD 2.5, LSS has lower
-RMSE. The example therefore demonstrates both sides of the trade-off rather
+Below the crossover (noise SD `r round(low_noise_sd, 3)` in the first row),
+LSA has lower RMSE; at the illustrated SD `r noise_sd`, LSS has lower RMSE. The example therefore demonstrates both sides of the trade-off rather
 than supplying a general estimator-selection rule. Event spacing, noise, HRF
 mismatch, and the distribution of true trial effects can all move the
 crossover. Simulate conditions that resemble your own acquisition.

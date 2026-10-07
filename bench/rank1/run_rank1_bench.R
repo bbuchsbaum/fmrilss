@@ -63,7 +63,7 @@ simulate <- function(V, iti, amplitudes, noise_sd, seed = 11) {
     as.numeric(stats::filter(e, 0.3, "recursive"))
   })
   truth <- sapply(1:10, function(g) {
-    stats::approx(tt, shape_of(ttp[g]), xout = seq(0, 24, by = 0.1))$y
+    stats::approx(tt, shape_of(ttp[g]), xout = seq(0, 30, by = 0.1))$y
   })
   list(Y = Y + noise_sd * noise + 50, B = B, events = events, sframe = sframe,
        Xg = Xg, grp = grp, truth = truth, V = V, Tn = Tn)
@@ -71,12 +71,14 @@ simulate <- function(V, iti, amplitudes, noise_sd, seed = 11) {
 
 beta_r <- function(est, d) mean(vapply(seq_len(d$V), function(v) cor(est[, v], d$B[, v]), 1))
 hrf_r <- function(fit, d) {
-  wf <- fmrilss:::.voxhrf_waveforms(fit$hrf$basis, fmrihrf::HRF_SPMG1, 24, precision = 0.1)
+  wf <- fmrilss:::.voxhrf_waveforms(fit$hrf$basis, fmrihrf::HRF_SPMG1, 30, precision = 0.1)
   W <- wf$H %*% fit$hrf$coefficients
   mean(vapply(seq_len(d$V), function(v) cor(W[, v], d$truth[, d$grp[v]]), 1))
 }
-bases <- list(SPMG3 = fmrihrf::HRF_SPMG3,
-              FIR12 = fmrihrf::hrf_fir_generator(nbasis = 12, span = 24))
+# Both bases span the full 30 s simulated response (fmrihrf's built-in
+# HRF_SPMG3 declares 24 s, which would truncate the undershoot).
+bases <- list(SPMG3 = fmrihrf::gen_hrf(fmrihrf::HRF_SPMG3, span = 30),
+              FIR15 = fmrihrf::hrf_fir_generator(nbasis = 15, span = 30))
 scenarios <- list(
   positive = list(iti = c(3, 8), amplitudes = "positive", noise_sd = 0.8),
   positive_rapid = list(iti = c(1.5, 4), amplitudes = "positive", noise_sd = 1.5),

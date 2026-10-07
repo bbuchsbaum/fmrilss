@@ -38,7 +38,7 @@
   (`model = "joint"`, R1-GLM). It is fitted by exact alternating least
   squares on K x K Gram blocks, which is monotone, parallel over voxels and,
   in benchmarks, reaches the same optimum as the paper's L-BFGS approach
-  (also available as `solver = "lbfgs"`) 2.5-200x faster. The learned HRFs
+  (also available as `solver = "lbfgs"`) 3-200x faster. The learned HRFs
   are returned as a `VoxelHRF` for `lss_with_hrf()` on new data. See
   `vignette("rank1_hrf")`.
 
