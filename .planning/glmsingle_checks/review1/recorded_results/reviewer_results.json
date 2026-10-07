@@ -1,0 +1,74 @@
+{
+  "metadata": {
+    "seed": 1,
+    "source_commit": "GLMsingle 1ab54a6",
+    "fracridge": "3.0",
+    "jit": false,
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "numpy": "2.3.5",
+    "scipy": "1.17.0",
+    "threads": [
+      {
+        "user_api": "blas",
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libscipy_openblas",
+        "filepath": "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-fdde5778.so",
+        "version": "0.3.30",
+        "threading_layer": "pthreads",
+        "architecture": "SkylakeX"
+      },
+      {
+        "user_api": "blas",
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libscipy_openblas",
+        "filepath": "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-6cdc3b4a.so",
+        "version": "0.3.30",
+        "threading_layer": "pthreads",
+        "architecture": "SkylakeX"
+      },
+      {
+        "user_api": "openmp",
+        "internal_api": "openmp",
+        "num_threads": 1,
+        "prefix": "libgomp",
+        "filepath": "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/scikit_learn.libs/libgomp-e985bcbb.so.1.0.0",
+        "version": null
+      }
+    ],
+    "wheel_sha256": "fc35bf291e6f217735600b5633e6d598186e2d07c2624f499b2fb44cabfaa0bb",
+    "fracridge_source_sha256": "dedb1af19f175eaf07199c4a25667fb3924f185cb830adcc0ed2406af1217b8c",
+    "calcbadness_sha256": "a87a3a1d7f6ff286a253c3caef0eb1b08c037781cfcd5b942bc5413f2b373d75",
+    "zerodiv_sha256": "645df415d007063cdaec4be3ad07eb2413f022aca7a5bffb5a5ad711a0aa9232",
+    "reviewer_script_sha256": "0df292aaa6c32922a1c7cf1001f29d2474eddb779f4e131ec14bf87be529696d",
+    "setup_change": "Only dependency-loading setup omitted; original AST from rng initialization onwards executed unchanged; full actual modules and real helpers imported; no stubs"
+  },
+  "original_stdout": "block vs global fracridge coef rel err: 8.119978827159753e-13\nblock vs global alpha rel err: 5.860120151580206e-13\nfracridge grid-interp alpha vs exact root: median |log ratio| = 0.0115, max = 0.0397\nfracridge achieved-vs-requested frac max abs err: 0.00599\ncompiled calcbadness rel err: 2.694039415675863e-16  trials used: 70 / 72\ncompiled calcbadness rel err: 2.780526069794868e-16  trials used: 70 / 72\n",
+  "metrics": {
+    "coefficient_relative_l2": 8.119978827159753e-13,
+    "alpha_relative_l2": 5.860120151580206e-13,
+    "exactroot_median_abs_logratio": 0.01147991944813161,
+    "exactroot_max_abs_logratio": 0.0397208241651791,
+    "achieved_fraction_max_error": 0.005992432736777631,
+    "note": "Original reviewer uses direct SVD(X) per block and log1p(grid); upstream tall-design code uses SVD(X.T@X) and log(1+grid). This fixture does not test those boundary differences."
+  },
+  "zero_sd_case": {
+    "upstream_cv_scores": [
+      [
+        0.0,
+        2.0
+      ]
+    ],
+    "naive_zero_all_candidates_cv_scores": [
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "sd_after_actual_zerodiv": [
+      1.0
+    ],
+    "explanation": "zerodiv aliases tmp=y and replaces zero divisors by1 in-place. The baseline residual is0, but later candidates use divisor1, so they are not all set to0."
+  }
+}

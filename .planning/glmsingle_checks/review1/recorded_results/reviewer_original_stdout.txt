@@ -1,0 +1,6 @@
+block vs global fracridge coef rel err: 8.119978827159753e-13
+block vs global alpha rel err: 5.860120151580206e-13
+fracridge grid-interp alpha vs exact root: median |log ratio| = 0.0115, max = 0.0397
+fracridge achieved-vs-requested frac max abs err: 0.00599
+compiled calcbadness rel err: 2.694039415675863e-16  trials used: 70 / 72
+compiled calcbadness rel err: 2.780526069794868e-16  trials used: 70 / 72
