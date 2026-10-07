@@ -22,11 +22,12 @@
 #' @param groups NULL or integer trial group codes.
 #' @param method LSS method used to build weights ("r_optimized",
 #'   "cpp_optimized" or "cpp").
+#' @param ridge Length-2 fractional ridge.
 #' @return List with `beta` (T x V) and `whiten_plan`.
 #' @keywords internal
 #' @noRd
 .lss_prewhitened <- function(Y, X, Z, Nuisance, opts, groups = NULL,
-                             method = "r_optimized") {
+                             method = "r_optimized", ridge = c(0, 0)) {
   n <- nrow(Y)
   V <- ncol(Y)
   K <- cbind(Z, Nuisance)
@@ -73,9 +74,10 @@
     C_res <- .lss_residualize_trials(D[, seq_len(T_trials), drop = FALSE],
                                      D[, -seq_len(T_trials), drop = FALSE])
     if (method == "r_optimized") {
-      .lss_weight_matrix(C_res, groups)
+      .lss_weight_matrix(C_res, groups, ridge = ridge)
     } else {
-      lss_weight_matrix_cpp(C_res, if (is.null(groups)) integer(0) else groups)
+      lss_weight_matrix_cpp(C_res, if (is.null(groups)) integer(0) else groups,
+                            1e-12, ridge[1L], ridge[2L])
     }
   }
 

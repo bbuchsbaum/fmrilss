@@ -66,32 +66,42 @@ NULL
 #' own group. The weights solve a (G + 1)-dimensional normal system per trial
 #' and are again assembled into W, so the data are touched only once.
 #'
+#' With `ridge = c(rx, rb)` each trial model is ridge-penalized: the penalty
+#' adds `lx = rx * mean_i(c_i'c_i)` to the trial-of-interest diagonal and
+#' `lb = rb * mean(diag(B_i'B_i))` to each other-trials diagonal (the
+#' fractional convention of OASIS). The estimate remains linear in the data,
+#' `w_i = (c_i - B_i h_i) / (c_i'c_i + lx - c_i'B_i h_i)` with
+#' `h_i = (B_i'B_i + lb I)^-1 B_i'c_i`.
+#'
 #' @param C Residualized trial design (n x T).
 #' @param groups NULL or integer group codes (length T, values 1..G).
 #' @param eps Numerical tolerance.
+#' @param ridge Length-2 nonnegative fractional ridge `c(trial, others)`.
 #' @return Weight matrix W (n x T) with `crossprod(W, Y)` giving T x V betas.
 #' @keywords internal
 #' @noRd
-.lss_weight_matrix <- function(C, groups = NULL, eps = 1e-12) {
+.lss_weight_matrix <- function(C, groups = NULL, eps = 1e-12, ridge = c(0, 0)) {
   n_trials <- ncol(C)
+  CtC <- colSums(C^2)
+  lx <- ridge[1L] * mean(CtC)
   if (n_trials == 1L) {
-    cc <- sum(C^2)
+    cc <- CtC + lx
     return(if (cc <= eps) C * 0 else C / cc)
   }
   if (!is.null(groups)) {
-    return(.lss_weight_matrix_grouped(C, groups, eps))
+    return(.lss_weight_matrix_grouped(C, groups, eps, ridge))
   }
 
   total <- rowSums(C)
   ss_tot <- sum(total^2)
-  CtC <- colSums(C^2)
   CtT <- drop(crossprod(C, total))
 
   bt2 <- ss_tot - 2 * CtT + CtC
   ctb <- CtT - CtC
+  bt2 <- bt2 + ridge[2L] * mean(bt2)
   bt2[bt2 < eps] <- Inf
   alpha <- ctb / bt2
-  den <- pmax(CtC - ctb^2 / bt2, eps)
+  den <- pmax(CtC + lx - ctb^2 / bt2, eps)
 
   # W = C diag((1 + alpha) / den) - t (alpha / den)'
   sweep(C, 2L, (1 + alpha) / den, `*`) - tcrossprod(total, alpha / den)
@@ -100,7 +110,7 @@ NULL
 #' @rdname dot-lss_weight_matrix
 #' @keywords internal
 #' @noRd
-.lss_weight_matrix_grouped <- function(C, groups, eps = 1e-12) {
+.lss_weight_matrix_grouped <- function(C, groups, eps = 1e-12, ridge = c(0, 0)) {
   n_trials <- ncol(C)
   G <- max(groups)
   A <- vapply(seq_len(G), function(g) {
@@ -111,6 +121,15 @@ NULL
   AtA <- crossprod(A)
   AtC <- crossprod(A, C)              # G x T
   CtC <- colSums(C^2)
+  lx <- ridge[1L] * mean(CtC)
+  lb <- 0
+  if (ridge[2L] > 0) {
+    # Mean diagonal of B_i'B_i over trials and non-empty group columns
+    own <- diag(AtA)[groups] - 2 * AtC[cbind(groups, seq_len(n_trials))] + CtC
+    diag_all <- matrix(diag(AtA), G, n_trials)
+    diag_all[cbind(groups, seq_len(n_trials))] <- own
+    lb <- ridge[2L] * mean(diag_all[diag_all > eps])
+  }
 
   s <- numeric(n_trials)              # coefficient on c_i
   U <- matrix(0, G, n_trials)         # coefficients on group sums
@@ -128,15 +147,16 @@ NULL
     # Drop group columns that are empty once trial i is removed.
     keep <- diag(M_bb) > eps
     if (!any(keep)) {
-      s[i] <- if (CtC[i] > eps) 1 / CtC[i] else 0
+      s[i] <- if (CtC[i] + lx > eps) 1 / (CtC[i] + lx) else 0
       next
     }
     Mk <- M_bb[keep, keep, drop = FALSE]
+    diag(Mk) <- diag(Mk) + lb
     mk <- m_cb[keep]
     # Schur complement of the nuisance block gives beta_i directly:
-    #   beta_i = (c' - m' Mk^-1 B') y / (c'c - m' Mk^-1 m)
+    #   beta_i = (c' - m' Mk^-1 B') y / (c'c + lx - m' Mk^-1 m)
     h <- .lss_small_solve(Mk, mk)
-    den <- max(CtC[i] - sum(mk * h), eps)
+    den <- max(CtC[i] + lx - sum(mk * h), eps)
     hk <- numeric(G)
     hk[keep] <- h
     # w_i = (c_i - B_i h) / den,  B_i h = A h - c_i h_g
@@ -166,11 +186,26 @@ NULL
 #' @param C Trial design (n x T).
 #' @param Xc Confounds (n x p) or NULL.
 #' @param groups NULL or integer group codes.
+#' @param ridge Length-2 fractional ridge.
 #' @return T x V beta matrix.
 #' @keywords internal
 #' @noRd
-.lss_kernel_r <- function(Y, C, Xc, groups = NULL) {
+.lss_kernel_r <- function(Y, C, Xc, groups = NULL, ridge = c(0, 0)) {
   C_res <- .lss_residualize_trials(C, Xc)
-  W <- .lss_weight_matrix(C_res, groups)
+  W <- .lss_weight_matrix(C_res, groups, ridge = ridge)
   crossprod(W, Y)
+}
+
+#' Validate the fractional ridge argument of lss()
+#' @return Length-2 numeric `c(trial, others)`.
+#' @keywords internal
+#' @noRd
+.lss_ridge_arg <- function(ridge) {
+  if (is.null(ridge)) return(c(0, 0))
+  ok <- is.numeric(ridge) && length(ridge) %in% 1:2 && !anyNA(ridge) &&
+    all(is.finite(ridge)) && all(ridge >= 0)
+  if (!ok) {
+    stop("ridge must be one or two finite nonnegative numbers", call. = FALSE)
+  }
+  as.numeric(rep_len(ridge, 2L))
 }

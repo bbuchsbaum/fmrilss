@@ -18,6 +18,8 @@
 #' @param trial_groups Optional vector with one condition label per trial. When
 #'   supplied, each trial model uses one summed "other trials" regressor per
 #'   group (LSS-N) instead of a single pooled regressor. See \code{\link{lss}}.
+#' @param ridge Optional fractional ridge penalty (one or two numbers); see
+#'   \code{\link{lss}}.
 #'
 #' @return A numeric matrix with dimensions (n_events x n_voxels) containing
 #'   the LSS beta estimates for each trial and voxel.
@@ -71,7 +73,8 @@
 #'
 #' @seealso \code{\link{lss}} for the optimized implementation
 #' @export
-lss_naive <- function(Y = NULL, bdes, dset = NULL, trial_groups = NULL) {
+lss_naive <- function(Y = NULL, bdes, dset = NULL, trial_groups = NULL,
+                      ridge = NULL) {
   # Data preparation
   if (is.null(Y)) {
     data_matrix <- get_data_matrix(dset)
@@ -116,10 +119,9 @@ lss_naive <- function(Y = NULL, bdes, dset = NULL, trial_groups = NULL) {
   data_projected <- Q %*% data_matrix
   dmat_ran_projected <- Q %*% dmat_ran
   
-  # Loop over each trial and fit separate model
-  for (i in seq_len(n_events)) {
+  ridge <- .lss_ridge_arg(ridge)
+  trial_designs <- lapply(seq_len(n_events), function(i) {
     trial_regressor <- dmat_ran_projected[, i, drop = FALSE]
-
     if (n_events > 1 && !is.null(groups)) {
       # LSS-N: one summed "other trials" regressor per trial group
       others <- vapply(seq_len(max(groups)), function(g) {
@@ -127,19 +129,34 @@ lss_naive <- function(Y = NULL, bdes, dset = NULL, trial_groups = NULL) {
         rowSums(dmat_ran_projected[, idx, drop = FALSE])
       }, numeric(n_timepoints))
       others <- others[, colSums(others^2) > 0, drop = FALSE]
-      X_trial <- cbind(trial_regressor, others)
+      cbind(trial_regressor, others)
     } else if (n_events > 1) {
       other_trials_indices <- setdiff(seq_len(n_events), i)
-      other_trials_regressor <- rowSums(dmat_ran_projected[, other_trials_indices, drop = FALSE])
-      X_trial <- cbind(trial_regressor, other_trials_regressor)
+      cbind(trial_regressor,
+            rowSums(dmat_ran_projected[, other_trials_indices, drop = FALSE]))
     } else {
-      X_trial <- trial_regressor
+      trial_regressor
     }
-    
-    # Fit GLM using pseudoinverse (more stable than solve)
-    # Beta coefficients for all regressors  
-    beta_all <- MASS::ginv(X_trial) %*% data_projected
-    
+  })
+
+  # Fractional ridge: scale by the mean energy of trial and other columns
+  lx <- ridge[1L] * mean(colSums(dmat_ran_projected^2))
+  lb <- if (ridge[2L] > 0 && n_events > 1) {
+    ridge[2L] * mean(unlist(lapply(trial_designs, function(D) colSums(D[, -1, drop = FALSE]^2))))
+  } else {
+    0
+  }
+
+  # Loop over each trial and fit separate model
+  for (i in seq_len(n_events)) {
+    X_trial <- trial_designs[[i]]
+    if (lx > 0 || lb > 0) {
+      penalty <- diag(c(lx, rep(lb, ncol(X_trial) - 1L)), ncol(X_trial))
+      beta_all <- solve(crossprod(X_trial) + penalty, crossprod(X_trial, data_projected))
+    } else {
+      # Fit GLM using pseudoinverse (more stable than solve)
+      beta_all <- MASS::ginv(X_trial) %*% data_projected
+    }
     # Extract beta for the trial regressor (first column in X_trial)
     beta_matrix[i, ] <- beta_all[1, ]
   }

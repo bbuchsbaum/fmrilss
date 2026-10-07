@@ -4,7 +4,7 @@
 \alias{lss_naive}
 \title{Naive Least Squares Separate (LSS) Analysis}
 \usage{
-lss_naive(Y = NULL, bdes, dset = NULL, trial_groups = NULL)
+lss_naive(Y = NULL, bdes, dset = NULL, trial_groups = NULL, ridge = NULL)
 }
 \arguments{
 \item{Y}{A numeric matrix where rows are timepoints and columns are voxels/features.
@@ -24,6 +24,9 @@ extracted using \code{get_data_matrix}.}
 \item{trial_groups}{Optional vector with one condition label per trial. When
 supplied, each trial model uses one summed "other trials" regressor per
 group (LSS-N) instead of a single pooled regressor. See \code{\link{lss}}.}
+
+\item{ridge}{Optional fractional ridge penalty (one or two numbers); see
+\code{\link{lss}}.}
 }
 \value{
 A numeric matrix with dimensions (n_events x n_voxels) containing

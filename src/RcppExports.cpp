@@ -61,21 +61,23 @@ BEGIN_RCPP
 END_RCPP
 }
 // lss_weight_matrix_cpp
-arma::mat lss_weight_matrix_cpp(const arma::mat& C, const arma::ivec& groups, double eps);
-RcppExport SEXP _fmrilss_lss_weight_matrix_cpp(SEXP CSEXP, SEXP groupsSEXP, SEXP epsSEXP) {
+arma::mat lss_weight_matrix_cpp(const arma::mat& C, const arma::ivec& groups, double eps, double ridge_x, double ridge_b);
+RcppExport SEXP _fmrilss_lss_weight_matrix_cpp(SEXP CSEXP, SEXP groupsSEXP, SEXP epsSEXP, SEXP ridge_xSEXP, SEXP ridge_bSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::mat& >::type C(CSEXP);
     Rcpp::traits::input_parameter< const arma::ivec& >::type groups(groupsSEXP);
     Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
-    rcpp_result_gen = Rcpp::wrap(lss_weight_matrix_cpp(C, groups, eps));
+    Rcpp::traits::input_parameter< double >::type ridge_x(ridge_xSEXP);
+    Rcpp::traits::input_parameter< double >::type ridge_b(ridge_bSEXP);
+    rcpp_result_gen = Rcpp::wrap(lss_weight_matrix_cpp(C, groups, eps, ridge_x, ridge_b));
     return rcpp_result_gen;
 END_RCPP
 }
 // lss_fused_optim_cpp
-arma::mat lss_fused_optim_cpp(const arma::mat& X, const arma::mat& Y, const arma::mat& C, int block_size, SEXP groups, bool use_omp);
-RcppExport SEXP _fmrilss_lss_fused_optim_cpp(SEXP XSEXP, SEXP YSEXP, SEXP CSEXP, SEXP block_sizeSEXP, SEXP groupsSEXP, SEXP use_ompSEXP) {
+arma::mat lss_fused_optim_cpp(const arma::mat& X, const arma::mat& Y, const arma::mat& C, int block_size, SEXP groups, bool use_omp, double ridge_x, double ridge_b);
+RcppExport SEXP _fmrilss_lss_fused_optim_cpp(SEXP XSEXP, SEXP YSEXP, SEXP CSEXP, SEXP block_sizeSEXP, SEXP groupsSEXP, SEXP use_ompSEXP, SEXP ridge_xSEXP, SEXP ridge_bSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -85,7 +87,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type block_size(block_sizeSEXP);
     Rcpp::traits::input_parameter< SEXP >::type groups(groupsSEXP);
     Rcpp::traits::input_parameter< bool >::type use_omp(use_ompSEXP);
-    rcpp_result_gen = Rcpp::wrap(lss_fused_optim_cpp(X, Y, C, block_size, groups, use_omp));
+    Rcpp::traits::input_parameter< double >::type ridge_x(ridge_xSEXP);
+    Rcpp::traits::input_parameter< double >::type ridge_b(ridge_bSEXP);
+    rcpp_result_gen = Rcpp::wrap(lss_fused_optim_cpp(X, Y, C, block_size, groups, use_omp, ridge_x, ridge_b));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -366,8 +370,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_lss_compute_cpp", (DL_FUNC) &_fmrilss_lss_compute_cpp, 2},
     {"_fmrilss_all_finite_cpp", (DL_FUNC) &_fmrilss_all_finite_cpp, 1},
     {"_fmrilss_voxel_acf_cpp", (DL_FUNC) &_fmrilss_voxel_acf_cpp, 3},
-    {"_fmrilss_lss_weight_matrix_cpp", (DL_FUNC) &_fmrilss_lss_weight_matrix_cpp, 3},
-    {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 6},
+    {"_fmrilss_lss_weight_matrix_cpp", (DL_FUNC) &_fmrilss_lss_weight_matrix_cpp, 5},
+    {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 8},
     {"_fmrilss_lss_engine_vox_hrf_cpp", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf_cpp, 4},
     {"_fmrilss_lss_engine_vox_hrf_arma", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf_arma, 4},
     {"_fmrilss_lss_engine_vox_hrf_omp", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf_omp, 4},

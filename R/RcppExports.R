@@ -17,8 +17,8 @@ voxel_acf_cpp <- function(E, run_starts, max_lag) {
     .Call(`_fmrilss_voxel_acf_cpp`, E, run_starts, max_lag)
 }
 
-lss_weight_matrix_cpp <- function(C, groups, eps = 1e-12) {
-    .Call(`_fmrilss_lss_weight_matrix_cpp`, C, groups, eps)
+lss_weight_matrix_cpp <- function(C, groups, eps = 1e-12, ridge_x = 0.0, ridge_b = 0.0) {
+    .Call(`_fmrilss_lss_weight_matrix_cpp`, C, groups, eps, ridge_x, ridge_b)
 }
 
 #' Fused Single-Pass LSS Solver (C++)
@@ -39,10 +39,12 @@ lss_weight_matrix_cpp <- function(C, groups, eps = 1e-12) {
 #' @param use_omp Logical; distribute voxel blocks across OpenMP threads.
 #'   Useful with a single-threaded BLAS. With a multithreaded BLAS a single
 #'   matrix product is faster.
+#' @param ridge_x,ridge_b Fractional ridge penalties on the trial and
+#'   other-trial coefficients.
 #' @return A T x V matrix of LSS beta estimates.
 #' @keywords internal
-lss_fused_optim_cpp <- function(X, Y, C, block_size = 96L, groups = NULL, use_omp = TRUE) {
-    .Call(`_fmrilss_lss_fused_optim_cpp`, X, Y, C, block_size, groups, use_omp)
+lss_fused_optim_cpp <- function(X, Y, C, block_size = 96L, groups = NULL, use_omp = TRUE, ridge_x = 0.0, ridge_b = 0.0) {
+    .Call(`_fmrilss_lss_fused_optim_cpp`, X, Y, C, block_size, groups, use_omp, ridge_x, ridge_b)
 }
 
 lss_engine_vox_hrf_cpp <- function(Y, coeffs, basis_convolved, Z) {

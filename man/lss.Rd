@@ -15,7 +15,8 @@ lss(
   oasis = list(),
   stglmnet = list(),
   prewhiten = NULL,
-  trial_groups = NULL
+  trial_groups = NULL,
+  ridge = NULL
 )
 }
 \arguments{
@@ -76,6 +77,16 @@ pooling every other trial. This is the model used by Nilearn's and
 NiBetaSeries' LSS beta series and is more accurate when conditions evoke
 different responses. Supported by methods \code{"r_optimized"},
 \code{"cpp_optimized"}, \code{"cpp"}, and \code{"naive"}. Defaults to \code{NULL} (classic LSS).}
+
+\item{ridge}{Optional fractional ridge penalty: one number, or two numbers
+\code{c(trial, others)} for the trial-of-interest and the other-trials
+coefficients. Each is a fraction of the mean design energy (the
+\code{ridge_mode = "fractional"} convention of OASIS), i.e. the penalty added to
+the trial diagonal is \verb{ridge[1] * mean(c_i'c_i)}. Ridge shrinks trial
+estimates toward zero and can greatly reduce their variance in rapid
+designs where neighbouring trials overlap; it composes with
+\code{trial_groups} and \code{prewhiten}. Supported by methods \code{"r_optimized"},
+\code{"cpp_optimized"}, \code{"cpp"}, and \code{"naive"}. Defaults to \code{NULL} (no ridge).}
 }
 \value{
 Normally, a numeric matrix of trial-wise beta estimates: T × V for

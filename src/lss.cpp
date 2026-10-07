@@ -44,7 +44,7 @@ List compute_residuals_cpp(const arma::mat& X,          // (n×k)
 }
 
 arma::mat lss_weight_matrix_cpp(const arma::mat& C, const arma::ivec& groups,
-                                double eps);
+                                double eps, double ridge_x, double ridge_b);
 
 // Single-pass LS-S solver: beta = W' Y with W the LSS weight matrix of the
 // projected trial regressors. Y may be raw or projected data; the result is
@@ -53,7 +53,7 @@ arma::mat lss_weight_matrix_cpp(const arma::mat& C, const arma::ivec& groups,
 arma::mat lss_compute_cpp(const arma::mat& C,   // projected (n×T)
                           const arma::mat& Y) { // data (n×V)
     arma::ivec no_groups;
-    arma::mat W = lss_weight_matrix_cpp(C, no_groups, 1e-12);
+    arma::mat W = lss_weight_matrix_cpp(C, no_groups, 1e-12, 0.0, 0.0);
     return W.t() * Y;
 }
 

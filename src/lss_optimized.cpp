@@ -25,21 +25,26 @@ static arma::vec small_spd_solve(const arma::mat& M, const arma::vec& b) {
 // `groups` vector a single pooled "other trials" regressor is used (classic
 // LSS); otherwise `groups` holds 1-based trial group codes and one summed
 // regressor per group is used (LSS-N), with trial i removed from its group.
+// `ridge_x` / `ridge_b` are fractional ridge penalties on the trial and
+// other-trial coefficients, scaled by the mean design energy (as in OASIS).
 // [[Rcpp::export]]
 arma::mat lss_weight_matrix_cpp(const arma::mat& C,
                                 const arma::ivec& groups,
-                                double eps = 1e-12) {
+                                double eps = 1e-12,
+                                double ridge_x = 0.0,
+                                double ridge_b = 0.0) {
     const uword n = C.n_rows;
     const uword T = C.n_cols;
     arma::mat W(n, T);
 
+    arma::vec CtC = arma::sum(arma::square(C), 0).t();
+    const double lx = ridge_x * arma::mean(CtC);
+
     if (T == 1) {
-        double cc = arma::dot(C, C);
+        double cc = CtC[0] + lx;
         if (cc <= eps) W.zeros(); else W = C / cc;
         return W;
     }
-
-    arma::vec CtC = arma::sum(arma::square(C), 0).t();
 
     if (groups.n_elem == 0) {
         arma::vec total = arma::sum(C, 1);
@@ -47,9 +52,10 @@ arma::mat lss_weight_matrix_cpp(const arma::mat& C,
         arma::vec CtT = C.t() * total;
         arma::vec bt2 = ss_tot - 2.0 * CtT + CtC;
         arma::vec ctb = CtT - CtC;
+        bt2 += ridge_b * arma::mean(bt2);
         bt2.elem(arma::find(bt2 < eps)).fill(arma::datum::inf);
         arma::vec alpha = ctb / bt2;
-        arma::vec den = CtC - arma::square(ctb) / bt2;
+        arma::vec den = CtC + lx - arma::square(ctb) / bt2;
         den.elem(arma::find(den < eps)).fill(eps);
         arma::vec s = (1.0 + alpha) / den;
         arma::vec u = alpha / den;
@@ -66,6 +72,22 @@ arma::mat lss_weight_matrix_cpp(const arma::mat& C,
     arma::mat AtA = A.t() * A;
     arma::mat AtC = A.t() * C;
 
+    double lb = 0.0;
+    if (ridge_b > 0) {
+        // Mean diagonal of B_i'B_i over trials and non-empty group columns
+        double total = 0.0;
+        uword count = 0;
+        for (uword i = 0; i < T; ++i) {
+            const uword gi = groups[i] - 1;
+            for (int g = 0; g < G; ++g) {
+                double d = AtA(g, g);
+                if ((uword)g == gi) d += CtC[i] - 2.0 * AtC(g, i);
+                if (d > eps) { total += d; ++count; }
+            }
+        }
+        if (count > 0) lb = ridge_b * total / count;
+    }
+
     arma::vec s(T, arma::fill::zeros);
     arma::mat U(G, T, arma::fill::zeros);
     for (uword i = 0; i < T; ++i) {
@@ -80,12 +102,14 @@ arma::mat lss_weight_matrix_cpp(const arma::mat& C,
 
         arma::uvec keep = arma::find(Mbb.diag() > eps);
         if (keep.n_elem == 0) {
-            s[i] = CtC[i] > eps ? 1.0 / CtC[i] : 0.0;
+            s[i] = CtC[i] + lx > eps ? 1.0 / (CtC[i] + lx) : 0.0;
             continue;
         }
         arma::vec mk = mcb.elem(keep);
-        arma::vec h = small_spd_solve(Mbb.submat(keep, keep), mk);
-        double den = std::max(CtC[i] - arma::dot(mk, h), eps);
+        arma::mat Mk = Mbb.submat(keep, keep);
+        Mk.diag() += lb;
+        arma::vec h = small_spd_solve(Mk, mk);
+        double den = std::max(CtC[i] + lx - arma::dot(mk, h), eps);
         arma::vec hk(G, arma::fill::zeros);
         hk.elem(keep) = h;
         s[i] = (1.0 + hk[g]) / den;
@@ -132,6 +156,8 @@ static arma::mat blocked_crossprod(const arma::mat& W, const arma::mat& Y,
 //' @param use_omp Logical; distribute voxel blocks across OpenMP threads.
 //'   Useful with a single-threaded BLAS. With a multithreaded BLAS a single
 //'   matrix product is faster.
+//' @param ridge_x,ridge_b Fractional ridge penalties on the trial and
+//'   other-trial coefficients.
 //' @return A T x V matrix of LSS beta estimates.
 //' @keywords internal
 // [[Rcpp::export]]
@@ -140,7 +166,9 @@ arma::mat lss_fused_optim_cpp(const arma::mat& X,
                               const arma::mat& C,
                               int block_size = 96,
                               SEXP groups = R_NilValue,
-                              bool use_omp = true) {
+                              bool use_omp = true,
+                              double ridge_x = 0.0,
+                              double ridge_b = 0.0) {
     if (block_size <= 0) {
         Rcpp::stop("block_size must be positive");
     }
@@ -161,7 +189,7 @@ arma::mat lss_fused_optim_cpp(const arma::mat& X,
 
     arma::ivec g;
     if (!Rf_isNull(groups)) g = Rcpp::as<arma::ivec>(groups);
-    arma::mat W = lss_weight_matrix_cpp(C_res, g);
+    arma::mat W = lss_weight_matrix_cpp(C_res, g, 1e-12, ridge_x, ridge_b);
 
     if (use_omp) return blocked_crossprod(W, Y, (uword)block_size);
     return W.t() * Y;

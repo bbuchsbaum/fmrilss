@@ -4,7 +4,16 @@
 \alias{lss_fused_optim_cpp}
 \title{Fused Single-Pass LSS Solver (C++)}
 \usage{
-lss_fused_optim_cpp(X, Y, C, block_size = 96L, groups = NULL, use_omp = TRUE)
+lss_fused_optim_cpp(
+  X,
+  Y,
+  C,
+  block_size = 96L,
+  groups = NULL,
+  use_omp = TRUE,
+  ridge_x = 0,
+  ridge_b = 0
+)
 }
 \arguments{
 \item{X}{The confound regressor matrix (n x k).}
@@ -22,6 +31,9 @@ a single pooled "other trials" regressor.}
 \item{use_omp}{Logical; distribute voxel blocks across OpenMP threads.
 Useful with a single-threaded BLAS. With a multithreaded BLAS a single
 matrix product is faster.}
+
+\item{ridge_x, ridge_b}{Fractional ridge penalties on the trial and
+other-trial coefficients.}
 }
 \value{
 A T x V matrix of LSS beta estimates.

@@ -54,6 +54,15 @@
 #'   NiBetaSeries' LSS beta series and is more accurate when conditions evoke
 #'   different responses. Supported by methods `"r_optimized"`,
 #'   `"cpp_optimized"`, `"cpp"`, and `"naive"`. Defaults to `NULL` (classic LSS).
+#' @param ridge Optional fractional ridge penalty: one number, or two numbers
+#'   `c(trial, others)` for the trial-of-interest and the other-trials
+#'   coefficients. Each is a fraction of the mean design energy (the
+#'   `ridge_mode = "fractional"` convention of OASIS), i.e. the penalty added to
+#'   the trial diagonal is `ridge[1] * mean(c_i'c_i)`. Ridge shrinks trial
+#'   estimates toward zero and can greatly reduce their variance in rapid
+#'   designs where neighbouring trials overlap; it composes with
+#'   `trial_groups` and `prewhiten`. Supported by methods `"r_optimized"`,
+#'   `"cpp_optimized"`, `"cpp"`, and `"naive"`. Defaults to `NULL` (no ridge).
 #'
 #' @return Normally, a numeric matrix of trial-wise beta estimates: T × V for
 #'   a one-basis design or (T K) × V for OASIS with K basis functions. With
@@ -324,7 +333,7 @@
 lss <- function(Y, X, Z = NULL, Nuisance = NULL,
                 method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive", "oasis", "stglmnet"),
                 block_size = 96, oasis = list(), stglmnet = list(), prewhiten = NULL,
-                trial_groups = NULL) {
+                trial_groups = NULL, ridge = NULL) {
   
   method <- match.arg(method)
 
@@ -335,6 +344,14 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
       call. = FALSE
     )
   }
+  if (!is.null(ridge) && method %in% c("r_vectorized", "oasis", "stglmnet")) {
+    stop(
+      "ridge is supported by methods 'r_optimized', 'cpp_optimized', 'cpp', ",
+      "and 'naive'; use oasis$ridge_x/ridge_b for method = 'oasis'",
+      call. = FALSE
+    )
+  }
+  ridge <- .lss_ridge_arg(ridge)
 
   if (!is.null(prewhiten)) {
     trusted_plan <- inherits(prewhiten, "fmrilss_internal_prewhiten")
@@ -429,7 +446,7 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
     # Weight-matrix path: one filtered design per whitening operator, which
     # also supports voxel- and parcel-specific noise models.
     fit <- .lss_prewhitened(Y, X, Z, Nuisance, prewhiten, groups = groups,
-                            method = method)
+                            method = method, ridge = ridge)
     result <- fit$beta
     rownames(result) <- trial_names
     colnames(result) <- voxel_names
@@ -478,12 +495,13 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
 
   # Step 3: Run LSS analysis with the chosen method
   result <- switch(method,
-    "r_optimized" = .lss_r_optimized(Y_clean, X_clean, Z, groups = groups),
+    "r_optimized" = .lss_r_optimized(Y_clean, X_clean, Z, groups = groups,
+                                     ridge = ridge),
     "cpp_optimized" = .lss_cpp_optimized(Y_clean, X_clean, Z, block_size = block_size,
-                                         groups = groups),
+                                         groups = groups, ridge = ridge),
     "r_vectorized" = .lss_r_vectorized(Y_clean, X_clean, Z),
-    "cpp" = .lss_cpp(Y_clean, X_clean, Z, groups = groups),
-    "naive" = .lss_naive(Y_clean, X_clean, Z, groups = groups),
+    "cpp" = .lss_cpp(Y_clean, X_clean, Z, groups = groups, ridge = ridge),
+    "naive" = .lss_naive(Y_clean, X_clean, Z, groups = groups, ridge = ridge),
     stop("Unknown method: ", method)
   )
   
@@ -541,11 +559,12 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
 }
 
 # Implementation functions (these will call the existing optimized functions)
-.lss_r_optimized <- function(Y, X, Z, groups = NULL) {
-  .lss_kernel_r(Y, X, Z, groups = groups)
+.lss_r_optimized <- function(Y, X, Z, groups = NULL, ridge = c(0, 0)) {
+  .lss_kernel_r(Y, X, Z, groups = groups, ridge = ridge)
 }
 
-.lss_cpp_optimized <- function(Y, X, Z, block_size = 96, groups = NULL) {
+.lss_cpp_optimized <- function(Y, X, Z, block_size = 96, groups = NULL,
+                               ridge = c(0, 0)) {
   block_size <- .as_positive_integer(block_size, "block_size")
 
   # Pass an orthonormal, rank-revealed confound basis so the C++ projection
@@ -560,7 +579,8 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   # X = trial regressors, Z = confounds, Y = data
   # The C++ function expects: X=confounds, Y=data, C=trials
   lss_fused_optim_cpp(X = Zb, Y = Y, C = X, block_size = block_size,
-                      groups = groups, use_omp = !.blas_is_threaded())
+                      groups = groups, use_omp = !.blas_is_threaded(),
+                      ridge_x = ridge[1L], ridge_b = ridge[2L])
 }
 
 #' Does the linked BLAS run multithreaded?
@@ -591,10 +611,12 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   return(lss_fast(dset = NULL, bdes = bdes, Y = Y, use_cpp = FALSE))
 }
 
-.lss_cpp <- function(Y, X, Z, groups = NULL) {
-  if (!is.null(groups)) {
+.lss_cpp <- function(Y, X, Z, groups = NULL, ridge = c(0, 0)) {
+  if (!is.null(groups) || any(ridge > 0)) {
     C_res <- .lss_residualize_trials(X, Z)
-    return(crossprod(lss_weight_matrix_cpp(C_res, groups), Y))
+    W <- lss_weight_matrix_cpp(C_res, if (is.null(groups)) integer(0) else groups,
+                               1e-12, ridge[1L], ridge[2L])
+    return(crossprod(W, Y))
   }
   bdes <- list(
     dmat_base = Z,
@@ -605,14 +627,14 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   return(lss_fast(dset = NULL, bdes = bdes, Y = Y, use_cpp = TRUE))
 }
 
-.lss_naive <- function(Y, X, Z, groups = NULL) {
+.lss_naive <- function(Y, X, Z, groups = NULL, ridge = c(0, 0)) {
   bdes <- list(
     dmat_base = Z,
     dmat_ran = X,
     dmat_fixed = NULL,
     fixed_ind = NULL
   )
-  return(lss_naive(Y, bdes, trial_groups = groups))
+  return(lss_naive(Y, bdes, trial_groups = groups, ridge = ridge))
 }
 
 #' Orthogonal Projection Matrix

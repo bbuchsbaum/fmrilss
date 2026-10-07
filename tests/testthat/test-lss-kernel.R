@@ -258,3 +258,64 @@ test_that("residual_model is validated against the bias correction", {
   )
   expect_error(prewhiten_options(method = "ar", residual_model = "bogus"))
 })
+
+test_that("fractional ridge matches the naive reference and OASIS", {
+  p <- make_kernel_problem()
+  g <- rep(c("a", "b", "c"), length.out = p$T)
+  for (rg in list(0.3, c(0.1, 0.5), c(0.5, 0))) {
+    ref <- lss(p$Y, p$X, p$Z, p$N, method = "naive", ridge = rg)
+    refg <- lss(p$Y, p$X, p$Z, p$N, method = "naive", ridge = rg, trial_groups = g)
+    for (m in c("r_optimized", "cpp_optimized", "cpp")) {
+      expect_equal(unname(lss(p$Y, p$X, p$Z, p$N, method = m, ridge = rg)),
+                   unname(ref), tolerance = 1e-10, info = m)
+      expect_equal(unname(lss(p$Y, p$X, p$Z, p$N, method = m, ridge = rg,
+                              trial_groups = g)),
+                   unname(refg), tolerance = 1e-10, info = m)
+    }
+    rg2 <- rep_len(rg, 2L)
+    oasis <- lss(p$Y, p$X, p$Z, p$N, method = "oasis",
+                 oasis = list(ridge_x = rg2[1], ridge_b = rg2[2],
+                              ridge_mode = "fractional"))
+    expect_equal(unname(oasis), unname(ref), tolerance = 1e-10)
+  }
+  expect_equal(lss(p$Y, p$X, p$Z, ridge = 0), lss(p$Y, p$X, p$Z))
+})
+
+test_that("ridge composes with prewhitening", {
+  skip_if_not_installed("fmriAR")
+  p <- make_kernel_problem()
+  pw <- list(method = "ar", p = 1)
+  ref <- lss(p$Y, p$X, p$Z, p$N, method = "naive", prewhiten = pw, ridge = c(0.4, 0.1))
+  for (m in c("r_optimized", "cpp_optimized", "cpp")) {
+    expect_equal(unname(lss(p$Y, p$X, p$Z, p$N, method = m, prewhiten = pw,
+                            ridge = c(0.4, 0.1))),
+                 unname(ref), tolerance = 1e-10, ignore_attr = TRUE, info = m)
+  }
+})
+
+test_that("ridge reduces error for overlapping rapid-design trials", {
+  set.seed(31)
+  n <- 300
+  n_trials <- 100
+  onsets <- cumsum(c(5, sample(2:4, n_trials - 1, replace = TRUE)))
+  h <- dgamma(0:15, 6, 1) - dgamma(0:15, 16, 1) / 6
+  X <- vapply(onsets, function(o) {
+    s <- numeric(n)
+    s[o] <- 1
+    out <- stats::filter(s, h, sides = 1)
+    out[is.na(out)] <- 0
+    as.numeric(out)
+  }, numeric(n))
+  V <- 50
+  B <- matrix(rnorm(n_trials * V, 1, 0.5), n_trials, V)
+  Y <- X %*% B + matrix(rnorm(n * V), n, V)
+  rmse <- function(est) sqrt(mean((est - B)^2))
+  expect_lt(rmse(lss(Y, X, ridge = c(0.5, 0))), rmse(lss(Y, X)))
+})
+
+test_that("ridge is validated", {
+  p <- make_kernel_problem()
+  expect_error(lss(p$Y, p$X, ridge = -1), "nonnegative")
+  expect_error(lss(p$Y, p$X, ridge = c(1, 2, 3)), "one or two")
+  expect_error(lss(p$Y, p$X, method = "oasis", ridge = 1), "oasis\\$ridge_x")
+})
