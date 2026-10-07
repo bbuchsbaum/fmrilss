@@ -9,59 +9,32 @@
 # every fold sums (z_cand[i] - z_ref[j])^2 over training trials i and held-out
 # trials j of the same condition. With W_ij counting those pairs this equals
 #   sum_i d_i z_i^2 - 2 sum_i z_i M_i + sum_j w_j z_ref[j]^2,
-# with d = rowSums(W), M = W z_ref and w = colSums(W).
+# with d = rowSums(W), M = W z_ref and w = colSums(W) (glms_cv_compile, C++).
+# Only trials with d > 0 are kept ("used").
 .glms_cv_compile <- function(geom, ref, zero_sd = "zero") {
-  N <- geom$n_trials
-  V <- ncol(ref)
-  mu <- sdv <- matrix(0, N, V)
-  for (s in unique(geom$session)) {
-    cols <- unlist(geom$validcolumns[geom$session == s])
-    if (!length(cols)) next
-    x <- ref[cols, , drop = FALSE]
-    m <- colMeans(x)
-    sd <- sqrt(colSums(sweep(x, 2L, m)^2) / (length(cols) - 1L))
-    mu[cols, ] <- rep(m, each = length(cols))
-    sdv[cols, ] <- rep(sd, each = length(cols))
+  if (is.null(geom$cond_trials)) {
+    geom$cond_trials <- split(seq_len(geom$n_trials) - 1L, geom$stimorder)
   }
-  zero <- sdv == 0
-  zref <- (ref - mu) / ifelse(zero, 1, sdv)
-  zref[zero] <- 0
-  d <- numeric(N)
-  M <- matrix(0, N, V)
-  const <- numeric(V)
-  cond <- geom$stimorder
-  run <- geom$trial_run
-  for (test_runs in geom$xval_scheme) {
-    test <- which(run %in% test_runs)
-    train <- which(!run %in% test_runs)
-    if (!length(test) || !length(train)) next
-    test_conds <- sort(unique(cond[test]))
-    sums <- rowsum(zref[test, , drop = FALSE], cond[test], reorder = TRUE)
-    counts <- tabulate(match(cond[test], test_conds), length(test_conds))
-    hit <- match(cond[train], test_conds)
-    ok <- !is.na(hit)
-    tr_i <- train[ok]
-    d[tr_i] <- d[tr_i] + counts[hit[ok]]
-    M[tr_i, ] <- M[tr_i, , drop = FALSE] + sums[hit[ok], , drop = FALSE]
-    train_counts <- tabulate(match(cond[train], test_conds), length(test_conds))
-    w <- train_counts[match(cond[test], test_conds)]
-    const <- const + colSums(w * zref[test, , drop = FALSE]^2)
-  }
-  used <- which(d > 0)
-  sd_used <- sdv[used, , drop = FALSE]
-  zero_used <- zero[used, , drop = FALSE]
-  # 1/sd for the reference (zero-SD -> z = 0) and for candidates
-  isd_ref <- ifelse(zero_used, 0, 1 / sd_used)
-  isd <- if (identical(zero_sd, "python")) ifelse(zero_used, 1, 1 / sd_used) else isd_ref
-  list(mu = mu[used, , drop = FALSE], isd = isd, isd_ref = isd_ref,
-       d = d[used], M = M[used, , drop = FALSE], const = const, used = used)
+  test_runs <- vapply(geom$xval_scheme, function(f) seq_len(length(geom$validcolumns)) %in% f,
+                      logical(length(geom$validcolumns)))
+  cv <- glms_cv_compile(ref, match(geom$session, unique(geom$session))[geom$trial_run] - 1L,
+                        geom$trial_run - 1L, unname(geom$cond_trials),
+                        matrix(as.integer(test_runs), nrow = length(geom$validcolumns)))
+  cv$used <- as.integer(cv$used)
+  cv$const <- drop(cv$const)
+  cv$d <- drop(cv$d)
+  cv$session_used <- as.integer(cv$session_used)
+  # candidates: zero-SD voxels get z = 0 ("zero"), or are divided by 1
+  # ("python", reproducing GLMsingle's in-place divisor update)
+  cv$isd <- if (identical(zero_sd, "python")) ifelse(cv$sd == 0, 1, cv$isd_ref) else cv$isd_ref
+  cv
 }
 
 # Cross-validation loss (one value per voxel) of candidate betas given only
 # on the used trial rows.
 .glms_cv_loss <- function(cv, cand_used, ref = FALSE) {
-  z <- (cand_used - cv$mu) * (if (ref) cv$isd_ref else cv$isd)
-  colSums(cv$d * z^2) - 2 * colSums(z * cv$M) + cv$const
+  drop(glms_cv_loss_cpp(cand_used, cv$mu, if (ref) cv$isd_ref else cv$isd,
+                        cv$session_used, cv$d, cv$M, cv$const, .glms_nt()))
 }
 
 # Loss of the reference fit itself. In GLMsingle the reference's own z-scores

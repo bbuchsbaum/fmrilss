@@ -105,7 +105,12 @@
 #' @param full_glmbadness Compute the PC-count cross-validation for every
 #'   voxel instead of only the voxels that decide the PC count. Estimates are
 #'   identical; only the `glmbadness` diagnostic is filled for all voxels.
-#' @param chunk_size Number of voxels processed at a time.
+#' @param chunk_size Number of voxels processed at a time (GLMsingle's
+#'   `chunklen`). Lower it to reduce peak memory.
+#' @param n_threads Threads for the per-voxel C++ loops (`0` = OpenMP
+#'   default). Results do not depend on the thread count. Matrix products use
+#'   the BLAS library's own threads; use `n_threads > 1` only with a
+#'   single-threaded BLAS, because the two thread pools compete for cores.
 #' @param verbose Print progress messages.
 #'
 #' @return An object of class `glmsingle_fit`: a list with elements `typea`,
@@ -160,7 +165,8 @@ glmsingle <- function(Y, design, tr, stimdur,
                       singular = c("error", "pinv"),
                       frac_alpha = c("fracridge", "exact"),
                       full_glmbadness = FALSE,
-                      chunk_size = 5000L,
+                      chunk_size = 50000L,
+                      n_threads = 1L,
                       verbose = TRUE) {
   t_start <- proc.time()[["elapsed"]]
   timing <- list()
@@ -185,6 +191,10 @@ glmsingle <- function(Y, design, tr, stimdur,
   stimdur <- .as_nonnegative_scalar(stimdur, "stimdur")
   n_pcs <- .as_nonnegative_integer(n_pcs, "n_pcs")
   chunk_size <- .as_positive_integer(chunk_size, "chunk_size")
+  n_threads <- .as_nonnegative_integer(n_threads, "n_threads")
+  old_threads <- .glms_state$n_threads
+  .glms_state$n_threads <- n_threads
+  on.exit(.glms_state$n_threads <- old_threads, add = TRUE)
   if (!is.numeric(pcstop) || length(pcstop) != 1L || !is.finite(pcstop)) {
     stop("pcstop must be a single finite number", call. = FALSE)
   }
@@ -256,7 +266,7 @@ glmsingle <- function(Y, design, tr, stimdur,
   pb <- if (want_percent_bold) 100 / abs(meanvol) else rep(1, n_vox)
   beta_names <- list(paste0("trial", seq_len(geom$n_trials)), colnames(Ylist[[1]]))
   scale_betas <- function(B) {
-    structure(B * rep(pb, each = nrow(B)), dim = dim(B), dimnames = beta_names)
+    structure(glms_scale_cols(B, pb, .glms_nt()), dimnames = beta_names)
   }
   tick("setup")
 

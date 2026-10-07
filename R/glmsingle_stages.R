@@ -24,7 +24,7 @@
   fit_r2_run <- matrix(NA_real_, n_vox, R * n_hrf)  # becomes voxels x runs x HRFs
   beta <- matrix(0, geom$n_trials, n_vox)
   for (vox in tiles) {
-    dats <- lapply(seq_len(R), function(r) .glms_data_stats(Ylist[[r]][, vox, drop = FALSE], nuis[[r]]))
+    dats <- lapply(seq_len(R), function(r) .glms_data_stats(.glms_cols(Ylist[[r]], vox), nuis[[r]]))
     rhs <- lapply(seq_len(R), function(r) .glms_rhs(stats_a[[r]], dats[[r]]))
     b <- Reduce(`+`, lapply(rhs, function(x) x$b[1, ]))
     bt <- if (g_a > 0) b / g_a else 0 * b
@@ -33,16 +33,17 @@
     }))
     onoff_r2[vox] <- .glms_r2(sse, Reduce(`+`, lapply(dats, `[[`, "s")))
     beta_a[vox] <- bt
-    best <- rep(-Inf, length(vox))
+    # score every HRF without forming betas ...
     for (h in seq_len(n_hrf)) {
-      fit <- .glms_fit_ols(stats[[h]], dats)
-      r2 <- .glms_r2(colSums(fit$sse), colSums(fit$s))
-      fit_r2[vox, h] <- r2
-      fit_r2_run[vox, (h - 1L) * R + seq_len(R)] <- t(.glms_r2(fit$sse, fit$s))
-      # NaN R^2 (zero-variance voxels) keeps the first HRF, as in GLMsingle
-      better <- if (h == 1L) seq_along(vox) else which(r2 > best)
-      best[better] <- r2[better]
-      beta[, vox[better]] <- fit$beta[, better, drop = FALSE]
+      sc <- .glms_ols_score(stats[[h]], dats)
+      fit_r2[vox, h] <- .glms_r2(colSums(sc$sse), colSums(sc$s))
+      fit_r2_run[vox, (h - 1L) * R + seq_len(R)] <- t(.glms_r2(sc$sse, sc$s))
+    }
+    # ... then reconstruct betas only for each voxel's winning HRF
+    win <- .glms_argmax_rows(fit_r2[vox, , drop = FALSE])
+    for (h in unique(win)) {
+      sel <- which(win == h)
+      beta[, vox[sel]] <- .glms_fit_ols(stats[[h]], .glms_dats_subset(dats, sel))$beta
     }
   }
   dim(fit_r2_run) <- c(n_vox, R, n_hrf)
@@ -142,7 +143,7 @@
       }))
     }
     stats_k <- stats_cache[[key]]
-    dats <- lapply(seq_len(R), function(r) .glms_data_stats(Ylist[[r]][, grp$vox, drop = FALSE], nuis[[r]]))
+    dats <- lapply(seq_len(R), function(r) .glms_data_stats(.glms_cols(Ylist[[r]], grp$vox), nuis[[r]]))
     ref <- .glms_fit_ols(stats_k[[1L]], dats)$beta
     cv <- .glms_cv_compile(geom, ref, zero_sd_cv)
     rows <- match(grp$vox, cv_vox)
@@ -178,7 +179,8 @@
     used_off <- used_off + length(keep)
     off <- off + n
   }
-  glms_frac_cv_loss(Vu, s2, a, offsets, alphas, cv$mu, cv$isd, cv$d, cv$M, cv$const)
+  glms_frac_cv_loss(Vu, s2, a, offsets, alphas, cv$mu, cv$isd, cv$session_used,
+                    cv$d, cv$M, cv$const, .glms_nt())
 }
 
 # Types C (GLMdenoise, unregularised) and D (fractional ridge) for all voxels.
@@ -216,7 +218,7 @@
     }
     stats <- stats_cache[[key]]
     v <- grp$vox
-    dats <- lapply(seq_len(R), function(r) .glms_data_stats(Ylist[[r]][, v, drop = FALSE], nuis[[r]], kname))
+    dats <- lapply(seq_len(R), function(r) .glms_data_stats(.glms_cols(Ylist[[r]], v), nuis[[r]], kname))
     sp <- .glms_spectral(stats, dats)
     w1 <- .glms_shrink(sp, rep(0, length(v)))
     b1 <- .glms_ridge_coef(sp, w1)

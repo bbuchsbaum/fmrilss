@@ -33,7 +33,8 @@ glmsingle(
   singular = c("error", "pinv"),
   frac_alpha = c("fracridge", "exact"),
   full_glmbadness = FALSE,
-  chunk_size = 5000L,
+  chunk_size = 50000L,
+  n_threads = 1L,
   verbose = TRUE
 )
 }
@@ -123,7 +124,13 @@ fraction equation exactly; experimental).}
 voxel instead of only the voxels that decide the PC count. Estimates are
 identical; only the \code{glmbadness} diagnostic is filled for all voxels.}
 
-\item{chunk_size}{Number of voxels processed at a time.}
+\item{chunk_size}{Number of voxels processed at a time (GLMsingle's
+\code{chunklen}). Lower it to reduce peak memory.}
+
+\item{n_threads}{Threads for the per-voxel C++ loops (\code{0} = OpenMP
+default). Results do not depend on the thread count. Matrix products use
+the BLAS library's own threads; use \code{n_threads > 1} only with a
+single-threaded BLAS, because the two thread pools compete for cores.}
 
 \item{verbose}{Print progress messages.}
 }

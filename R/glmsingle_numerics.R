@@ -4,6 +4,16 @@
 # Python port at commit 1ab54a6) where they affect estimates. They are not
 # user options; variants that users may choose are arguments of glmsingle().
 
+# Per-call settings shared by the C++ kernels (set and restored by glmsingle()).
+.glms_state <- new.env(parent = emptyenv())
+.glms_state$n_threads <- 1L
+.glms_nt <- function() .glms_state$n_threads
+
+# Columns `vox` of Y, without a copy when they are all columns in order.
+.glms_cols <- function(Y, vox) {
+  if (length(vox) == ncol(Y) && identical(vox, seq_len(ncol(Y)))) Y else Y[, vox, drop = FALSE]
+}
+
 # GLMsingle's alt_round(): round half away from zero, to integer.
 .glms_alt_round <- function(x) {
   as.integer(sign(x) * ceiling(floor(abs(x) * 2) / 2))
@@ -32,43 +42,6 @@
 .glms_resid <- function(X, Q) {
   if (is.null(Q) || !ncol(Q)) return(X)
   X - Q %*% crossprod(Q, X)
-}
-
-# Solve G beta = B for a symmetric positive (semi)definite G.
-#
-# Mirrors olsmatrix2(): columns whose design column is exactly zero get a zero
-# coefficient; the remaining system is solved directly. A singular remaining
-# system is an error (as in GLMsingle) unless singular = "pinv".
-.glms_solve <- function(G, B, zero_cols = NULL, singular = "error",
-                        context = "trial design") {
-  B <- as.matrix(B)
-  n <- nrow(G)
-  out <- matrix(0, n, ncol(B))
-  good <- if (is.null(zero_cols)) rep(TRUE, n) else !zero_cols
-  if (!any(good)) return(out)
-  Gg <- G[good, good, drop = FALSE]
-  R <- tryCatch(chol(Gg), error = function(e) NULL)
-  if (!is.null(R)) {
-    d <- diag(R)
-    if (min(d) > sqrt(.Machine$double.eps) * max(d)) {
-      out[good, ] <- backsolve(R, forwardsolve(t(R), B[good, , drop = FALSE]))
-      return(out)
-    }
-  }
-  if (identical(singular, "pinv")) {
-    # counted by glmsingle(), which warns once per call
-    signalCondition(structure(class = c("glms_singular", "condition"),
-                              list(message = context, call = NULL)))
-    e <- eigen(Gg, symmetric = TRUE)
-    keep <- e$values > max(e$values) * n * .Machine$double.eps
-    V <- e$vectors[, keep, drop = FALSE]
-    out[good, ] <- V %*% (crossprod(V, B[good, , drop = FALSE]) / e$values[keep])
-    return(out)
-  }
-  stop(sprintf(
-    "Singular %s: two or more trial regressors are linearly dependent. ",
-    context),
-    "Use singular = \"pinv\" for a minimum-norm solution.", call. = FALSE)
 }
 
 # Autoscale operator: for each voxel, regress the reference betas `ref`

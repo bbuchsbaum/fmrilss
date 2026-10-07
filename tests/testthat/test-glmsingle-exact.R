@@ -177,3 +177,14 @@ test_that("fmridesign front end matches the matrix interface", {
   expect_s3_class(summary(a), "summary.glmsingle_fit")
   expect_length(coef(a, "a"), 10L)
 })
+
+test_that("results do not depend on the thread count", {
+  x <- glms_sim_fit("plain", seed = 21)
+  sim <- x$sim
+  one <- glmsingle(sim$Y, sim$design, tr = sim$tr, stimdur = sim$stimdur, n_pcs = 3,
+                   verbose = FALSE, brain_r2 = 2, pc_r2_cutoff = 2, n_threads = 1)
+  many <- glmsingle(sim$Y, sim$design, tr = sim$tr, stimdur = sim$stimdur, n_pcs = 3,
+                    verbose = FALSE, brain_r2 = 2, pc_r2_cutoff = 2, n_threads = 2)
+  expect_identical(one$typed$betasmd, many$typed$betasmd)
+  expect_identical(one$typed$FRACvalue, many$typed$FRACvalue)
+})

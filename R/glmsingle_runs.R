@@ -118,6 +118,7 @@
     validcolumns = validcolumns, stimorder = stimorder,
     trial_run = rep(seq_len(R), n_per_run),
     session = session_indicator, xval_scheme = xval_scheme,
-    cond_in_runs = cond_in_runs
+    cond_in_runs = cond_in_runs,
+    cond_trials = split(seq_along(stimorder) - 1L, stimorder)
   )
 }
