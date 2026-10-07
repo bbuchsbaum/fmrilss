@@ -60,11 +60,14 @@ cat(sprintf(
 ))
 ```
 
-`lss_design()` is the run-aware adapter between `fmridesign` event and baseline
-models and the OASIS estimator. Read this after `vignette("fmrilss")` and
-`vignette("oasis_method")`. The adapter is useful when event tables have
-run-relative onsets, the baseline is structured by run, or non-trial event
-terms must remain in the common model.
+`lss_design()` runs LSS directly on `fmridesign` event and baseline models. It
+reads the run structure from those models and converts them into the inputs of
+the OASIS estimator: the trial matrix, the common regressors `Z`, and the
+`Nuisance` regressors. Use it when event tables have onsets measured from the
+start of each run, when the baseline (intercepts, drift, nuisance) is defined
+per run, or when event terms that are not trials must stay in every trial's
+model. Read this article after `vignette("fmrilss")` and
+`vignette("oasis_method")`.
 
 This article requires the suggested `fmridesign` package. Load the three
 packages used below before copying the workflow into a fresh session.
@@ -77,7 +80,7 @@ suppressPackageStartupMessages({
 })
 ```
 
-## Know the adapter contract
+## How lss_design() maps an fmridesign model to LSS
 
 ```{r contract-table, echo = FALSE}
 contracts <- data.frame(
@@ -90,7 +93,7 @@ contracts <- data.frame(
   Answer = c(
     "Exactly one trialwise event term",
     "They are fixed common regressors, not extra trials",
-    "drift + block go to Z; nuisance is projected as Nuisance",
+    "drift + block and the fixed RT_c event column go to Z; nuisance is projected as Nuisance",
     "K coefficient rows per trial, in trial-major order"
   )
 )
@@ -101,9 +104,9 @@ knitr::kable(
 )
 ```
 
-The function requires one—and only one—trialwise event term. A parametric or
-condition-level event term can accompany it, but that term is part of every
-trial's common design. It does not create another set of trial targets.
+`lss_design()` requires one—and only one—trialwise event term. A parametric or
+condition-level event term can accompany it, but that term enters every trial's
+model as a common regressor. It does not create another set of trial targets.
 
 ## Start from a two-run event table
 
@@ -127,9 +130,9 @@ events$RT_c <- events$RT - mean(events$RT)
 events
 ```
 
-Build one trialwise target term and one reaction-time event term. The latter is
-a common regressor: it adjusts every LSS model for the specified amplitude
-modulation but is not reported as a trial beta.
+Build one trialwise target term and one reaction-time (RT) event term. The RT
+term is a common regressor: it adjusts every LSS model for RT-related amplitude
+modulation, but `lss_design()` does not report a trial beta for it.
 
 ```{r event-model}
 emod <- event_model(
@@ -144,17 +147,17 @@ event_meta <- attr(event_dm, "col_metadata")
 table(event_meta$term_tag)
 ```
 
-The ten `trial` columns are the LSS targets; the one `RT_c` column is fixed.
-`lss_design()` uses the design metadata and stable column identities rather
-than assuming that columns arrived in a particular order.
+The ten `trial` columns are the LSS targets; the one `RT_c` column is a fixed
+common regressor. `lss_design()` uses the design metadata and stable column
+identities rather than assuming that columns arrived in a particular order.
 
-## Verify the run boundary
+## Check that trial regressors stay within their run
 
-The target matrix is block diagonal by run: trials 1--5 have no energy in run
-2, and trials 6--10 have no energy in run 1.
+The target matrix is block diagonal by run: the regressors for trials 1--5 are
+zero throughout run 2, and those for trials 6--10 are zero throughout run 1.
 
 ```{r public-design-reconstruction, include = FALSE}
-# Reconstruct the adapter contract from public fmridesign outputs. This court
+# Reconstruct the adapter contract from public fmridesign outputs. This check
 # deliberately does not call fmrilss's internal mapper.
 reconstruct_public_lss <- function(event_model, trial_tag = "trial") {
   dm <- as.matrix(design_matrix(event_model))
@@ -253,10 +256,11 @@ model is supplied, it inserts run-wise intercepts instead.
 
 ## Fit and check every trial against a full GLM
 
-The simulation below is correctly specified for every LSS model: target trials
-share a coefficient within each voxel, while drift, run intercepts, motion, and
-the RT modulator all have their own common coefficients. This is an adapter
-court, not evidence about recovery in arbitrary designs.
+The simulated data below match the LSS model exactly: within each voxel, all
+trials share one coefficient, and drift, run intercepts, motion, and the RT
+modulator each have their own common coefficient. The simulation tests whether
+the adapter assembles the models correctly; it is not evidence about how well
+LSS recovers trial effects in arbitrary designs.
 
 ```{r simulate-data, include = FALSE}
 Z_common <- as.matrix(cbind(
@@ -284,8 +288,8 @@ Y <- matrix(rowSums(X_trial), n_time, 1L) %*% common_trial_beta +
   matrix(rnorm(n_time * n_voxels), n_time, n_voxels)
 ```
 
-Use explicit zero ridge when the goal is ordinary LSS. The default OASIS
-configuration is penalized.
+The default OASIS configuration applies a ridge penalty. When the goal is
+ordinary (unpenalized) LSS, set the ridge to zero explicitly, as here.
 
 ```{r fit}
 fit <- lss_design(
@@ -304,12 +308,14 @@ dim(fit)
 fit[1:4, ]
 ```
 
-`validate = FALSE` above skips the adapter's optional full-design
-condition-number warning; it does not disable the mandatory trial/basis
-identity mapping. The full trialwise matrix contains `RT_c` as a weighted sum
-of trial columns, so that screening matrix is rank deficient even though each
-target-specific LSS model below is full rank. The independent court checks the
-actual per-target designs and every returned cell.
+`validate = FALSE` skips the adapter's optional checks: the sampling-frame and
+row-count checks described under Validation below, and a warning based on the
+condition number of the full assembled design. The mandatory trial/basis
+identity mapping still runs. The full design contains `RT_c` as a weighted sum
+of the trial columns, so the matrix used for that screening is rank deficient,
+even though each target-specific LSS model below is full rank. A separate check
+fits each target's design as an ordinary GLM and compares every returned
+coefficient with `lss_design()`.
 
 ```{r direct-oracle, include = FALSE}
 direct <- matrix(NA_real_, n_trials, n_voxels)
@@ -349,8 +355,10 @@ knitr::kable(
 )
 ```
 
-The zero discrepancy also proves that the RT event term and baseline nuisance
-span entered the model without becoming extra trial rows.
+Agreement to within `1e-10` also shows that the RT event term and the
+baseline nuisance regressors entered the model without becoming extra trial
+rows. They do matter: refitting the direct GLMs without the RT term changes
+the betas by more than `1e-3`.
 
 ```{r fixed-term-mutation, include = FALSE}
 direct_without_rt <- matrix(NA_real_, n_trials, n_voxels)
@@ -370,14 +378,15 @@ stopifnot(rt_omission_error > 1e-3)
 
 ## Decide whether other-trial effects are pooled across runs
 
-Run-aware onset placement does not make the default coefficient estimator
+Placing onsets within runs does not make the default coefficient estimator
 run-local. A single `lss_design()` call passes all target columns to one OASIS
-fit, whose other-trial regressor aggregates trials from both runs. A run-1
-target can therefore change when the run-2 response changes. This is a pooled
-multi-run estimand, not leakage in the event convolution.
+fit, and in that fit the other-trial regressor (the sum of all non-target
+trials) includes trials from both runs. A run-1 trial's estimate can therefore change when the run-2
+response changes. This reflects a pooled multi-run estimand (the quantity the
+model is defined to estimate), not leakage in the event convolution.
 
-The next mutation adds signal only in run 2. It changes the joint fit's run-1
-coefficients, while two explicitly separate run fits leave run 1 unchanged.
+The next check adds signal to run 2 only. The run-1 coefficients change in the
+single joint fit but stay the same when each run is fitted separately.
 
 ```{r run-pooling-contract, include = FALSE}
 Y_shifted <- Y
@@ -489,21 +498,22 @@ stopifnot(
 knitr::kable(
   run_perturbation,
   digits = 12,
-  caption = "Effect of a run-2-only response mutation on run-1 coefficients."
+  caption = "Effect of changing only the run-2 response on run-1 coefficients."
 )
 ```
 
-Use one joint call only when that cross-run pooling is the intended LSS model.
+Use one joint call only when cross-run pooling is the LSS model you intend.
 For run-local coefficients, fit each run with its own event and baseline models,
-then restore global event identifiers in both row names and the trial/basis map
-before combining rows, as the helper above does. Run-specific prewhitening does
-not by itself change the pooled other-trial estimand.
+then restore global event identifiers in both the row names and the trial/basis
+map before combining rows, as the helper used for this check does. Run-specific
+prewhitening does not by itself change the pooled other-trial estimand.
 
-## Preserve output identity
+## Identify output rows with the trial/basis map
 
 The result carries the event model, baseline model, sampling frame, and an
-explicit trial/basis map. Use the map or row names; do not reconstruct trial
-identity from a presumed source-column order.
+explicit trial/basis map as attributes. To find which trial a row belongs to,
+use the map or the row names; do not infer it from a presumed source-column
+order.
 
 ```{r output-identity}
 attributes_kept <- c(
@@ -521,10 +531,11 @@ identity_map[1:3, c("input_event_id", "trial", "basis", "output_row")]
 
 ## Multi-basis designs return coefficients, not amplitudes
 
-With SPMG3, `lss_design()` detects three basis columns per trial and returns
-rows in trial-major, basis-minor order. The next simulation is correctly
-specified in that three-dimensional basis and is checked against independent
-full GLMs.
+With the three-function SPMG3 basis, `lss_design()` detects three basis
+columns per trial and returns rows in trial-major, basis-minor order: the three
+basis rows for trial 1, then the three for trial 2, and so on. The next
+simulation generates data from that three-dimensional basis, and the result is
+checked against independently fitted full GLMs.
 
 ```{r multibasis-data, include = FALSE}
 emod_spmg3 <- event_model(
@@ -608,20 +619,21 @@ coefficients. The canonical coefficient alone is not a normalized response
 amplitude. Keep all three rows unless a separately defined shape and amplitude
 estimand justifies a reduction.
 
-## Ridge, standard errors, and whitening retain OASIS semantics
+## Ridge, standard errors, and whitening follow the OASIS rules
 
-The adapter does not change the inference contract:
+`lss_design()` does not change how OASIS handles ridge, standard errors, or
+whitening:
 
 - `oasis_options()` uses fractional ridge by default.
 - `return_se = TRUE` requires zero ridge, a fixed full-rank design, positive
   residual degrees of freedom, and no estimated prewhitening.
 - A non-trial event term remains common whether or not ridge is used.
 
-For multiple runs, whitening needs scan-level segmentation. `lss_design()`
-infers it from the sampling frame. The explicit vector below is equivalent and
-shows the underlying contract; if supplied, it must encode the same boundaries.
-The event model's `blockids` describe events, not scans, so do not pass that
-shorter vector as `prewhiten$runs`.
+With multiple runs, whitening needs a run label for every scan. `lss_design()`
+infers these labels from the sampling frame. The explicit vector below is
+equivalent and shows what is expected; if you supply one, it must encode the
+same run boundaries. The event model's `blockids` label events, not scans, so
+do not pass that shorter vector as `prewhiten$runs`.
 
 ```{r whitening-recipe, eval = FALSE}
 scan_run <- rep(seq_along(run_lengths), times = run_lengths)
@@ -648,16 +660,18 @@ voxel- or parcel-specific filtered designs.
 
 ## Validation and failure modes
 
-With `validate = TRUE`, the adapter checks time dimensions and sampling-frame
-agreement. It computes a scale-dependent condition number for the full
-assembled design and emits a warning only when that number exceeds 30 and the
-effective ridge penalties are all zero; it does not return the number as a
-diagnostic. Treat the warning as screening, not as a characterization of every
-residualized LSS target model. Mandatory semantic checks remain active
-regardless of the flag: the event design must have metadata, exactly one
-trialwise term, a complete trial/basis rectangle, and stable identities.
+With `validate = TRUE`, `lss_design()` checks that the time dimensions and
+sampling frames agree. It also computes a scale-dependent condition number for
+the full assembled design and emits a warning only when that number exceeds 30
+and the effective ridge penalties are all zero; it does not return the number
+as a diagnostic. Treat the warning as screening, not as a characterization of
+every residualized LSS target model.
 
-Common failures are direct:
+Mandatory checks run whatever the value of `validate`: the event design must have
+metadata, exactly one trialwise term, a complete trial/basis rectangle (every
+trial has every basis column), and stable identities.
+
+Common failures and the rules behind them:
 
 - `nrow(Y)` must equal `sum(blocklens(sframe))`.
 - The event and baseline models must use the same sampling frame.
