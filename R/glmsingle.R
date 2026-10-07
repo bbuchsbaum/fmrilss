@@ -218,9 +218,15 @@ glmsingle <- function(Y, design, tr, stimdur,
     d
   }
   extras <- .glms_check_extras(extra_regressors, n_time)
+  for (nm in c("brain_exclude", "pc_r2_cutoff_mask")) {
+    m <- get(nm)
+    if (!is.null(m) && (length(m) != n_vox || anyNA(as.logical(m)))) {
+      stop(sprintf("%s must be a logical vector with one entry per voxel", nm), call. = FALSE)
+    }
+  }
 
   hrf0 <- glmsingle_hrf(stimdur, tr)
-  library <- if (!want_library) {
+  hrf_lib <- if (!want_library) {
     matrix(hrf0, ncol = 1L)
   } else if (is.null(hrf_library)) {
     glmsingle_hrf_library(stimdur, tr)
@@ -231,7 +237,6 @@ glmsingle <- function(Y, design, tr, stimdur,
     }
     sweep(lib, 2L, apply(lib, 2L, max), "/")
   }
-  n_hrf <- ncol(library)
 
   if (all(geom$cond_in_runs <= 1L)) {
     warning("No condition occurs in more than one run; cross-validation is not possible.",
@@ -262,7 +267,7 @@ glmsingle <- function(Y, design, tr, stimdur,
   n_singular <- 0L
   withCallingHandlers({
     say("Fitting type-A (ON-OFF) and type-B (HRF library) models")
-    b <- .glms_fit_types_ab(Ylist, geom, hrf0, library, nuis_ab, tiles, singular)
+    b <- .glms_fit_types_ab(Ylist, geom, hrf0, hrf_lib, nuis_ab, tiles, singular)
     typea <- list(onoffR2 = b$onoffR2, meanvol = meanvol, betasmd = b$beta_a * pb)
     typeb <- c(b[c("FitHRFR2", "FitHRFR2run", "HRFindex", "HRFindexrun", "R2", "R2run")],
                list(betasmd = scale_betas(b$beta), meanvol = meanvol))
@@ -278,7 +283,7 @@ glmsingle <- function(Y, design, tr, stimdur,
                xvaltrend = NULL, glmbadness = NULL, pcvoxels = NULL)
     if (want_glmdenoise) {
       say("Deriving GLMdenoise regressors")
-      dn <- .glms_denoise(Ylist, geom, library, b$HRFindex, b$onoffR2, meanvol,
+      dn <- .glms_denoise(Ylist, geom, hrf_lib, b$HRFindex, b$onoffR2, meanvol,
                           nuis_ab, max_poly_deg, extras, n_pcs, pcstop,
                           brain_thresh, brain_r2, brain_exclude, pc_r2_cutoff,
                           pc_r2_cutoff_mask, full_glmbadness, extras_in_denoise,
@@ -290,10 +295,10 @@ glmsingle <- function(Y, design, tr, stimdur,
     if (want_glmdenoise || want_fracridge) {
       say(sprintf("Fitting type-C/D models (%d noise PCs)", dn$pcnum))
       fracstouse <- if (want_fracridge) unique(c(1, fracs)) else 1
-      cd <- .glms_fit_cd(Ylist, geom, library, b$HRFindex, max_poly_deg, extras,
+      cd <- .glms_fit_cd(Ylist, geom, hrf_lib, b$HRFindex, max_poly_deg, extras,
                          dn$pcregressors, dn$pcnum, extras_in_denoise, fracstouse,
                          fracs, want_fracridge, want_autoscale, zero_sd_cv,
-                         frac_alpha, tiles)
+                         frac_alpha, chunk_size)
       common <- c(list(HRFindex = b$HRFindex, HRFindexrun = b$HRFindexrun),
                   dn[c("glmbadness", "pcvoxels", "pcnum", "xvaltrend",
                        "noisepool", "pcregressors")],
@@ -320,7 +325,7 @@ glmsingle <- function(Y, design, tr, stimdur,
 
   structure(list(
     typea = typea, typeb = typeb, typec = typec, typed = typed,
-    meanvol = meanvol, hrf_library = library, hrf_assumed = hrf0,
+    meanvol = meanvol, hrf_library = hrf_lib, hrf_assumed = hrf0,
     design = list(stimorder = geom$stimorder, condition_levels = geom$levels,
                   trial_run = geom$trial_run, validcolumns = geom$validcolumns,
                   onsets = geom$onsets, n_time = n_time),

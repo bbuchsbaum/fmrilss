@@ -185,7 +185,7 @@
 .glms_fit_cd <- function(Ylist, geom, library, hrf_index, max_poly_deg, extras,
                          pcs, pcnum, extras_in_denoise, fracstouse, fracs,
                          want_fracridge, want_autoscale, zero_sd_cv,
-                         frac_alpha, tiles) {
+                         frac_alpha, chunk_size) {
   R <- length(Ylist)
   n_vox <- length(hrf_index)
   N <- geom$n_trials
@@ -206,7 +206,6 @@
                                        dimnames = list(NULL, c("scale", "offset"))) else NULL
   prepended <- fracs[1L] != 1
   stats_cache <- list()
-  chunk_size <- max(lengths(tiles))
   for (grp in .glms_voxel_groups(hrf_index, seq_len(n_vox), chunk_size)) {
     key <- as.character(grp$h)
     if (is.null(stats_cache[[key]])) {

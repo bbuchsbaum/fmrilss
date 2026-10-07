@@ -1,7 +1,8 @@
 # Fast GLMsingle in fmrilss: due diligence and implementation plan
 
-**Status:** plan v3.3. It incorporates external review 1 (disposition log in
-§8) and the maintainer's decisions (§9).
+**Status:** v1 implemented (see "Implementation status" below). Plan v3.3
+incorporates external review 1 (disposition log in §8) and the
+maintainer's decisions (§9).
 **Reference implementation:** GLMsingle Python, `cvnlab/GLMsingle` at
 `1ab54a6` (2025-11-09, current HEAD), with `fracridge` 3.0.
 **Evidence:** `.planning/glmsingle_checks/`
@@ -9,6 +10,58 @@
 - `review1/` — the reviewer's reproducibility bundle, unmodified and
   hash-verified (`python3 verify_manifest.py`). It is re-run here on
   2026-10-07; logs are in `review1/rerun_2026-10-07/`.
+
+## Implementation status (v1)
+
+**Delivered:** `glmsingle()`, `glmsingle_design()`, `glmsingle_hrf()`,
+`glmsingle_hrf_library()`, and `print`/`summary`/`coef` methods.
+
+**Code layout:**
+- `R/glmsingle*.R` — 9 files, about 1,400 lines.
+- `src/glmsingle_kernels.cpp` — fraction-to-penalty conversion and the fused
+  ridge cross-validation loss.
+- `vignettes/glmsingle.Rmd`.
+
+**Verification:**
+
+| Tier | Test file | Result |
+|---|---|---|
+| A: parity with pinned Python | `test-glmsingle-parity.R`, 11 scenarios (`tools/glmsingle_ref/make_fixtures.py`) | Every HRF index, PC count and ridge fraction matches. Betas and R^2 agree to about 1e-6 (float32), within the κ²-scaled bound |
+| B: float64 exactness | `test-glmsingle-exact.R` | Every stage matches dense literal references (stacked design, dense projectors, literal `calcbadness`/`fracridge`, `olsmatrix` autoscale) to ≤ 1e-8 |
+| Units | `test-glmsingle-units.R` | HRFs, rank rule, compiled CV (both zero-SD modes), PC rule, autoscale, fracridge mapping |
+| C: accuracy | Vignette simulation | Correlation with true trial amplitudes: B 0.33 → C 0.60 → D 0.66 |
+
+**Benchmark** (`bench/run_glmsingle_benchmark.R`): 8 runs × 200 TRs × 20,000
+voxels (375 trials), 1 thread, OpenBLAS for both. Python 339 s; fmrilss 27.6 s
+(**12.3×**). PC count is identical and the median per-voxel beta correlation
+is 1.000.
+
+**Deviations from this plan, with reasons:**
+- **Tier A tolerance uses κ², not κ.** Python forms float32 normal equations,
+  so errors scale with eps32·κ². Measured errors run from 2e-6 at κ≈6 to 1.7%
+  at κ≈1000.
+- **The data pass uses R BLAS products** (`crossprod`, `%*%`) rather than a
+  shared C++ header. These are already BLAS-3 and gave the speedup.
+  `blocked_products.h` (tasks 1.2 and 7.4) was therefore not created; OASIS
+  is unchanged.
+- **C++ is used only where profiling showed R overhead:** the per-voxel
+  `fracridge` interpolation and the fused per-fraction CV loss. The
+  filter-bank `XᵀY` and PC-prefix maps (Phase 6) were not needed to reach the
+  target.
+- **New upstream quirks were found during implementation:**
+  - (S11) Types C/D are always scaled to percent BOLD, whatever
+    `wantpercentbold` says. Our `want_percent_bold` applies to every type, and
+    its default (TRUE) matches upstream.
+  - (S12) A constant voxel is not constant in float32. Rounding residue gives
+    it a nonzero R² and puts it in the noise pool, which changes the PCs. In
+    double precision the voxel contributes nothing. The fixture uses an
+    all-zero voxel instead.
+  - (S13) Upstream crashes when `pcstop` is the float `-0.0`.
+- **Fixtures (2.6 MB) are dev-only.** They are excluded from the built
+  package, and the parity tests skip when the fixtures are absent.
+- **Not implemented (each errors or is documented):** the FIR diagnostic
+  model, `hrfmodel = "optimize"`, `wantlss`, bootstrap modes, figures and
+  file outputs.
 
 ## 0. Goal and decisions
 
