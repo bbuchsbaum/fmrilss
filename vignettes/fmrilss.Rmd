@@ -522,6 +522,10 @@ and backend agreement, not a benefit from whitening. Treat AR(1) as an example
 starting model: choose an order and pooling strategy using residual diagnostics
 and acquisition-aware validation.
 
+How the noise model is estimated matters for single-trial designs: see
+`vignette("prewhitening")` for the `residual_model` choices and when each is
+appropriate.
+
 For multiple runs, use run-aware intercepts and supply run labels to
 `prewhiten_options(method = "ar", p = 1, pooling = "run", runs = ...)`. Do not
 concatenate runs and let filtering cross a run boundary.

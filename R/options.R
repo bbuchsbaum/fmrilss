@@ -221,13 +221,20 @@ oasis_options <- function(
 #'   `pooling = "voxel"` in the weight-matrix LSS methods. Voxels with similar
 #'   residual autocorrelation share one AR model refitted from their pooled
 #'   residuals (default 50).
-#' @param residual_model Design whose OLS residuals feed the noise model.
-#'   `"aggregate"` (the default unless a residual-bias correction is
-#'   requested) keeps the confounds plus one summed regressor per trial group
-#'   or basis function. `"full"` uses every trial regressor (the LSA model),
-#'   which in rapid designs with many trials removes so many degrees of
-#'   freedom that the residual autocorrelation is biased strongly downward;
-#'   it is required with `design`/`acvf_correction`, which correct that bias.
+#' @param residual_model Which model's OLS residuals the noise model is
+#'   estimated from. `"aggregate"` (the default unless `design` or
+#'   `acvf_correction` is supplied) keeps the confounds plus one summed
+#'   regressor per trial group or basis function: fast and available for every
+#'   pooling mode, but trial-to-trial response variability stays in the
+#'   residuals and inflates the autocorrelation estimate when it is large
+#'   relative to the noise. `"full"` uses every trial regressor (the LSA
+#'   model); with many trials this removes so many degrees of freedom that the
+#'   autocorrelation is biased strongly downward. `"corrected"` uses the full
+#'   model and fmriAR's residual-autocovariance bias correction, built
+#'   automatically; it is the least biased choice but costs roughly
+#'   O(n^2 x trials) and requires `method = "ar"` with global or run pooling.
+#'   Supplying `design` or `acvf_correction` yourself implies `"full"`. See
+#'   `vignette("prewhitening")`.
 #'
 #' @return A list with class `"fmrilss_prewhiten_options"`.
 #' @examples

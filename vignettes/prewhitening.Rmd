@@ -1,0 +1,309 @@
+---
+title: 'Prewhitening: Where the Noise Model Comes From'
+output:
+  rmarkdown::html_vignette:
+    mathjax: default
+    toc: yes
+    toc_depth: 2.0
+    css: albers.css
+    includes:
+      in_header: albers-header.html
+params:
+  family: red
+  preset: homage
+resource_files:
+- albers.css
+- albers.js
+- albers-header.html
+- fonts
+
+vignette: |
+  %\VignetteIndexEntry{Prewhitening: Where the Noise Model Comes From}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup-opts, include = FALSE}
+if (requireNamespace("ragg", quietly = TRUE)) {
+  knitr::opts_chunk$set(dev = "ragg_png")
+}
+if (requireNamespace("systemfonts", quietly = TRUE) &&
+    requireNamespace("albersdown", quietly = TRUE)) {
+  albersdown::albers_register_fonts()
+}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 8,
+  fig.height = 6,
+  dpi = 150,
+  warning = TRUE,
+  message = TRUE
+)
+library(fmrilss)
+```
+
+```{r albers-classes, echo = FALSE, results = 'asis'}
+cat(sprintf(
+  paste0(
+    '<script>document.addEventListener("DOMContentLoaded",function(){',
+    'document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");',
+    'document.body.classList.add("palette-%s","preset-%s");',
+    '});</script>'
+  ),
+  params$family,
+  params$preset
+))
+```
+
+fMRI noise is temporally autocorrelated. Prewhitening estimates that
+autocorrelation, builds a filter that removes it, and applies the same filter
+to the data and to every design matrix, so that ordinary least squares on the
+filtered system is generalized least squares on the original one. When the
+noise model is right, trial estimates become more precise.
+
+The filter is only as good as the autocorrelation estimate, and that estimate
+has to come from *residuals of some fitted model*: the noise itself is never
+observed. This article explains why the choice of that model matters a great
+deal for single-trial analyses, what the three choices offered by
+`prewhiten$residual_model` do, and how to pick one. Read it after
+`vignette("fmrilss")`.
+
+## Why the residual model matters
+
+Let \(M = I - D(D^\top D)^{-1}D^\top\) be the residual-forming matrix of a
+fitted design \(D\) with \(q\) columns and \(n\) scans. The residuals are
+\(r = M y\). If the noise were white with variance \(\sigma^2\), the expected
+lag-\(k\) autocovariance of the residuals would be
+
+\[
+\mathbb{E}\Big[\tfrac{1}{n}\textstyle\sum_t r_t r_{t+k}\Big] =
+\tfrac{\sigma^2}{n}\operatorname{tr}(M L_k),
+\]
+
+where \(L_k\) is the lag-\(k\) shift matrix. That is not zero. Fitting \(D\)
+absorbs part of the noise into the fitted values, and because HRF-convolved
+trial regressors are smooth, the part they absorb is the slowly varying,
+positively autocorrelated part. What is left looks rougher than the noise
+really is, so the autocorrelation estimate is biased **downward**. The size of
+the bias grows with \(q / n\).
+
+That is harmless for a block design with a handful of regressors. It is not
+harmless for single-trial models, where the natural "full" design, the
+least-squares-all (LSA) model with one column per trial, can have a column for
+every two or three scans.
+
+The opposite mistake is to fit too little. If the residual model leaves real
+signal in the residuals, for example trial-to-trial amplitude variability, that
+smooth signal is mistaken for autocorrelated noise and the estimate is biased
+**upward**.
+
+## The three residual models
+
+| `residual_model` | Trial part of the fitted design | Bias of the autocorrelation estimate | Cost | Pooling |
+|---|---|---|---|---|
+| `"aggregate"` (default) | One summed regressor per `trial_groups` level (or per basis function) | Upward when trial-to-trial variability is large relative to noise | Fast | All |
+| `"full"` | Every trial regressor (LSA) | Downward, severe when trials are a sizeable fraction of scans | Fast | All |
+| `"corrected"` | Every trial regressor, then fmriAR's residual-bias correction | Approximately unbiased | About \(O(n^2 \times \text{trials})\) | `"global"`, `"run"` |
+
+In every case the confounds (`Z`, `Nuisance`, and an intercept if none is
+present) are part of the fitted design.
+
+* **`"aggregate"`** is the model the per-trial GLMs of Nilearn and
+  NiBetaSeries effectively estimate their noise from: the condition-level
+  response is removed, trial-by-trial deviations from it are not.
+* **`"full"`** was the only behaviour before fmrilss 0.2.0.9000. Use it to
+  reproduce earlier results.
+* **`"corrected"`** fits the full model and then inverts the linear map
+  \(\gamma \mapsto \operatorname{tr}(M L_k \Gamma)\) from true to expected
+  residual autocovariance (`fmriAR::acvf_bias_matrix()`), so neither the
+  over-fitting of the full model nor unmodelled trial variability distorts the
+  estimate. fmrilss builds the correction design for you; supplying
+  `prewhiten$design` yourself is equivalent and implies `"full"`.
+
+## A simulation
+
+The simulation below draws AR(1) noise with \(\phi = 0.4\), and trial
+amplitudes with mean 1 and either modest or large trial-to-trial variability,
+in a rapid design (inter-trial interval 1.5--4 s, about one trial per three
+scans) and a slow design (8--12 s).
+
+```{r simulate}
+canonical_hrf <- function(t) {
+  h <- dgamma(t, 6) - dgamma(t, 16) / 6
+  h / max(h)
+}
+
+simulate_run <- function(iti, trial_sd, n = 300, n_voxels = 200, phi = 0.4,
+                         seed = 1) {
+  set.seed(seed)
+  onsets <- cumsum(c(20, runif(1000, iti[1], iti[2])))
+  onsets <- onsets[onsets < n - 25]
+  X <- vapply(onsets, function(onset) {
+    lag <- seq_len(n) - 1 - onset
+    ifelse(lag >= 0, canonical_hrf(pmax(lag, 0)), 0)
+  }, numeric(n))
+  betas <- matrix(rnorm(ncol(X) * n_voxels, 1, trial_sd), ncol(X), n_voxels)
+  innovations <- matrix(rnorm(n * n_voxels, sd = sqrt(1 - phi^2)), n, n_voxels)
+  noise <- apply(innovations, 2, function(e) {
+    as.numeric(stats::filter(e, phi, method = "recursive"))
+  })
+  list(Y = X %*% betas + noise, X = X, betas = betas)
+}
+
+compare_models <- function(label, run) {
+  rmse <- function(estimate) sqrt(mean((estimate - run$betas)^2))
+  fit <- function(model) {
+    lss(run$Y, run$X,
+        prewhiten = list(method = "ar", p = 1, residual_model = model))
+  }
+  fits <- lapply(c(aggregate = "aggregate", full = "full",
+                   corrected = "corrected"), fit)
+  phi_hat <- vapply(fits, function(f) attr(f, "whiten_plan")$phi[[1]], 1)
+  data.frame(
+    design = label,
+    trials = ncol(run$X),
+    phi_full = phi_hat[["full"]],
+    phi_aggregate = phi_hat[["aggregate"]],
+    phi_corrected = phi_hat[["corrected"]],
+    rmse_ols = rmse(lss(run$Y, run$X)),
+    rmse_full = rmse(fits$full),
+    rmse_aggregate = rmse(fits$aggregate),
+    rmse_corrected = rmse(fits$corrected)
+  )
+}
+
+scenarios <- rbind(
+  compare_models("rapid, trial SD 0.5", simulate_run(c(1.5, 4), 0.5)),
+  compare_models("slow, trial SD 0.5", simulate_run(c(8, 12), 0.5)),
+  compare_models("rapid, trial SD 2", simulate_run(c(1.5, 4), 2)),
+  compare_models("slow, trial SD 2", simulate_run(c(8, 12), 2))
+)
+```
+
+```{r simulate-table, echo = FALSE}
+display <- scenarios
+display[-(1:2)] <- lapply(display[-(1:2)], round, digits = 2)
+knitr::kable(
+  display,
+  col.names = c("Design", "Trials", "phi: full", "phi: aggregate",
+                "phi: corrected", "RMSE: OLS", "RMSE: full",
+                "RMSE: aggregate", "RMSE: corrected"),
+  caption = "AR(1) estimates (truth 0.4) and trial-beta RMSE for 300 scans and 200 voxels."
+)
+```
+
+```{r simulate-check, include = FALSE}
+rapid <- scenarios[1, ]
+slow_noisy <- scenarios[4, ]
+stopifnot(
+  rapid$phi_full < 0,
+  abs(rapid$phi_aggregate - 0.4) > abs(rapid$phi_corrected - 0.4),
+  all(abs(scenarios$phi_corrected - 0.4) < 0.05),
+  all(scenarios$phi_full < 0.35),
+  slow_noisy$phi_aggregate > 0.6,
+  slow_noisy$rmse_aggregate > slow_noisy$rmse_corrected,
+  rapid$rmse_full > rapid$rmse_aggregate
+)
+```
+
+Reading the table:
+
+* **`"full"` is biased whenever the trial count is not small relative to the
+  scan count.** In the rapid design (one trial column per three scans) it
+  estimates a *negative* \(\phi\) for positively autocorrelated noise, and the
+  resulting filter gives betas no better (slightly worse) than no
+  prewhitening at all. Even the slow design, with about one column per eleven
+  scans, loses a third of \(\phi\).
+* **`"aggregate"` works well when trial-to-trial variability is modest
+  relative to the noise**, which is the common situation for single-trial
+  fMRI: its estimate is close in the slow design and somewhat high in the
+  rapid one, and it gives the lowest or equal-lowest RMSE in both. When the
+  variability is large, the deviations it leaves in the residuals inflate
+  \(\phi\) substantially; in the slow design that over-whitening costs
+  accuracy. (In the rapid, high-variability design the over-whitened LSS
+  betas happen to have lower error, because LSS already mixes neighbouring
+  trials' deviations into each estimate. Treat that as a coincidence of this
+  design, not a reason to over-whiten.)
+* **`"corrected"` recovers \(\phi\) in every scenario** and is never far from
+  the best RMSE in each row.
+
+## Choosing a residual model
+
+1. Start with the default, `"aggregate"`. It is fast, works with every
+   pooling mode, including voxel-adaptive pooling, and matches what Nilearn
+   does.
+2. If you can afford it, compare its estimate with `"corrected"` once on your
+   data, for example on a subset of voxels or one run:
+
+    ```{r compare-plans, eval = FALSE}
+    est <- function(model) {
+      fit <- lss(Y[, voxel_subset], X, Z, Nuisance,
+                 prewhiten = list(method = "ar", p = 1, residual_model = model))
+      attr(fit, "whiten_plan")$phi
+    }
+    est("aggregate")
+    est("corrected")
+    ```
+
+   Close agreement means the default is fine. A clearly larger
+   `"aggregate"` estimate means trial-to-trial variability is large relative
+   to the noise; prefer `"corrected"` (with global or run pooling) for that
+   dataset.
+3. Avoid `"full"` except to reproduce earlier results.
+
+The correction's cost grows with the square of the scan count times the
+number of design columns, roughly a second for 400 scans and 150 trials and
+around ten seconds for 1,200 scans and 300 trials, independent of the voxel
+count. It is computed once per fit. The correction is designed for
+high-pass-filtered designs; see `correction_max_lag` in `?lss` and
+`fmriAR::fit_noise()`.
+
+## How the aggregate columns are chosen
+
+The aggregate model sums trial regressors so that the condition-level response
+is removed from the residuals:
+
+| Caller | Aggregate trial columns |
+|---|---|
+| `lss()` with `trial_groups` | One summed regressor per group |
+| `lss()` without `trial_groups` | One regressor summing all trials |
+| `lss(method = "oasis")`, multi-basis | One summed regressor per basis function |
+| `lss_sbhm()`, SBHM amplitude fits | One summed regressor per shared basis function (plus other conditions) |
+
+Passing `trial_groups` therefore also improves the noise model whenever
+conditions differ in their mean response.
+
+## Pooling and the residual model
+
+`residual_model` decides which residuals are used; `pooling` decides how the
+autocorrelation is shared across voxels:
+
+* `"global"` and `"run"` estimate one model (per run) from all voxels. All
+  three residual models are available.
+* `"voxel"` (weight-matrix methods `r_optimized`, `cpp_optimized`, `cpp`)
+  groups voxels into `voxel_bins` bins of similar residual autocorrelation,
+  refits one AR model per bin, and fits each bin with its own filtered design.
+  `"parcel"` does the same for user-supplied parcels. These use `"aggregate"`
+  or `"full"` residuals; fmriAR's correction is not available for them.
+
+Every prewhitened result carries the fitted plan:
+
+```{r inspect-plan}
+run <- simulate_run(c(1.5, 4), 0.5)
+fit <- lss(run$Y, run$X, prewhiten = prewhiten_options(method = "ar", p = 1))
+plan <- attr(fit, "whiten_plan")
+plan$phi
+```
+
+```{r inspect-plan-check, include = FALSE}
+stopifnot(inherits(plan, "fmriAR_plan"), abs(plan$phi[[1]] - 0.4) < 0.15)
+```
+
+## Where to go next
+
+- `?prewhiten_options` and `?lss` list every prewhitening field.
+- `vignette("oasis_method")` covers prewhitening with OASIS and multi-basis
+  designs.
+- `vignette("lss_with_fmridesign")` covers multi-run designs and run-aware
+  pooling.

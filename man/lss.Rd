@@ -241,12 +241,15 @@ matrices from \code{fmriAR::acvf_bias_matrix()}, used instead of
 are mutually exclusive.
 \item \code{voxel_bins}: Positive integer number of autocorrelation bins
 for \code{pooling = "voxel"} (default 50).
-\item \code{residual_model}: \code{"aggregate"} (default) estimates the
-noise model from residuals of the confounds plus one summed trial
-regressor per \code{trial_groups} level (or per basis function);
-\code{"full"} uses residuals of the full trial-wise design, whose many
-columns bias the residual autocorrelation downward in rapid designs.
-\code{"full"} is implied by \code{design}/\code{acvf_correction}.
+\item \code{residual_model}: which model's residuals the noise model is
+estimated from. \code{"aggregate"} (default) uses the confounds plus one
+summed trial regressor per \code{trial_groups} level (or per basis
+function); \code{"full"} uses the full trial-wise design, whose many
+columns bias the autocorrelation downward in rapid designs;
+\code{"corrected"} uses the full design with fmriAR's bias correction
+(least biased, slower, global/run pooling only). \code{"full"} is
+implied by \code{design}/\code{acvf_correction}. See
+\code{vignette("prewhitening")} for when to use each.
 \item \code{correction_max_lag}: Positive integer lag budget used when
 \code{design} is supplied (default 25). The correction is intended for
 high-pass-filtered designs; without high-pass filtering, the required

@@ -28,7 +28,7 @@
 #'     \item{acvf_correction}{Optional cached bias-correction matrix or list of matrices}
 #'     \item{correction_max_lag}{Positive integer lag budget for bias correction}
 #'     \item{voxel_bins}{Number of autocorrelation bins for pooling = "voxel"}
-#'     \item{residual_model}{"aggregate" (default) or "full" design for noise residuals}
+#'     \item{residual_model}{"aggregate" (default), "full", or "corrected" design for noise residuals}
 #'   }
 #' @return List containing:
 #'   \describe{
@@ -161,11 +161,23 @@
   if (is.null(opts$residual_model)) {
     opts$residual_model <- if (correction_requested) "full" else "aggregate"
   }
-  opts$residual_model <- match.arg(opts$residual_model, c("aggregate", "full"))
+  opts$residual_model <- match.arg(
+    opts$residual_model, c("aggregate", "full", "corrected")
+  )
   if (correction_requested && opts$residual_model != "full") {
-    stop("prewhiten residual-bias correction requires residual_model = 'full'",
+    stop(
+      "prewhiten residual-bias correction requires residual_model = 'full' ",
+      "(residual_model = 'corrected' builds the correction automatically; ",
+      "do not also supply design or acvf_correction)",
+      call. = FALSE
+    )
+  }
+  if (identical(opts$residual_model, "corrected") && !opts$compute_residuals) {
+    stop("prewhiten residual_model = 'corrected' requires compute_residuals = TRUE",
          call. = FALSE)
   }
+  correction_requested <- correction_requested ||
+    identical(opts$residual_model, "corrected")
   if (correction_requested && opts$method != "ar") {
     stop("prewhiten residual-bias correction requires method = 'ar'", call. = FALSE)
   }
@@ -254,7 +266,7 @@
   if (!is.null(X)) X <- as.matrix(X)
   if (!is.null(Nuisance)) Nuisance <- as.matrix(Nuisance)
   if (opts$compute_residuals) {
-    X_model <- if (identical(opts$residual_model, "full")) {
+    X_model <- if (opts$residual_model %in% c("full", "corrected")) {
       X
     } else {
       X_noise %||% .aggregate_trials(X)

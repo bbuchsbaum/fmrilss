@@ -38,7 +38,10 @@
   prewhitened betas less accurate than OLS. The new
   `prewhiten$residual_model` defaults to `"aggregate"` (confounds plus one
   summed regressor per trial group or basis function); `"full"` restores the
-  previous behaviour and is implied by the residual-bias correction.
+  previous behaviour and is implied by a user-supplied residual-bias
+  correction; `"corrected"` fits the full model with fmriAR's bias
+  correction, built automatically (least biased; global/run pooling only).
+  The new `vignette("prewhitening")` explains the trade-offs.
 
 ### Benchmarks
 - `bench/python_comparison/` compares fmrilss with Nilearn (per-trial

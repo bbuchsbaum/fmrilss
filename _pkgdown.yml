@@ -20,5 +20,6 @@ articles:
   - oasis_method
   - oasis_theory
   - lss_with_fmridesign
+  - prewhitening
   - voxel-wise-hrf
   - sbhm

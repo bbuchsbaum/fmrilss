@@ -320,3 +320,36 @@ test_that("ridge is validated", {
   expect_error(lss(p$Y, p$X, ridge = c(1, 2, 3)), "one or two")
   expect_error(lss(p$Y, p$X, method = "oasis", ridge = 1), "oasis\\$ridge_x")
 })
+
+test_that("residual_model = 'corrected' equals a manually supplied correction design", {
+  skip_if_not_installed("fmriAR")
+  set.seed(4)
+  n <- 160
+  V <- 400
+  X <- matrix(rnorm(n * 40), n, 40)
+  Z <- cbind(1, seq_len(n) / n)
+  Y <- apply(matrix(rnorm(n * V), n, V), 2, function(e) {
+    as.numeric(stats::filter(e, 0.4, "recursive"))
+  })
+  auto <- lss(Y, X, Z, prewhiten = list(method = "ar", p = 1,
+                                        residual_model = "corrected"))
+  manual <- lss(Y, X, Z, prewhiten = list(method = "ar", p = 1,
+                                          design = cbind(Z, X)))
+  expect_equal(attr(auto, "whiten_plan")$phi, attr(manual, "whiten_plan")$phi,
+               tolerance = 1e-10)
+  expect_equal(unname(auto), unname(manual), tolerance = 1e-10, ignore_attr = TRUE)
+  naive <- lss(Y[, 1:50], X, Z, method = "naive",
+               prewhiten = list(method = "ar", p = 1, residual_model = "corrected"))
+  fast <- lss(Y[, 1:50], X, Z,
+              prewhiten = list(method = "ar", p = 1, residual_model = "corrected"))
+  expect_equal(unname(fast), unname(naive), tolerance = 1e-10, ignore_attr = TRUE)
+  expect_error(
+    lss(Y, X, prewhiten = list(method = "ar", p = 1, residual_model = "corrected",
+                               pooling = "voxel")),
+    "global' or 'run"
+  )
+  expect_error(
+    prewhiten_options(method = "ar", residual_model = "corrected", design = cbind(1, X)),
+    "do not also supply"
+  )
+})

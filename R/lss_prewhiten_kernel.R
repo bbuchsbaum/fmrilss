@@ -41,7 +41,7 @@
 
   plan <- opts$.whiten_plan
   if (is.null(plan)) {
-    X_model <- if (identical(opts$residual_model, "full")) {
+    X_model <- if (opts$residual_model %in% c("full", "corrected")) {
       X
     } else {
       .aggregate_trials(X, groups)
@@ -112,6 +112,12 @@
 .fit_noise_plan <- function(Y, design_full, opts) {
   n <- nrow(Y)
   V <- ncol(Y)
+  if (identical(opts$residual_model, "corrected")) {
+    # fmriAR corrects the residual autocovariance for projection onto this
+    # design; the orthonormal basis spans exactly the projected space,
+    # including the intercept added by .noise_basis().
+    opts$design <- .noise_basis(design_full, n)
+  }
   compressible <- identical(opts$method, "ar") &&
     opts$pooling %in% c("global", "run") && V > 2L * n
   if (compressible) {
