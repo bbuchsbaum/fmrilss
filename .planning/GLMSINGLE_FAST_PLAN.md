@@ -1,7 +1,7 @@
 # Fast GLMsingle in fmrilss: due diligence and implementation plan
 
-**Status:** plan v3. It incorporates external review 1, whose disposition log
-is in §8.
+**Status:** plan v3.1. It incorporates external review 1 (disposition log in
+§8) and the maintainer's policy decisions (§9).
 **Reference implementation:** GLMsingle Python, `cvnlab/GLMsingle` at
 `1ab54a6` (2025-11-09, current HEAD), with `fracridge` 3.0.
 **Evidence:** `.planning/glmsingle_checks/`
@@ -22,7 +22,7 @@ substantially faster. Estimator changes are a separate, gated research track
 | Where it lives | **fmrilss.** It shares the Rcpp/Armadillo/OpenMP toolchain, the fmrihrf/fmridesign integration, and the test and bench infrastructure |
 | Parity target | **Python GLMsingle at `1ab54a6`.** It can be scripted without a licence and includes Python's latest fix (`19e6617`). MATLAB-only later commits are audited in §2.4 |
 | PC-count CV on the selection subset only | **Yes, by default.** Estimates are unchanged. The full-volume `glmbadness` diagnostic is available on request. Both a lean-output and a matched-output mode are benchmarked (task 7.3) |
-| Upstream quirks (§2.3) | **Default reproduces pinned behaviour.** Each quirk gets a documented, opt-in corrected policy. The `extras` quirk waits on an upstream answer (§9, item 1) |
+| Upstream quirks (§2.3) | **Default = the most sensible behaviour, not bug-for-bug parity.** Where upstream is internally inconsistent or the two ports disagree (S3, S6), fmrilss uses the defensible choice by default. `policy = "upstream"` reproduces pinned Python exactly, for comparisons and for the parity tests (§3.4, §9) |
 
 ## 1. Bottom line
 
@@ -112,7 +112,7 @@ a policy in §3.4.
 |---|---|---|---|
 | S1 | `make_projection_matrix` → `olsmatrix(mode=0)`: drop exactly-zero columns, unit-normalise, then `np.linalg.pinv` of the normalised Gram (numpy default `rcond`) | A conventional QR cutoff gives a different nuisance subspace. For `[q0, q1, q1+1e-9·q2]`, QR keeps rank 3 while the reference removes rank 2 (projector difference ≈ 1.0) | review1 |
 | S2 | `olsmatrix2`: drop exactly-zero columns, then `np.linalg.solve`. Raises `LinAlgError` on singular Gram | `G⁺` (v2 wording) is a behaviour change | review1 |
-| S3 | User `extra_regressors` are appended **only when the PC count > 0**, in both PC-CV and C/D. **MATLAB differs:** `GLMestimatesingletrial.m` (lines ~1167 and ~1355) *never* adds user extras in PC-CV or C/D; only the PCs are added. Both ports use extras in FIR/A/B | (a) If `pcnum = 0`, final C/D fits omit the user's extras. (b) The 0-PC fit is also the **held-out reference for every PC count** in `calcbadness`, so with extras supplied the entire PC-selection curve is scored against an extras-free reference. (c) Whenever extras are supplied, the two ports give different C/D estimates. A universal `[poly, extras, PCs₁..k]` basis matches neither port. Intent asked upstream (§9) | review1 (a); us (b, c) |
+| S3 | User `extra_regressors` are appended **only when the PC count > 0**, in both PC-CV and C/D. **MATLAB differs:** `GLMestimatesingletrial.m` (lines ~1167 and ~1355) *never* adds user extras in PC-CV or C/D; only the PCs are added. Both ports use extras in FIR/A/B | (a) If `pcnum = 0`, final C/D fits omit the user's extras. (b) The 0-PC fit is also the **held-out reference for every PC count** in `calcbadness`, so with extras supplied the entire PC-selection curve is scored against an extras-free reference. (c) Whenever extras are supplied, the two ports give different C/D estimates. A universal `[poly, extras, PCs₁..k]` basis matches neither port. **fmrilss default: extras in every fit** (§9) | review1 (a); us (b, c) |
 | S4 | Autoscale uses `olsmatrix` (normalised-Gram pinv) on float32 `[β_f, 1]` | A plain 2×2 solve fails for constant candidate β. The reference returns a defined `(scale, offset)` | review1 |
 | S5 | Type C/D R² is stored from the selected-fraction fit **before** autoscale and percent-BOLD scaling | R² must not be recomputed from the final betas | review1 |
 | S6 | `zerodiv(..., wantcaution=0)` aliases `tmp = y` and sets zero divisors to 1 **in place**. MATLAB passes by value, so it has no such mutation; this is likely a Python port artefact | In `calcbadness`, zero-SD voxels give `z = 0` for `results[0]` but `(x − μ)/1` for later candidates. "Zero all candidates" is wrong (CV scores `[0, 2]` vs `[0, 0]`) | review1 |
@@ -189,17 +189,26 @@ excluding tests. Split any file approaching 400 lines.
 
 ### 3.4 Numerical policy (`glmsingle_policy.R`)
 
-Each policy has a `"pinned"` default (reproduces `1ab54a6`) and, where it is
-useful, a named alternative. Choosing a non-pinned policy is recorded in
-`fit$options` and voids the parity claim for that output.
+There are two policy sets, selected with `glmsingle_options(policy = )`:
 
-| Policy | `"pinned"` | Alternative |
+* **`"fmrilss"` (default):** pinned behaviour everywhere, except where pinned
+  behaviour is inconsistent or the ports disagree (S3, S6, GMM floor). There
+  the defensible choice is used.
+* **`"upstream"`:** reproduces pinned Python `1ab54a6` exactly, including S3,
+  S6 and the unregularised GMM. It is used for parity testing and for users
+  who need to match existing GLMsingle outputs.
+
+The policy set used is recorded in `fit$options`. Individual policies can be
+overridden for diagnostics.
+
+| Policy | `"fmrilss"` (default) | `"upstream"` |
 |---|---|---|
-| Nuisance rank (S1) | Drop exact-zero columns; normalise; SVD of the normalised design with cutoff equivalent to `pinv(rcond = 1e-15)` on the Gram, i.e. singular values of X below `sqrt(1e-15)·s_max` are dropped | `"qr"` (tolerance-based) |
-| Extras in PC-CV and C/D (S3) | Python: extras only when k > 0 | `"matlab"`: never in PC-CV/C/D. `"always"`: in every fit. The default may switch after the upstream answer (§9, item 1) |
-| Trial OLS singularity (S2) | **Decided:** drop exact-zero columns, then Cholesky; on failure, error (as upstream does) with a diagnostic naming the colliding trials | `"pinv"` opt-in |
-| Autoscale (S4) | Normalised-Gram pinv on `[β_f, 1]`, `h[0] < 0 → (1, 0)` | — |
-| Divisor (S6) | Emulate in-place `zerodiv` mutation exactly | `"zero_all"`, which matches MATLAB |
+| Nuisance rank (S1) | Drop exact-zero columns; normalise; SVD of the normalised design with cutoff equivalent to `pinv(rcond = 1e-15)` on the Gram, i.e. singular values of X below `sqrt(1e-15)·s_max` are dropped | Same |
+| Extras in PC-CV and C/D (S3) | **Always included:** nuisance basis `[poly, extras, PCs₁..k]` for every k, including k = 0, the CV reference, and final C/D | Python: extras only when k > 0 |
+| Trial OLS singularity (S2) | Drop exact-zero columns, then Cholesky; on failure, error with a diagnostic naming the colliding trials. `"pinv"` opt-in | Same |
+| Tail-threshold GMM | Deterministic EM, 3 fixed restarts, eps variance floor (MATLAB `91e5b7e`) | Thresholds injected from fixtures, since Python's GMM is unseeded |
+| Autoscale (S4) | Normalised-Gram pinv on `[β_f, 1]`, `h[0] < 0 → (1, 0)` | Same |
+| Divisor (S6) | **Zero for all candidates:** zero-SD voxels contribute nothing to CV, as in MATLAB | Emulate Python's in-place `zerodiv` mutation |
 | Precision | float64 throughout; per-run mean-centring of `Y` before products (exact under polynomial projection, and it reduces cancellation in `XᵀY − (XᵀQ)(QᵀY)`) | — |
 | Gram construction | Form the residualised design `A_r = X_r − Q(QᵀX_r)` explicitly per run (voxel-independent, cheap), with `G = AᵀA`. This avoids the `XᵀX − (XᵀQ)(XᵀQ)ᵀ` cancellation. Use a per-block QR/SVD path when `κ(A_r)` exceeds a threshold | — |
 | Conditioning diagnostics | Record `κ(A_r)` per run/HRF, decision margins, and the policy used, in `fit$diagnostics` | — |
@@ -245,7 +254,9 @@ equivalence** and **statistical accuracy**.
 
 **References.** These are mutually checking:
 - **(R1)** Pinned Python with recorded intermediates. This is the source of
-  truth for behaviour.
+  truth for behaviour. Unpatched, it is the reference for `policy = "upstream"`.
+  With the reviewed `fmrilss_policy.patch` applied, it is the reference for
+  the default (task 0.3).
 - **(R2)** Compact float64 spec references in `helper-glmsingle.R`: explicit
   stacked designs, literal `calcbadness` loops, per-fraction `fracridge`, dense
   projectors. These are test-only.
@@ -321,7 +332,14 @@ Each task is about one reviewable commit with a done-criterion. Phases 2–5 are
   (h) near-collinear extras (S1);
   (i) a constant-response voxel (S6) and a constant-candidate autoscale (S4);
   (j) a zero-variance/all-zero voxel.
-  Fixtures are under 2 MB each. *Done when* they regenerate deterministically
+  Fixtures are under 2 MB each. Each scenario is written twice:
+  - by **pinned Python**, which is the reference for `policy = "upstream"`;
+  - by **pinned Python plus `tools/glmsingle_ref/fmrilss_policy.patch`**, which
+    is the reference for the default policy. The patch is minimal and reviewed:
+    extras are included at every k, and `zerodiv` copies its divisor.
+
+  Scenarios without extras or zero-SD voxels give identical outputs under both,
+  and that identity is asserted. *Done when* they regenerate deterministically
   with thresholds pinned.
 - **0.4 Ground-truth simulator** (test helper, local RNG). *Done when* it is
   documented and deterministic.
@@ -396,13 +414,17 @@ Each change must keep every Phase 2–4 gate green.
 
 - **7.1 Parity report:** all scenarios plus example data. Certified-decision
   rates, reference-unstable blocks, and divergence traces.
-- **7.2 Tier C report** for v1 (the baseline for Phase 8).
+- **7.2 Tier C report** for v1 (the baseline for Phase 8). It includes
+  `"fmrilss"` vs `"upstream"` on a simulator with motion-like extras that
+  correlate with the noise. The default must be no worse than upstream on beta
+  MSE, within-condition variation and behavioural-effect recovery. If it is
+  worse, revisit the S3 default.
 - **7.3 Matched benchmark** (`bench/run_glmsingle_benchmark.R`): same outputs
   and diagnostics, same thread count, same input precision, I/O excluded on
   both sides. Per-stage time and peak RSS at 1 and N threads, in lean and
   matched-output modes. *Target:* ≥ 5× end to end at 1 thread.
 - **7.4** Optional OASIS migration to `blocked_products.h`.
-- **7.5 Docs:** vignette (usage, policies, parity evidence, timing), pkgdown,
+- **7.5 Docs:** vignette (usage, a "Differences from GLMsingle" section listing every `"fmrilss"` vs `"upstream"` policy, parity evidence, timing), pkgdown,
   NEWS, `inst/COPYRIGHTS` (GLMsingle BSD-3, fracridge BSD-2).
 - **7.6** `R CMD check` clean; the GLMsingle test suite runs in under 60 s.
 
@@ -428,7 +450,7 @@ resampling modes, figures, hdf5.
 | Shared misreading of the source in R2 and the fast path | R1 fixtures for every policy edge (0.3 c, h–j); policy table reviewed in 0.6 |
 | Speedup below target because unoptimised stages dominate | Per-stage baseline (0.5) and profiling-driven Phase 6 |
 | Memory blow-up from retained statistics | Per-tile lifetimes (§3.6); `memory_limit_gb` |
-| Upstream changes | Pinned commit in the fixture manifest; re-audit on releases |
+| Upstream changes | Pinned commit in the fixture manifest; re-audit on releases. Default-policy deviations are documented in the vignette |
 
 ## 7. Evidence index
 
@@ -472,8 +494,10 @@ already addressed in v2 (`1dcaabf`).
 
 ## 9. Decisions
 
-| # | Item | Status |
+| # | Item | Decision |
 |---|---|---|
-| 1 | **S3 extras policy** | **Open, waiting on upstream.** Ask cvnlab/GLMsingle which behaviour is intended; the draft issue is `.planning/glmsingle_upstream_issue.md`. Until they answer, the default is Python behaviour (the parity target), with `"matlab"` and `"always"` as opt-ins. If upstream names an intended behaviour, make it the default and regenerate the fixtures |
-| 2 | **S2 singular trial Gram** | **Decided:** error, as upstream does; `"pinv"` opt-in |
-| 3 | **GMM eps floor** (MATLAB `91e5b7e`) | **Decided:** adopt it, as the single intentional deviation from Python |
+| 1 | **S3 extras policy** | **Always include user extras**, in every PC-CV fit (including the k = 0 reference) and in final C/D. Rationale: (i) user nuisances such as motion are part of the noise model, and dropping them when no PCs are chosen leaves known confounds in the betas; (ii) it keeps the PC models nested (`[poly, extras] ⊂ [poly, extras, PC₁] ⊂ …`), so the CV curve compares like with like and the k = 0 reference is the same model family; (iii) it removes Python's discontinuity between k = 0 and k = 1; (iv) it is consistent with stages A and B, which already use the extras in both ports. MATLAB's "never in C/D" would let the GLMdenoise PCs silently replace user-specified nuisances, which is less defensible. `policy = "upstream"` reproduces Python. The choice is verified by Tier C (7.2) |
+| 2 | **S2 singular trial Gram** | Error, as upstream does, with a diagnostic; `"pinv"` opt-in |
+| 3 | **GMM eps floor** (MATLAB `91e5b7e`) | Adopt, with deterministic restarts |
+| 4 | **S6 zero-SD voxels in CV** | Zero for all candidates (MATLAB semantics). Python's in-place divisor mutation is an aliasing artefact that scores constant voxels inconsistently across candidates |
+| 5 | **Upstream issues** | None will be filed. Deviations are documented in the vignette's "Differences from GLMsingle" section |
