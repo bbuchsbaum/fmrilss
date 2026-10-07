@@ -33,15 +33,42 @@ maintainer's decisions (§9).
 
 **Benchmark** (`bench/run_glmsingle_benchmark.R`): 1 thread, OpenBLAS for
 both sides, optimised (`-O2`) build. PC count is identical and the median
-per-voxel beta correlation is 1.000 in both runs.
+per-voxel beta correlation is 1.000 in every run.
 
-| Data | Python GLMsingle | fmrilss | Speedup |
-|---|---:|---:|---:|
-| 8 runs × 200 TRs × 20,000 voxels (375 trials) | 339 s | 27.6 s | **12.3×** |
-| 12 runs × 220 TRs × 20,000 voxels (628 trials) | 884 s | 46.8 s | **18.9×** |
+| Data | Python GLMsingle | fmrilss v1 | fmrilss v1.1 | Speedup (v1.1) |
+|---|---:|---:|---:|---:|
+| 8 runs × 200 TRs × 20,000 voxels (375 trials) | 339 s | 27.6 s | 18.3 s | **18.5×** |
+| 12 runs × 220 TRs × 20,000 voxels (628 trials) | 884 s | 46.8 s | 36.9 s | **24.0×** |
 
-The speedup grows with the number of runs because GLMsingle's stacked design
-scales with total trials, while the per-run solves do not.
+The speedup grows with the number of runs because GLMsingle's stacked
+design scales with total trials, while the per-run solves do not.
+
+**v1.1 optimisations** (all exact; every test tier unchanged):
+- **Whitened OLS operators** (W'W = G⁻¹). R² for every library HRF comes from
+  z = W·A'y alone, and betas are rebuilt only for each voxel's winning HRF.
+  This is the review's "score every candidate, reconstruct the winner".
+- **Copy-free data statistics.** Operators are orthogonal to the constant, so
+  an exact rank-1 mean correction replaces the centred copy of the data.
+  Sums of squares come from a C++ two-pass kernel.
+- **CV compile and loss in C++,** with per-session means and SDs instead of
+  trials × voxels matrices.
+- **Default `chunk_size` = 50,000** (GLMsingle's `chunklen`), so a tile that
+  covers every voxel is not copied.
+
+**Tried and rejected:**
+- **Filter-bank `XᵀY`** (one BLAS call per trial over the HRF window). It is
+  2× fewer flops on paper, but measured 2× slower than one dense product per
+  HRF: the per-trial calls (21 × 53 × V) are too small for BLAS to run
+  efficiently. This confirms the reviewer's caution that fewer operations
+  need not mean less time.
+- **OpenMP inside the C++ loops combined with multi-threaded BLAS.** The two
+  thread pools compete for cores: 4+4 threads were 2× slower than 1 thread.
+  Either alone gives 5–12%. `n_threads` therefore defaults to 1, and results
+  are identical for any value (tested).
+
+**Remaining profile** (12-run case): dense products 26%, fused
+fraction/CV kernel 13%, CV compile 8%. The PC-prefix update path (review
+point 10) would save at most about 3 s of the 5.9 s GLMdenoise stage.
 
 **Deviations from this plan, with reasons:**
 - **Tier A tolerance uses κ², not κ.** Python forms float32 normal equations,
@@ -51,10 +78,14 @@ scales with total trials, while the per-run solves do not.
   shared C++ header. These are already BLAS-3 and gave the speedup.
   `blocked_products.h` (tasks 1.2 and 7.4) was therefore not created; OASIS
   is unchanged.
-- **C++ is used only where profiling showed R overhead:** the per-voxel
-  `fracridge` interpolation and the fused per-fraction CV loss. The
-  filter-bank `XᵀY` and PC-prefix maps (Phase 6) were not needed to reach the
-  target.
+- **C++ is used only where profiling showed R overhead:**
+  - the per-voxel `fracridge` interpolation;
+  - the fused per-fraction CV loss;
+  - CV compile and loss;
+  - column statistics and scaling.
+
+  The filter-bank `XᵀY` was measured and rejected (above); PC-prefix maps
+  were not needed.
 - **New upstream quirks were found during implementation:**
   - (S11) Types C/D are always scaled to percent BOLD, whatever
     `wantpercentbold` says. Our `want_percent_bold` applies to every type, and

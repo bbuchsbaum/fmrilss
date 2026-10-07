@@ -12,6 +12,8 @@
   each run separately, applies nuisance projections as low-rank products,
   scores models from sufficient statistics, and compiles the repeated-trial
   cross-validation into fixed per-trial weights.
+  On simulated data with 8–12 runs and 20,000 voxels it runs 18–24 times
+  faster than pinned Python GLMsingle on a single thread.
 - Agreement with pinned Python GLMsingle (commit `1ab54a6`) is tested on 11
   scenarios: all HRF, noise-component and ridge-fraction choices match, and
   betas agree to single-precision accuracy.
@@ -21,6 +23,13 @@
 - `glmsingle_design()` fits from an fmridesign event model;
   `glmsingle_hrf()` and `glmsingle_hrf_library()` return GLMsingle's HRFs.
 - New vignette: `vignette("glmsingle")`.
+
+### Vignettes
+
+- Recalibrated `fmrilss`, `oasis_method` and `voxel-wise-hrf` for fmrihrf's
+  corrected SPMG HRFs (smaller raw scale and a realistic undershoot). Designs
+  now use unit-peak HRFs, and checks that were tied to the old kernel are
+  relative or computed.
 
 ## fmrilss 0.2.0
 
