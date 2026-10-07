@@ -45,6 +45,24 @@
 #' @param prewhiten A list of prewhitening options using the \pkg{fmriAR}
 #'   package, or \code{NULL} (no whitening, the default).
 #'   See Details and \code{\link{prewhiten_options}} for the full list.
+#' @param trial_groups Optional vector (character, factor, or integer) with one
+#'   condition label per trial, i.e. per column of `X`. When supplied, each
+#'   trial-wise model uses one summed "other trials" regressor per condition
+#'   (the LSS-N variant of Turner et al., 2012), with the trial of interest
+#'   removed from its own condition's regressor, instead of a single regressor
+#'   pooling every other trial. This is the model used by Nilearn's and
+#'   NiBetaSeries' LSS beta series and is more accurate when conditions evoke
+#'   different responses. Supported by methods `"r_optimized"`,
+#'   `"cpp_optimized"`, `"cpp"`, and `"naive"`. Defaults to `NULL` (classic LSS).
+#' @param ridge Optional fractional ridge penalty: one number, or two numbers
+#'   `c(trial, others)` for the trial-of-interest and the other-trials
+#'   coefficients. Each is a fraction of the mean design energy (the
+#'   `ridge_mode = "fractional"` convention of OASIS), i.e. the penalty added to
+#'   the trial diagonal is `ridge[1] * mean(c_i'c_i)`. Ridge shrinks trial
+#'   estimates toward zero and can greatly reduce their variance in rapid
+#'   designs where neighbouring trials overlap; it composes with
+#'   `trial_groups` and `prewhiten`. Supported by methods `"r_optimized"`,
+#'   `"cpp_optimized"`, `"cpp"`, and `"naive"`. Defaults to `NULL` (no ridge).
 #'
 #' @return Normally, a numeric matrix of trial-wise beta estimates: T × V for
 #'   a one-basis design or (T K) × V for OASIS with K basis functions. With
@@ -67,6 +85,14 @@
 #'   \item Common fixed regressors (Z matrix), whose coefficients are not returned
 #' }
 #' 
+#' \strong{Computation.} Each LSS estimate is a linear functional of the data,
+#' \eqn{\hat\beta_i = w_i^\top y}. The optimized methods build the
+#' \eqn{n \times T} weight matrix \eqn{W} from the (small) trial design and
+#' compute all trial betas with one matrix product \eqn{W^\top Y}. Because the
+#' weights lie in the residual space of the confounds, the data matrix is never
+#' residualized or copied, so the cost is a single
+#' \eqn{O(nTV)} BLAS call regardless of the number of confounds.
+#'
 #' If Nuisance regressors are provided, the rank-revealed combined span
 #' `cbind(Z, Nuisance)` is projected from both Y and X before fitting. Without a
 #' separate Nuisance matrix, Z remains explicitly in every trial-wise model.
@@ -144,14 +170,19 @@
 #'       \item{\code{"global"}}{(default) A single set of AR coefficients is
 #'         estimated from the median autocorrelation across all voxels.
 #'         Fast and usually adequate.}
-#'       \item{\code{"voxel"}}{Fit a separate AR model per voxel. Shared-design
-#'         \code{lss()} calls reject this mode because each voxel would require
-#'         its own matching filtered design.}
+#'       \item{\code{"voxel"}}{Voxel-adaptive noise model. Per-voxel residual
+#'         autocorrelations are estimated, voxels are grouped into
+#'         \code{voxel_bins} bins (default 50) of similar autocorrelation, and an
+#'         AR model is refitted per bin; each bin gets its own filtered design,
+#'         as in Nilearn's AR(1) GLM. Supported by methods
+#'         \code{"r_optimized"}, \code{"cpp_optimized"} and \code{"cpp"}; other
+#'         methods reject it.}
 #'       \item{\code{"run"}}{Fit one AR model per run (requires \code{runs}).
 #'         Useful when noise structure differs between runs.}
 #'       \item{\code{"parcel"}}{Fit one AR model per parcel (requires
-#'         \code{parcels}). Shared-design \code{lss()} calls reject this mode
-#'         until parcel-specific filtered designs are fitted separately.}
+#'         \code{parcels}); each parcel is fitted with its own filtered design.
+#'         Supported by methods \code{"r_optimized"}, \code{"cpp_optimized"}
+#'         and \code{"cpp"}.}
 #'     }
 #'   \item \code{runs}: Integer vector of length \code{nrow(Y)} giving
 #'     run/block labels. Required for \code{pooling = "run"} and recommended
@@ -164,8 +195,8 @@
 #'     segment is scaled by \eqn{\sqrt{1 - \phi_1^2}} for the exact
 #'     likelihood; \code{"none"} drops the first observation instead.
 #'   \item \code{compute_residuals}: Logical (default TRUE). When TRUE,
-#'     OLS residuals from the full design are computed before fitting the
-#'     noise model.  Set to FALSE only if Y is already residualized.
+#'     OLS residuals (see \code{residual_model}) are computed before fitting
+#'     the noise model.  Set to FALSE only if Y is already residualized.
 #'   \item \code{design}: Optional numeric design matrix whose projection
 #'     produced those residuals. Supplying it opts in to fmriAR's correction
 #'     for downward bias in residual autocovariance. When
@@ -176,6 +207,17 @@
 #'     matrices from \code{fmriAR::acvf_bias_matrix()}, used instead of
 #'     \code{design} when reusing a correction across datasets. The two fields
 #'     are mutually exclusive.
+#'   \item \code{voxel_bins}: Positive integer number of autocorrelation bins
+#'     for \code{pooling = "voxel"} (default 50).
+#'   \item \code{residual_model}: which model's residuals the noise model is
+#'     estimated from. \code{"aggregate"} (default) uses the confounds plus one
+#'     summed trial regressor per \code{trial_groups} level (or per basis
+#'     function); \code{"full"} uses the full trial-wise design, whose many
+#'     columns bias the autocorrelation downward in rapid designs;
+#'     \code{"corrected"} uses the full design with fmriAR's bias correction
+#'     (least biased, slower, global/run pooling only). \code{"full"} is
+#'     implied by \code{design}/\code{acvf_correction}. See
+#'     \code{vignette("prewhitening")} for when to use each.
 #'   \item \code{correction_max_lag}: Positive integer lag budget used when
 #'     \code{design} is supplied (default 25). The correction is intended for
 #'     high-pass-filtered designs; without high-pass filtering, the required
@@ -215,6 +257,10 @@
 #' Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
 #' Deconvolving BOLD activation in event-related designs for multivoxel pattern
 #' classification analyses. NeuroImage, 59(3), 2636-2643.
+#'
+#' Turner, B. O., Mumford, J. A., Poldrack, R. A., & Ashby, F. G. (2012).
+#' Spatiotemporal activity estimation for multivoxel pattern analysis with
+#' rapid event-related designs. NeuroImage, 62(3), 1429-1438.
 #'
 #' @examples
 #' n_timepoints <- 100
@@ -289,9 +335,26 @@
 #' @export
 lss <- function(Y, X, Z = NULL, Nuisance = NULL,
                 method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive", "oasis", "stglmnet"),
-                block_size = 96, oasis = list(), stglmnet = list(), prewhiten = NULL) {
+                block_size = 96, oasis = list(), stglmnet = list(), prewhiten = NULL,
+                trial_groups = NULL, ridge = NULL) {
   
   method <- match.arg(method)
+
+  if (!is.null(trial_groups) && method %in% c("r_vectorized", "oasis", "stglmnet")) {
+    stop(
+      "trial_groups (LSS-N) is supported by methods 'r_optimized', ",
+      "'cpp_optimized', 'cpp', and 'naive'",
+      call. = FALSE
+    )
+  }
+  if (!is.null(ridge) && method %in% c("r_vectorized", "oasis", "stglmnet")) {
+    stop(
+      "ridge is supported by methods 'r_optimized', 'cpp_optimized', 'cpp', ",
+      "and 'naive'; use oasis$ridge_x/ridge_b for method = 'oasis'",
+      call. = FALSE
+    )
+  }
+  ridge <- .lss_ridge_arg(ridge)
 
   if (!is.null(prewhiten)) {
     trusted_plan <- inherits(prewhiten, "fmrilss_internal_prewhiten")
@@ -341,7 +404,7 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   if (nrow(Y) < 1L || ncol(Y) < 1L) {
     stop("Y must have at least one timepoint and one voxel")
   }
-  if (any(!is.finite(Y))) stop("Y contains non-finite values")
+  if (!.all_finite(Y)) stop("Y contains non-finite values")
   if (!is.null(Z) && (!is.matrix(Z) || !is.numeric(Z) || nrow(Z) != nrow(Y))) {
     stop("Z must be a numeric matrix with the same number of rows as Y")
   }
@@ -367,7 +430,7 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   trial_names <- .validate_or_default_names(colnames(X), ncol(X), "Trial_", "X column names")
   voxel_names <- .validate_or_default_names(colnames(Y), ncol(Y), "Voxel_", "Y column names")
   colnames(X) <- trial_names
-  colnames(Y) <- voxel_names
+  groups <- .lss_group_codes(trial_groups, ncol(X))
   
   # Set up default experimental regressors (intercept) if not provided
   if (is.null(Z)) {
@@ -380,8 +443,30 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   
   # Step 1: Apply prewhitening if requested
   whiten_plan <- NULL
-  if (!is.null(prewhiten) && !is.null(prewhiten$method) && prewhiten$method != "none") {
-    whitened <- .prewhiten_data(Y, X, Z, Nuisance, prewhiten)
+  prewhiten_active <- !is.null(prewhiten) && !is.null(prewhiten$method) &&
+    prewhiten$method != "none"
+  if (prewhiten_active && method %in% c("r_optimized", "cpp_optimized", "cpp")) {
+    # Weight-matrix path: one filtered design per whitening operator, which
+    # also supports voxel- and parcel-specific noise models.
+    fit <- .lss_prewhitened(Y, X, Z, Nuisance, prewhiten, groups = groups,
+                            method = method, ridge = ridge)
+    result <- fit$beta
+    rownames(result) <- trial_names
+    colnames(result) <- voxel_names
+    return(.attach_whiten_plan(result, fit$whiten_plan))
+  }
+  if (prewhiten_active) {
+    if (prewhiten$pooling %in% c("voxel", "parcel")) {
+      stop(
+        "pooling='", prewhiten$pooling, "' estimates voxel-specific whitening ",
+        "operators, which cannot be applied to a shared design matrix with ",
+        "method='", method, "'. Use method='r_optimized', 'cpp_optimized' or ",
+        "'cpp', or pooling='global'/'run'.",
+        call. = FALSE
+      )
+    }
+    whitened <- .prewhiten_data(Y, X, Z, Nuisance, prewhiten,
+                                X_noise = .aggregate_trials(X, groups))
     whiten_plan <- whitened$whiten_plan
     Y <- whitened$Y_whitened
     X <- whitened$X_whitened
@@ -394,10 +479,18 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
     # Create full nuisance design matrix
     X_nuisance <- cbind(Z, Nuisance)
 
-    # Project out nuisance from Y and X
-    proj_result <- .project_out_nuisance(Y, X, X_nuisance)
-    Y_clean <- proj_result$Y_residual
-    X_clean <- proj_result$X_residual
+    if (method %in% c("naive", "r_vectorized")) {
+      # Reference paths operate on explicitly residualized data.
+      proj_result <- .project_out_nuisance(Y, X, X_nuisance)
+      Y_clean <- proj_result$Y_residual
+      X_clean <- proj_result$X_residual
+    } else {
+      # Weight-matrix paths: the LSS weights of residualized trial regressors
+      # lie in the nuisance residual space, so W'Y == W'(QY) and Y never
+      # needs to be projected.
+      Y_clean <- Y
+      X_clean <- .lss_residualize_trials(X, X_nuisance)
+    }
   } else {
     Y_clean <- Y
     X_clean <- X
@@ -405,11 +498,13 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
 
   # Step 3: Run LSS analysis with the chosen method
   result <- switch(method,
-    "r_optimized" = .lss_r_optimized(Y_clean, X_clean, Z),
-    "cpp_optimized" = .lss_cpp_optimized(Y_clean, X_clean, Z, block_size = block_size),
+    "r_optimized" = .lss_r_optimized(Y_clean, X_clean, Z, groups = groups,
+                                     ridge = ridge),
+    "cpp_optimized" = .lss_cpp_optimized(Y_clean, X_clean, Z, block_size = block_size,
+                                         groups = groups, ridge = ridge),
     "r_vectorized" = .lss_r_vectorized(Y_clean, X_clean, Z),
-    "cpp" = .lss_cpp(Y_clean, X_clean, Z),
-    "naive" = .lss_naive(Y_clean, X_clean, Z),
+    "cpp" = .lss_cpp(Y_clean, X_clean, Z, groups = groups, ridge = ridge),
+    "naive" = .lss_naive(Y_clean, X_clean, Z, groups = groups, ridge = ridge),
     stop("Unknown method: ", method)
   )
   
@@ -444,51 +539,68 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
 
 # Helper function to check for zero or near-zero regressors
 .check_zero_regressors <- function(X, eps = 1e-12) {
-  trial_names <- if (!is.null(colnames(X))) colnames(X) else paste0("Trial_", 1:ncol(X))
-  
-  # Check each trial regressor
-  for (i in 1:ncol(X)) {
-    regressor_norm <- sqrt(sum(X[, i]^2))
-    regressor_var <- stats::var(X[, i])
-    
-    # Check for exactly zero regressor first
-    if (regressor_norm < eps) {
+  trial_names <- if (!is.null(colnames(X))) colnames(X) else paste0("Trial_", seq_len(ncol(X)))
+  n <- nrow(X)
+  regressor_norm <- sqrt(colSums(X^2))
+  regressor_var <- if (n > 1L) {
+    colSums(sweep(X, 2L, colMeans(X))^2) / (n - 1)
+  } else {
+    rep(NA_real_, ncol(X))
+  }
+
+  flagged <- which(regressor_norm < eps | (!is.na(regressor_var) & regressor_var < eps))
+  for (i in flagged) {
+    if (regressor_norm[i] < eps) {
       warning(sprintf("Trial regressor '%s' appears to be zero (norm = %g). This may cause numerical issues or NaN results.",
-                     trial_names[i], regressor_norm))
-    } else if (regressor_var < eps && regressor_norm >= eps) {
+                     trial_names[i], regressor_norm[i]))
+    } else {
       # Non-zero but constant (or nearly constant) regressor
       warning(sprintf("Trial regressor '%s' has very low variance (%g) and may cause numerical instability.",
-                     trial_names[i], regressor_var))
+                     trial_names[i], regressor_var[i]))
     }
   }
 }
 
 # Implementation functions (these will call the existing optimized functions)
-.lss_r_optimized <- function(Y, X, Z) {
-  # Create design list for compatibility with existing function
-  bdes <- list(
-    dmat_base = Z,
-    dmat_ran = X,
-    dmat_fixed = NULL,
-    fixed_ind = NULL
-  )
-  return(lss_optimized(Y, bdes, use_cpp = FALSE))
+.lss_r_optimized <- function(Y, X, Z, groups = NULL, ridge = c(0, 0)) {
+  .lss_kernel_r(Y, X, Z, groups = groups, ridge = ridge)
 }
 
-.lss_cpp_optimized <- function(Y, X, Z, block_size = 96) {
-  # This now calls the new single-pass C++ function
+.lss_cpp_optimized <- function(Y, X, Z, block_size = 96, groups = NULL,
+                               ridge = c(0, 0)) {
   block_size <- .as_positive_integer(block_size, "block_size")
-  
-  # Ensure Z (confounds) is a matrix, even if NULL or a vector
+
+  # Pass an orthonormal, rank-revealed confound basis so the C++ projection
+  # is exact even for collinear confounds.
   if (is.null(Z)) {
-    Z <- matrix(0, nrow = nrow(Y), ncol = 0)
-  } else if (!is.matrix(Z)) {
-    Z <- as.matrix(Z)
+    Zb <- matrix(0, nrow = nrow(Y), ncol = 0)
+  } else {
+    qrZ <- qr(as.matrix(Z))
+    Zb <- qr.Q(qrZ)[, seq_len(qrZ$rank), drop = FALSE]
   }
-  
+
   # X = trial regressors, Z = confounds, Y = data
   # The C++ function expects: X=confounds, Y=data, C=trials
-  lss_fused_optim_cpp(X = Z, Y = Y, C = X, block_size = block_size)
+  lss_fused_optim_cpp(X = Zb, Y = Y, C = X, block_size = block_size,
+                      groups = groups, use_omp = !.blas_is_threaded(),
+                      ridge_x = ridge[1L], ridge_b = ridge[2L])
+}
+
+#' Does the linked BLAS run multithreaded?
+#'
+#' A single large matrix product is fastest with a multithreaded BLAS, while
+#' distributing voxel blocks across OpenMP threads is faster with the
+#' reference BLAS. Override with `options(fmrilss.blas_threaded = TRUE/FALSE)`.
+#' @keywords internal
+#' @noRd
+.blas_is_threaded <- function() {
+  opt <- getOption("fmrilss.blas_threaded")
+  if (!is.null(opt)) return(isTRUE(opt))
+  blas <- tryCatch(
+    paste(extSoftVersion()[["BLAS"]], La_library()),
+    error = function(e) ""
+  )
+  grepl("openblas|mkl|accelerate|veclib|blis|armpl", blas, ignore.case = TRUE)
 }
 
 .lss_r_vectorized <- function(Y, X, Z) {
@@ -502,8 +614,13 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   return(lss_fast(dset = NULL, bdes = bdes, Y = Y, use_cpp = FALSE))
 }
 
-.lss_cpp <- function(Y, X, Z) {
-  # Use existing lss_fast function with use_cpp = TRUE  
+.lss_cpp <- function(Y, X, Z, groups = NULL, ridge = c(0, 0)) {
+  if (!is.null(groups) || any(ridge > 0)) {
+    C_res <- .lss_residualize_trials(X, Z)
+    W <- lss_weight_matrix_cpp(C_res, if (is.null(groups)) integer(0) else groups,
+                               1e-12, ridge[1L], ridge[2L])
+    return(crossprod(W, Y))
+  }
   bdes <- list(
     dmat_base = Z,
     dmat_ran = X,
@@ -513,14 +630,14 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   return(lss_fast(dset = NULL, bdes = bdes, Y = Y, use_cpp = TRUE))
 }
 
-.lss_naive <- function(Y, X, Z) {
+.lss_naive <- function(Y, X, Z, groups = NULL, ridge = c(0, 0)) {
   bdes <- list(
     dmat_base = Z,
     dmat_ran = X,
     dmat_fixed = NULL,
     fixed_ind = NULL
   )
-  return(lss_naive(Y, bdes))
+  return(lss_naive(Y, bdes, trial_groups = groups, ridge = ridge))
 }
 
 #' Orthogonal Projection Matrix
@@ -638,8 +755,7 @@ lss_fast <- function(dset, bdes, Y = NULL, use_cpp = TRUE) {
   # Hot-path early exit for single event
   if (n_events == 1) {
     if (use_cpp) {
-      res <- compute_residuals_cpp(X_base_fixed, Y, dmat_ran)
-      return(lss_compute_cpp(res$Q_dmat_ran, res$residual_data))
+      return(lss_compute_cpp(.lss_residualize_trials(dmat_ran, X_base_fixed), Y))
     } else {
       # Simple regression for single event
       Q <- .Q_project(X_base_fixed)
@@ -651,8 +767,9 @@ lss_fast <- function(dset, bdes, Y = NULL, use_cpp = TRUE) {
   }
 
   if (use_cpp) {
-    res <- compute_residuals_cpp(X_base_fixed, Y, dmat_ran)
-    return(lss_compute_cpp(res$Q_dmat_ran, res$residual_data))
+    # Projected trial regressors suffice: the LSS weights lie in the confound
+    # residual space, so the data need not be residualized.
+    return(lss_compute_cpp(.lss_residualize_trials(dmat_ran, X_base_fixed), Y))
   }
 
   # --- pure R fall-back ---

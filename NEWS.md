@@ -44,6 +44,73 @@
   now use unit-peak HRFs, and checks that were tied to the old kernel are
   relative or computed.
 
+### Rank-1 estimation fixes
+
+- Make rank-1 Gram solves invariant to event-amplitude units and preserve
+  the estimable span of dependent other-trial groups instead of dropping
+  all other-trial regressors.
+- Report the residual sum of squares at the final returned amplitudes in
+  both separate and joint ALS models.
+
+### Performance
+- The optimized LSS backends (`r_optimized`, `cpp_optimized`, `cpp`) now
+  build the n x T LSS weight matrix from the residualized trial design and
+  compute every trial beta with one matrix product. The data matrix is no
+  longer residualized or copied, the per-voxel R loop is gone, and
+  `cpp_optimized` only splits voxels across OpenMP threads when the linked
+  BLAS is single-threaded. Default `lss()` on 600 scans x 20,000 voxels with
+  150 trials: 1.9 s -> 0.07 s.
+- Prewhitening fits AR models with global or run pooling from an n-column
+  factor of the residual Gram matrix instead of the n x V residuals (exact),
+  and computes noise residuals with BLAS-3 projections. AR(1) `lss()` on the
+  same problem: 4.9 s -> 0.7 s.
+- Non-allocating finiteness check for `Y`.
+
+### New features
+- `lss(trial_groups = )` fits LSS-N (Turner et al., 2012): one summed
+  "other trials" regressor per condition, the model used by Nilearn's and
+  NiBetaSeries' beta series.
+- `lss(ridge = )` adds a fractional ridge penalty to each trial model (the
+  OASIS `ridge_mode = "fractional"` convention), composable with
+  `trial_groups` and prewhitening. In rapid designs with overlapping trials
+  it lowers beta RMSE substantially (about a third in the benchmark) without
+  changing pattern correlations.
+- `prewhiten = list(pooling = "voxel")` and `pooling = "parcel"` now work
+  with a shared design for `r_optimized`, `cpp_optimized` and `cpp`: each
+  whitening operator gets its own filtered design. Voxel pooling bins voxels
+  by residual autocorrelation (`voxel_bins`, default 50) and refits an AR
+  model per bin, as in Nilearn's AR(1) GLM.
+
+- New `lss_rank1()`: the rank-1 GLM of Pedregosa et al. (2015), which
+  learns one HRF per voxel (in any fmrihrf basis) jointly with per-trial
+  amplitudes, as least-squares-separate (`model = "separate"`, R1-GLMS,
+  optionally with LSS-N `trial_groups`) or least-squares-all
+  (`model = "joint"`, R1-GLM). It is fitted by exact alternating least
+  squares on K x K Gram blocks, which is monotone, parallel over voxels and,
+  in benchmarks, reaches the same optimum as the paper's L-BFGS approach
+  (also available as `solver = "lbfgs"`) 3-200x faster. The learned HRFs
+  are returned as a `VoxelHRF` for `lss_with_hrf()` on new data. See
+  `vignette("rank1_hrf")`.
+
+### Bug fixes
+- The noise model was estimated from residuals of the full trial-wise (LSA)
+  design. In rapid designs with many trials this biased the AR estimate
+  strongly downward (e.g. -0.32 for data with AR(1) ~ 0.35), making
+  prewhitened betas less accurate than OLS. The new
+  `prewhiten$residual_model` defaults to `"aggregate"` (confounds plus one
+  summed regressor per trial group or basis function); `"full"` restores the
+  previous behaviour and is implied by a user-supplied residual-bias
+  correction; `"corrected"` fits the full model with fmriAR's bias
+  correction, built automatically (least biased; global/run pooling only).
+  The new `vignette("prewhitening")` explains the trade-offs.
+
+### Benchmarks
+- `bench/python_comparison/` compares fmrilss with Nilearn (per-trial
+  `run_glm`, OLS and AR(1)) and NumPy LSS implementations on a shared
+  simulation: fmrilss reproduces the Python OLS estimates to < 5e-13, is
+  ~200x faster than the Nilearn per-trial loop at 20k voxels, and its
+  voxel-adaptive AR(1) matches Nilearn's AR(1) accuracy.
+
 ## fmrilss 0.2.0
 
 ### Major Enhancements

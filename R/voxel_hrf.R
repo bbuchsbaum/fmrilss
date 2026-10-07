@@ -5,7 +5,9 @@
 #' @name VoxelHRF
 #' @section Stored fields:
 #' `coefficients` contains one normalized HRF-shape column per voxel;
-#' `amplitude_scale` records the removed positive-peak scale; `basis` stores the
+#' `amplitude_scale` records the removed positive-peak scale; `degenerate`
+#' flags voxels whose shape has no positive peak of at least 5\% of its largest
+#' absolute deflection (scaled by that deflection instead); `basis` stores the
 #' HRF basis; `conditions` records observed labels while `condition_pooling`
 #' states that all events estimate one pooled shape; `sframe` preserves physical scan
 #' timing; and `normalization` plus `coefficient_units` state the coefficient
@@ -33,7 +35,7 @@ NULL
 #' @name LSSBeta
 #' @section Stored fields:
 #' `betas` is the file-backed trial-by-voxel matrix; `dimnames` preserves trial
-#' and voxel identity; `sframe`, `normalization`, `units`, and
+#' and voxel identity; `sframe`, `normalization`, `units`, `degenerate`, and
 #' `event_amplitude` and `event_duration` define timing and coefficient
 #' interpretation; and
 #' `engine_requested`, `engine_used`, and `chunk_size` record execution. Use
@@ -70,12 +72,19 @@ NULL
 #'   TR. Required; onset and duration values use its physical-time units.
 #' @param fixed_regs Optional finite numeric matrix of fixed/common regressors. An
 #'   intercept is added when it is not already in their span.
+#' @param ref_hrf HRF used to orient the sign of each estimated shape.
+#'   Defaults to the canonical `fmrihrf::HRF_SPMG1`.
 #'
 #' @return A \link{VoxelHRF} object containing at least:
 #'   \item{coefficients}{Matrix of positive-peak-normalized HRF shape weights
 #'     with one row per basis function and one column per voxel.}
 #'   \item{amplitude_scale}{The signed scale removed from each raw pooled-fit
 #'     coefficient column.}
+#'   \item{degenerate}{Logical, one per voxel: the estimated shape has no
+#'     positive peak after orientation, or one smaller than 5\% of its largest
+#'     absolute deflection (typically a voxel without signal). Such shapes are
+#'     scaled by their largest absolute value instead, and a warning reports
+#'     how many there are; estimation does not fail.}
 #'   \item{basis}{The HRF basis object used.}
 #'   \item{conditions}{Observed event labels. Labels are metadata: all events
 #'     are pooled into one shape per voxel.}
@@ -102,7 +111,8 @@ NULL
 #' }
 #' @export
 estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL,
-                               sframe = NULL, fixed_regs = NULL) {
+                               sframe = NULL, fixed_regs = NULL,
+                               ref_hrf = NULL) {
   # Input validation
   .voxhrf_validate_response(Y)
 
@@ -186,17 +196,23 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL,
   if (!is.matrix(coef_basis_raw)) {
     coef_basis_raw <- matrix(coef_basis_raw, nrow = ncol(X_basis))
   }
+  if (!is.null(ref_hrf) && !inherits(ref_hrf, "HRF")) {
+    stop("ref_hrf must be an fmrihrf HRF", call. = FALSE)
+  }
   normalized <- .normalize_voxel_hrf_coefficients(
     coef_basis_raw, basis,
     span = if (!is.null(attr(basis, "span"))) attr(basis, "span") else 30,
-    precision = 0.05
+    precision = 0.05, ref_hrf = ref_hrf
   )
   colnames(normalized$coefficients) <- colnames(Y)
   names(normalized$amplitude_scale) <- colnames(Y)
+  names(normalized$degenerate) <- colnames(Y)
+  .warn_degenerate_hrf(normalized$degenerate)
 
   result <- list(
     coefficients = normalized$coefficients,
     amplitude_scale = normalized$amplitude_scale,
+    degenerate = normalized$degenerate,
     basis = basis,
     conditions = unique(as.character(events$condition)),
     sframe = sframe,
@@ -263,29 +279,91 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL,
   fixed
 }
 
-.normalize_voxel_hrf_coefficients <- function(coefficients, basis, span, precision = 0.05) {
-  grid <- seq(0, span, by = precision)
-  impulse <- fmrihrf::regressor(onsets = 0, hrf = basis, duration = 0, span = span)
-  H <- fmrihrf::evaluate(impulse, grid, precision = precision, method = "conv")
-  if (inherits(H, "Matrix")) H <- as.matrix(H)
-  if (!is.matrix(H)) H <- matrix(H, ncol = 1L)
-  if (ncol(H) != nrow(coefficients)) {
+#' Orient and peak-normalize voxel HRF coefficients
+#'
+#' Shared by `estimate_voxel_hrf()` and `lss_rank1()`. Each voxel's waveform
+#' (the basis evaluated on a fine grid, baseline-subtracted) is oriented to
+#' correlate positively with `ref_hrf` and divided by its positive peak, and
+#' the removed signed scale is returned as `amplitude_scale`. A waveform whose
+#' positive peak after orientation is smaller than `peak_tolerance` times its
+#' largest absolute deflection (typically a voxel without signal, where
+#' dividing by a noise-level peak would inflate amplitudes arbitrarily) is
+#' *degenerate*: it is scaled by its largest absolute value instead (or left
+#' unscaled when it is identically zero) and flagged rather than failing the
+#' whole fit.
+#'
+#' @param coefficients K x V raw basis coefficients.
+#' @param basis fmrihrf HRF basis.
+#' @param span Evaluation span in seconds.
+#' @param precision Grid step in seconds.
+#' @param ref_hrf Reference HRF for orientation; `NULL` means the canonical
+#'   `fmrihrf::HRF_SPMG1`.
+#' @param peak_tolerance Minimum ratio of positive peak to largest absolute
+#'   deflection for a shape to be peak-normalized.
+#' @return List with `coefficients`, `amplitude_scale` and logical
+#'   `degenerate`.
+#' @keywords internal
+#' @noRd
+.normalize_voxel_hrf_coefficients <- function(coefficients, basis, span,
+                                              precision = 0.05, ref_hrf = NULL,
+                                              peak_tolerance = 0.05) {
+  coefficients <- as.matrix(coefficients)
+  wf <- .voxhrf_waveforms(basis, ref_hrf %||% fmrihrf::HRF_SPMG1, span, precision)
+  if (ncol(wf$H) != nrow(coefficients)) {
     stop("basis dimension does not match coefficient rows", call. = FALSE)
   }
-  H <- sweep(H, 2L, H[1L, ], "-")
-  reference <- H[, 1L]
-  waveforms <- H %*% coefficients
-  orientation <- sign(as.numeric(crossprod(reference, waveforms)))
+  waveforms <- wf$H %*% coefficients
+  orientation <- sign(drop(crossprod(wf$ref, waveforms)))
   orientation[!is.finite(orientation) | orientation == 0] <- 1
-  oriented <- sweep(waveforms, 2L, orientation, "*")
-  peak <- apply(oriented, 2L, max)
-  if (any(!is.finite(peak) | peak <= sqrt(.Machine$double.eps))) {
-    stop("voxel HRF has no identifiable positive peak", call. = FALSE)
-  }
+  peak <- apply(sweep(waveforms, 2L, orientation, "*"), 2L, max)
+  amp <- apply(abs(waveforms), 2L, max)
+  degenerate <- !is.finite(peak) | !(peak >= peak_tolerance * amp) | amp <= 0
+  peak[degenerate] <- amp[degenerate]
+  peak[!is.finite(peak) | peak <= 0] <- 1
+  scale <- orientation * peak
   list(
-    coefficients = sweep(sweep(coefficients, 2L, orientation, "*"), 2L, peak, "/"),
-    amplitude_scale = orientation * peak
+    coefficients = sweep(coefficients, 2L, scale, "/"),
+    amplitude_scale = scale,
+    degenerate = degenerate
   )
+}
+
+#' Basis and reference waveforms on a fine grid (baseline-subtracted)
+#' @keywords internal
+#' @noRd
+.voxhrf_waveforms <- function(basis, ref_hrf, span, precision = 0.05) {
+  grid <- seq(0, span, by = precision)
+  eval_hrf <- function(h) {
+    impulse <- fmrihrf::regressor(onsets = 0, hrf = h, duration = 0, span = span)
+    out <- fmrihrf::evaluate(impulse, grid, precision = precision, method = "conv")
+    if (inherits(out, "Matrix")) out <- as.matrix(out)
+    if (!is.matrix(out)) out <- matrix(out, ncol = 1L)
+    sweep(out, 2L, out[1L, ], "-")
+  }
+  H <- eval_hrf(basis)
+  ref <- eval_hrf(ref_hrf)[, 1L]
+  list(H = H, ref = ref, ref_coef = qr.coef(qr(H), ref))
+}
+
+#' Warn once about voxels without an identifiable positive HRF peak
+#' @keywords internal
+#' @noRd
+.warn_degenerate_hrf <- function(degenerate) {
+  n_bad <- sum(degenerate)
+  if (n_bad > 0L) {
+    warning(
+      sprintf(
+        paste0(
+          "%d of %d voxel(s) have no identifiable positive HRF peak; their ",
+          "shapes are scaled by the largest absolute response and flagged in ",
+          "`degenerate`, so their amplitudes are not in peak-response units"
+        ),
+        n_bad, length(degenerate)
+      ),
+      call. = FALSE
+    )
+  }
+  invisible(n_bad)
 }
 
 #' Perform LSS using Voxel-wise HRFs
@@ -317,6 +395,9 @@ estimate_voxel_hrf <- function(Y, events, basis, nuisance_regs = NULL,
 #'   With a positive-peak-normalized shape, a zero-duration unit-amplitude event
 #'   has a peak-response-amplitude coefficient. Otherwise the result is a
 #'   coefficient on the supplied duration- and amplitude-coded event design.
+#'   The `degenerate` metadata repeats the per-voxel flags of `hrf_estimates`:
+#'   flagged voxels have no positive-peak shape, so their coefficients are not
+#'   in peak-response units.
 #'
 #' @examples
 #' \donttest{
@@ -398,6 +479,14 @@ lss_with_hrf <- function(Y, events, hrf_estimates, nuisance_regs = NULL,
   event_duration <- as.numeric(events$duration)
   fixed_use <- .voxhrf_fixed_design(fixed_regs, nrow(Y), sframe)
   normalization <- hrf_estimates$normalization %||% "unspecified"
+  degenerate <- hrf_estimates$degenerate
+  if (!is.null(degenerate)) {
+    degenerate <- as.logical(degenerate)
+    if (!is.null(names(hrf_estimates$degenerate)) && !is.null(colnames(Y))) {
+      degenerate <- degenerate[match(colnames(Y), names(hrf_estimates$degenerate))]
+    }
+    names(degenerate) <- colnames(Y)
+  }
   units <- if (identical(normalization, "positive-peak")) {
     if (all(event_amplitude == 1) && all(event_duration == 0)) {
       "peak-response amplitude"
@@ -429,6 +518,7 @@ lss_with_hrf <- function(Y, events, hrf_estimates, nuisance_regs = NULL,
     attr(beta, "sframe") <- sframe
     attr(beta, "normalization") <- normalization
     attr(beta, "units") <- units
+    attr(beta, "degenerate") <- degenerate
     attr(beta, "event_amplitude") <- event_amplitude
     attr(beta, "event_duration") <- event_duration
     attr(beta, "engine_requested") <- engine
@@ -477,6 +567,7 @@ lss_with_hrf <- function(Y, events, hrf_estimates, nuisance_regs = NULL,
     sframe = sframe,
     normalization = normalization,
     units = units,
+    degenerate = degenerate,
     event_amplitude = event_amplitude,
     event_duration = event_duration,
     engine_requested = engine,
@@ -538,6 +629,7 @@ as.matrix.LSSBeta <- function(x, ...) {
   attr(out, "sframe") <- x$sframe
   attr(out, "normalization") <- x$normalization
   attr(out, "units") <- x$units
+  attr(out, "degenerate") <- x$degenerate
   attr(out, "event_amplitude") <- x$event_amplitude
   attr(out, "event_duration") <- x$event_duration
   attr(out, "engine_requested") <- x$engine_requested

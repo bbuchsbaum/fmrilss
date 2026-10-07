@@ -16,7 +16,7 @@ normalization, and unit metadata.
 \section{Stored fields}{
 
 \code{betas} is the file-backed trial-by-voxel matrix; \code{dimnames} preserves trial
-and voxel identity; \code{sframe}, \code{normalization}, \code{units}, and
+and voxel identity; \code{sframe}, \code{normalization}, \code{units}, \code{degenerate}, and
 \code{event_amplitude} and \code{event_duration} define timing and coefficient
 interpretation; and
 \code{engine_requested}, \code{engine_used}, and \code{chunk_size} record execution. Use

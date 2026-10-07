@@ -1,0 +1,49 @@
+"scenario","method","seconds","beta_r","hrf_r","n_degenerate"
+"positive","oracle LSS (true HRF)",NA,0.633359423657919,NA,NA
+"positive","oracle LSS-N (true HRF)",NA,0.63209984599922,NA,NA
+"positive","LSS, canonical HRF",0.00600000000002865,0.559302040960595,NA,NA
+"positive","LSS-N, canonical HRF",0.00799999999998136,0.55664229488965,NA,NA
+"positive","estimate_voxel_hrf + lss_with_hrf, SPMG3",8.77100000000002,0.620259323007131,0.952746960444255,0
+"positive","lss_rank1 separate, SPMG3",0.186999999999955,0.620387930607256,0.953374689570546,0
+"positive","lss_rank1 separate + trial_groups, SPMG3",0.235000000000014,0.615966592269765,0.952385182637699,0
+"positive","lss_rank1 joint, SPMG3",4.56099999999998,0.570529413964403,0.9413463352202,0
+"positive","estimate_voxel_hrf + lss_with_hrf, FIR15",10.762,0.538503306158738,0.810262209436862,0
+"positive","lss_rank1 separate, FIR15",0.331999999999994,0.539012836815073,0.811924458502651,0
+"positive","lss_rank1 separate + trial_groups, FIR15",0.694999999999993,0.50526126096369,0.789393749945039,0
+"positive","lss_rank1 joint, FIR15",98.12,0.336335302559364,0.602254063543333,0
+"positive_rapid","oracle LSS (true HRF)",NA,0.390472638275349,NA,NA
+"positive_rapid","oracle LSS-N (true HRF)",NA,0.374650058741848,NA,NA
+"positive_rapid","LSS, canonical HRF",0.007000000000005,0.341134044101576,NA,NA
+"positive_rapid","LSS-N, canonical HRF",0.01400000000001,0.329336607749539,NA,NA
+"positive_rapid","estimate_voxel_hrf + lss_with_hrf, SPMG3",16.711,0.368256196748134,0.91437926230913,0
+"positive_rapid","lss_rank1 separate, SPMG3",0.231999999999971,0.368462888548335,0.916073004983995,0
+"positive_rapid","lss_rank1 separate + trial_groups, SPMG3",0.300000000000068,0.338806496128302,0.910643245959705,0
+"positive_rapid","lss_rank1 joint, SPMG3",48.587,0.116897401484727,0.853252155424837,0
+"positive_rapid","estimate_voxel_hrf + lss_with_hrf, FIR15",20.942,0.288350006852908,0.698190803085906,1
+"positive_rapid","lss_rank1 separate, FIR15",1.02800000000002,0.290629375377573,0.704329915526278,0
+"positive_rapid","lss_rank1 separate + trial_groups, FIR15",1.52700000000004,0.256907982971835,0.704865040140002,2
+"positive_rapid","lss_rank1 joint, FIR15",367.133,0.0708604467733343,0.469334276745952,1
+"zero_mean","oracle LSS (true HRF)",NA,0.806843117881176,NA,NA
+"zero_mean","oracle LSS-N (true HRF)",NA,0.806687983650829,NA,NA
+"zero_mean","LSS, canonical HRF",0.0080000000000382,0.728982332082685,NA,NA
+"zero_mean","LSS-N, canonical HRF",0.00900000000001455,0.728172753869423,NA,NA
+"zero_mean","estimate_voxel_hrf + lss_with_hrf, SPMG3",8.33100000000002,0.453169109730885,0.507595838515772,0
+"zero_mean","lss_rank1 separate, SPMG3",0.268000000000029,0.599468092303941,0.694996188035709,0
+"zero_mean","lss_rank1 separate + trial_groups, SPMG3",0.271999999999935,0.591569903620264,0.708434272287432,0
+"zero_mean","lss_rank1 joint, SPMG3",6.88999999999999,0.76712379229899,0.928030594494171,0
+"zero_mean","estimate_voxel_hrf + lss_with_hrf, FIR15",10.198,0.216344186691558,0.25048317077416,1
+"zero_mean","lss_rank1 separate, FIR15",0.377999999999929,0.242593586655776,0.282954078676052,2
+"zero_mean","lss_rank1 separate + trial_groups, FIR15",0.90300000000002,0.24207121816449,0.319474847797505,21
+"zero_mean","lss_rank1 joint, FIR15",111.209,0.297280684560184,0.436153331011383,5
+"opposite","oracle LSS (true HRF)",NA,0.648522018189687,NA,NA
+"opposite","oracle LSS-N (true HRF)",NA,0.879851219022114,NA,NA
+"opposite","LSS, canonical HRF",0.00600000000008549,0.504600892997777,NA,NA
+"opposite","LSS-N, canonical HRF",0.00900000000001455,0.691235217997316,NA,NA
+"opposite","estimate_voxel_hrf + lss_with_hrf, SPMG3",8.41699999999992,0.146624094318509,0.325992169000308,0
+"opposite","lss_rank1 separate, SPMG3",0.233000000000175,0.270117912385083,0.420355856100562,0
+"opposite","lss_rank1 separate + trial_groups, SPMG3",0.211999999999989,0.87618369735788,0.962797360220187,0
+"opposite","lss_rank1 joint, SPMG3",6.44899999999984,0.639571847140805,0.809905003076874,0
+"opposite","estimate_voxel_hrf + lss_with_hrf, FIR15",10.3440000000001,0.0701152574591478,0.158317894836071,0
+"opposite","lss_rank1 separate, FIR15",0.336000000000013,0.0893249160946868,0.16962999922163,1
+"opposite","lss_rank1 separate + trial_groups, FIR15",0.817000000000007,0.827985067914617,0.769425418881798,0
+"opposite","lss_rank1 joint, FIR15",98.6420000000001,0.316730735094338,0.35656755325567,1

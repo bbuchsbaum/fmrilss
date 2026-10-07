@@ -37,21 +37,42 @@ lss_compute_cpp <- function(C, Y) {
     .Call(`_fmrilss_lss_compute_cpp`, C, Y)
 }
 
+all_finite_cpp <- function(x) {
+    .Call(`_fmrilss_all_finite_cpp`, x)
+}
+
+voxel_acf_cpp <- function(E, run_starts, max_lag) {
+    .Call(`_fmrilss_voxel_acf_cpp`, E, run_starts, max_lag)
+}
+
+lss_weight_matrix_cpp <- function(C, groups, eps = 1e-12, ridge_x = 0.0, ridge_b = 0.0) {
+    .Call(`_fmrilss_lss_weight_matrix_cpp`, C, groups, eps, ridge_x, ridge_b)
+}
+
 #' Fused Single-Pass LSS Solver (C++)
 #'
-#' This function computes Least Squares-Separate (LSS) beta estimates using
-#' a memory-efficient, single-pass algorithm. It fuses the projection and
-#' estimation steps, processing voxels in parallel blocks to maximize cache
-#' efficiency.
+#' Computes Least Squares-Separate (LSS) beta estimates by residualizing the
+#' trial design against the confounds, forming the n x T LSS weight matrix
+#' once, and applying it to the data with a single matrix product. The data
+#' matrix is never residualized: each weight vector already lies in the
+#' confound residual space.
 #'
-#' @param X The nuisance regressor matrix (confounds).
-#' @param Y The data matrix (e.g., fMRI data).
-#' @param C The trial-wise design matrix.
-#' @param block_size The number of voxels to process in each parallel block.
-#' @return A matrix of LSS beta estimates.
+#' @param X The confound regressor matrix (n x k).
+#' @param Y The data matrix (n x V).
+#' @param C The trial-wise design matrix (n x T).
+#' @param block_size The number of voxels per OpenMP block when
+#'   `use_omp = TRUE`.
+#' @param groups Optional 1-based integer trial group codes (LSS-N); NULL for
+#'   a single pooled "other trials" regressor.
+#' @param use_omp Logical; distribute voxel blocks across OpenMP threads.
+#'   Useful with a single-threaded BLAS. With a multithreaded BLAS a single
+#'   matrix product is faster.
+#' @param ridge_x,ridge_b Fractional ridge penalties on the trial and
+#'   other-trial coefficients.
+#' @return A T x V matrix of LSS beta estimates.
 #' @keywords internal
-lss_fused_optim_cpp <- function(X, Y, C, block_size = 96L) {
-    .Call(`_fmrilss_lss_fused_optim_cpp`, X, Y, C, block_size)
+lss_fused_optim_cpp <- function(X, Y, C, block_size = 96L, groups = NULL, use_omp = TRUE, ridge_x = 0.0, ridge_b = 0.0) {
+    .Call(`_fmrilss_lss_fused_optim_cpp`, X, Y, C, block_size, groups, use_omp, ridge_x, ridge_b)
 }
 
 lss_engine_vox_hrf_cpp <- function(Y, coeffs, basis_convolved, Z) {
@@ -179,6 +200,18 @@ oasisk_compute_RY_norm2 <- function(Q, Y) {
 
 oasisk_betas_se <- function(D, C, E, N1, SY, RY_norm2, dof, ridge_x = 0.0, ridge_b = 0.0) {
     .Call(`_fmrilss_oasisk_betas_se`, D, C, E, N1, SY, RY_norm2, dof, ridge_x, ridge_b)
+}
+
+r1glms_fit_cpp <- function(U, Gii, S, GA, groups, yy, H0, max_iter = 100L, tol = 1e-7) {
+    .Call(`_fmrilss_r1glms_fit_cpp`, U, Gii, S, GA, groups, yy, H0, max_iter, tol)
+}
+
+r1glm_fit_cpp <- function(U, G, yy, H0, max_iter = 100L, tol = 1e-7) {
+    .Call(`_fmrilss_r1glm_fit_cpp`, U, G, yy, H0, max_iter, tol)
+}
+
+r1glms_lbfgs_cpp <- function(U, Gii, S, GTT, yy, H0, B0, R0, maxit = 1000L, factr = 1e7, pgtol = 0.0) {
+    .Call(`_fmrilss_r1glms_lbfgs_cpp`, U, Gii, S, GTT, yy, H0, B0, R0, maxit, factr, pgtol)
 }
 
 estimate_hrf_cpp <- function(X, Y) {

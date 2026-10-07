@@ -42,7 +42,7 @@
   if (nrow(Y) < 1L || ncol(Y) < 1L) {
     stop("Y must have at least one timepoint and one voxel")
   }
-  if (any(!is.finite(Y))) stop("Y contains non-finite values")
+  if (!.all_finite(Y)) stop("Y contains non-finite values")
 
   voxel_names <- .validate_or_default_names(
     colnames(Y), ncol(Y), "Voxel_", "Y column names"
@@ -242,7 +242,14 @@
   # 4) Whitening hook (optional)
   whiten_plan <- NULL
   if (!is.null(prewhiten) && is.list(prewhiten) && (prewhiten$method %||% "none") != "none") {
-    whitened <- .prewhiten_data(Y, X, NULL, N_nuis, prewhiten)
+    X_noise <- if (K > 1L) {
+      vapply(seq_len(K), function(k) {
+        rowSums(X[, seq.int(k, ncol(X), by = K), drop = FALSE])
+      }, numeric(nrow(X)))
+    } else {
+      NULL
+    }
+    whitened <- .prewhiten_data(Y, X, NULL, N_nuis, prewhiten, X_noise = X_noise)
     whiten_plan <- whitened$whiten_plan
     Y <- whitened$Y_whitened
     X <- whitened$X_whitened

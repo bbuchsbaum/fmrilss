@@ -14,7 +14,9 @@ voxel-wise HRF basis coefficients and related metadata.
 \section{Stored fields}{
 
 \code{coefficients} contains one normalized HRF-shape column per voxel;
-\code{amplitude_scale} records the removed positive-peak scale; \code{basis} stores the
+\code{amplitude_scale} records the removed positive-peak scale; \code{degenerate}
+flags voxels whose shape has no positive peak (scaled by their largest
+absolute value instead); \code{basis} stores the
 HRF basis; \code{conditions} records observed labels while \code{condition_pooling}
 states that all events estimate one pooled shape; \code{sframe} preserves physical scan
 timing; and \code{normalization} plus \code{coefficient_units} state the coefficient
@@ -23,7 +25,7 @@ amplitude-scale entries.
 }
 
 \examples{
-\dontshow{if (requireNamespace("fmrihrf", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+\dontshow{if (requireNamespace("fmrihrf", quietly = TRUE)) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
 \donttest{
 Y <- matrix(rnorm(100), 50, 2)
 events <- data.frame(onset = c(5, 25), duration = 1, condition = "A")

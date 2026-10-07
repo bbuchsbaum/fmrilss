@@ -30,90 +30,8 @@ lss_optimized <- function(Y = NULL, bdes, dset = NULL, use_cpp = TRUE) {
   .lss_engine_optimized(dset = dset, bdes = bdes, Y = Y, use_cpp = use_cpp)
 }
 
-#' Optimized R Projection via Residualization
-#'
-#' Computes projected data without forming the n x n projection matrix Q.
-#' This is mathematically equivalent to `Y - X %*% solve(t(X) %*% X) %*% t(X) %*% Y`
-#' but more numerically stable and efficient.
-#'
-#' @param X Confound design matrix (n x p).
-#' @param Y Data matrix (n x V).
-#' @param C Trial design matrix (n x T).
-#' @return A list containing the residualized (projected) Y and C matrices.
-#' @keywords internal
-#' @noRd
-.project_R_optimized <- function(X, Y, C) {
-  XtX <- crossprod(X)
-  reciprocal_condition <- rcond(XtX)
-  well_conditioned <- is.finite(reciprocal_condition) &&
-    reciprocal_condition > sqrt(.Machine$double.eps)
-
-  if (well_conditioned) {
-    chol_XtX <- tryCatch(chol(XtX), error = function(e) NULL)
-    if (!is.null(chol_XtX)) {
-      XtX_inv <- chol2inv(chol_XtX)
-      return(list(
-        Y_res = Y - X %*% (XtX_inv %*% crossprod(X, Y)),
-        C_res = C - X %*% (XtX_inv %*% crossprod(X, C))
-      ))
-    }
-  }
-
-  # Pivoted QR is the safe fallback for singular or ill-conditioned confounds.
-  qrX <- qr(X)
-  list(Y_res = qr.resid(qrX, Y), C_res = qr.resid(qrX, C))
-}
-
-#' Memory-Efficient and Algebraically Optimized LSS Beta Computation
-#'
-#' This version avoids creating a large T x V temporary matrix for BtY.
-#' The numerator is rewritten as: num_i = (1 + alpha_i)*C_i'Y - alpha_i*total'Y
-#'
-#' @param C Projected trial regressors (n x T).
-#' @param Y Projected data (n x V).
-#' @param eps Numerical tolerance.
-#' @return Beta matrix (T x V).
-#' @keywords internal
-#' @noRd
-.lss_beta_vec_optimized <- function(C, Y, eps = 1e-12) {
-  T_trials <- ncol(C)
-  V_voxels <- ncol(Y)
-  
-  # Shared building blocks
-  total   <- rowSums(C)
-  ss_tot  <- sum(total^2)
-  CtY     <- crossprod(C, Y)
-  CtC     <- colSums(C^2)
-  CtT     <- crossprod(C, total)
-  total_Y <- drop(crossprod(total, Y))
-
-  # Per-trial "other" pieces
-  bt2 <- ss_tot - 2*CtT + CtC
-  ctb <- CtT - CtC
-  
-  # Guard against near-zero regressors
-  bt2[bt2 < eps] <- Inf
-  
-  # Numerator & denominator calculation using algebraic rewrite
-  alpha <- ctb / bt2
-  
-  # Initialize the numerator matrix
-  num <- matrix(0, nrow = T_trials, ncol = V_voxels)
-  
-  # Loop over voxels to avoid broadcasting issues
-  for (j in 1:V_voxels) {
-    num[, j] <- (1 + alpha) * CtY[, j] - alpha * total_Y[j]
-  }
-
-  den <- CtC - (ctb^2) / bt2
-  
-  # Final division with guard
-  sweep(num, 1, pmax(den, eps), `/`)
-}
-
 #' LSS Engine (Optimized)
 #'
-#' @importFrom stats lm.fit
 #' @keywords internal
 #' @noRd
 .lss_engine_optimized <- function(dset, bdes, Y = NULL, use_cpp = TRUE) {
@@ -140,28 +58,11 @@ lss_optimized <- function(Y = NULL, bdes, dset = NULL, use_cpp = TRUE) {
   
   n_events <- ncol(dmat_ran)
   
-  # --- C++ path is unchanged ---
+  # Both paths residualize only the (small) trial design and apply the LSS
+  # weight matrix to the raw data in a single matrix product.
   if (use_cpp) {
-    # The C++ path is already optimized and doesn't form the Q matrix explicitly
-    res <- compute_residuals_cpp(X_base_fixed, Y, dmat_ran)
-    return(lss_compute_cpp(res$Q_dmat_ran, res$residual_data))
-  }
-  
-  # --- OPTIMIZED PURE R PATH ---
-  
-  # Hot-path early exit for a single event
-  if (n_events == 1) {
-    # Use the efficient lm.fit approach for single-event case
-    residuals_all <- lm.fit(X_base_fixed, cbind(Y, dmat_ran))$residuals
-    Ry <- residuals_all[, 1:ncol(Y), drop = FALSE]
-    QC <- residuals_all[, ncol(Y) + 1, drop = FALSE]
-    
-    beta_matrix <- matrix(crossprod(QC, Ry) / drop(crossprod(QC)), nrow = 1)
-    return(beta_matrix)
+    return(lss_compute_cpp(.lss_residualize_trials(dmat_ran, X_base_fixed), Y))
   }
 
-  # For multiple events, use the new optimized projection and beta functions
-  proj <- .project_R_optimized(X_base_fixed, Y, dmat_ran)
-  
-  .lss_beta_vec_optimized(proj$C_res, proj$Y_res)
-} 
+  .lss_kernel_r(Y, dmat_ran, X_base_fixed)
+}

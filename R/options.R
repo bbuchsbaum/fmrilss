@@ -217,6 +217,24 @@ oasis_options <- function(
 #' @param correction_max_lag Positive integer lag budget used when `design` is
 #'   supplied. See `fmriAR::fit_noise()` for the computational and filtering
 #'   requirements of the correction.
+#' @param voxel_bins Positive integer number of autocorrelation bins used by
+#'   `pooling = "voxel"` in the weight-matrix LSS methods. Voxels with similar
+#'   residual autocorrelation share one AR model refitted from their pooled
+#'   residuals (default 50).
+#' @param residual_model Which model's OLS residuals the noise model is
+#'   estimated from. `"aggregate"` (the default unless `design` or
+#'   `acvf_correction` is supplied) keeps the confounds plus one summed
+#'   regressor per trial group or basis function: fast and available for every
+#'   pooling mode, but trial-to-trial response variability stays in the
+#'   residuals and inflates the autocorrelation estimate when it is large
+#'   relative to the noise. `"full"` uses every trial regressor (the LSA
+#'   model); with many trials this removes so many degrees of freedom that the
+#'   autocorrelation is biased strongly downward. `"corrected"` uses the full
+#'   model and fmriAR's residual-autocovariance bias correction, built
+#'   automatically; it is the least biased choice but costs roughly
+#'   O(n^2 x trials) and requires `method = "ar"` with global or run pooling.
+#'   Supplying `design` or `acvf_correction` yourself implies `"full"`. See
+#'   `vignette("prewhitening")`.
 #'
 #' @return A list with class `"fmrilss_prewhiten_options"`.
 #' @examples
@@ -235,7 +253,9 @@ prewhiten_options <- function(
   compute_residuals = TRUE,
   design = NULL,
   acvf_correction = NULL,
-  correction_max_lag = 25L
+  correction_max_lag = 25L,
+  voxel_bins = 50L,
+  residual_model = NULL
 ) {
   method <- match.arg(method)
   pooling <- match.arg(pooling)
@@ -279,7 +299,9 @@ prewhiten_options <- function(
     compute_residuals = compute_residuals,
     design = design,
     acvf_correction = acvf_correction,
-    correction_max_lag = correction_max_lag
+    correction_max_lag = correction_max_lag,
+    voxel_bins = voxel_bins,
+    residual_model = residual_model
   )
   opts <- .resolve_prewhiten_options(opts, internal = FALSE)
   option_names <- .prewhiten_option_names(internal = FALSE)

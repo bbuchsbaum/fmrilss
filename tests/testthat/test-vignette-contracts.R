@@ -321,7 +321,11 @@ test_that("voxel-ridge OASIS solves the final LSS model in whitened space", {
     prewhiten = whitening
   )
 
-  pw <- fmrilss:::.prewhiten_data(Y, X, Z, NULL, whitening)
+  # The noise model uses one summed regressor per basis function.
+  X_noise <- vapply(seq_len(K), function(k) {
+    rowSums(X[, seq.int(k, ncol(X), by = K), drop = FALSE])
+  }, numeric(T))
+  pw <- fmrilss:::.prewhiten_data(Y, X, Z, NULL, whitening, X_noise = X_noise)
   qr_nuis <- qr(pw$Z_whitened)
   nuisance_basis <- qr.Q(qr_nuis)[, seq_len(qr_nuis$rank), drop = FALSE]
   vhrf <- fmrilss:::.estimate_voxel_hrf_fast(
@@ -934,7 +938,7 @@ test_that("fmridesign non-trial event terms are fixed rather than targets", {
   )
 })
 
-test_that("voxel and parcel whitening fail closed for a shared design", {
+test_that("voxel and parcel whitening fail closed for generic-whitening methods", {
   skip_if_not_installed("fmriAR")
   Y <- matrix(rnorm(80 * 4), 80, 4)
   X <- matrix(rnorm(80 * 5), 80, 5)
@@ -942,9 +946,13 @@ test_that("voxel and parcel whitening fail closed for a shared design", {
     opts <- list(method = "ar", p = 1, pooling = pooling)
     if (pooling == "parcel") opts$parcels <- c(1, 1, 2, 2)
     expect_error(
-      lss(Y, X, prewhiten = opts),
+      lss(Y, X, method = "naive", prewhiten = opts),
       "cannot be applied to a shared design matrix"
     )
+    # Weight-matrix methods fit one filtered design per whitening operator.
+    result <- lss(Y, X, prewhiten = opts)
+    expect_equal(dim(result), c(5L, 4L))
+    expect_identical(attr(result, "whiten_plan")$pooling, "parcel")
   }
 })
 
