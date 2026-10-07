@@ -255,3 +255,92 @@ test_that("estimate_voxel_hrf and lss_rank1 share the degenerate-voxel policy", 
   expect_identical(fit$hrf$degenerate, fit$degenerate)
   expect_true(all(is.finite(fit$beta)))
 })
+
+# Score returned parameters in time space, independently of the Gram kernels.
+rank1_returned_rss <- function(p, fit, groups = NULL) {
+  Q <- qr.Q(qr(cbind(1, p$N)))
+  X <- p$X - Q %*% crossprod(Q, p$X)
+  Y <- p$Y - Q %*% crossprod(Q, p$Y)
+  codes <- if (is.null(groups)) rep(1L, p$T) else match(groups, unique(groups))
+  vapply(seq_len(p$V), function(v) {
+    D <- vapply(seq_len(p$T), function(i) {
+      drop(X[, ((i - 1L) * p$K + 1L):(i * p$K), drop = FALSE] %*%
+             fit$hrf$coefficients[, v])
+    }, numeric(p$n))
+    if (fit$model == "joint") return(sum((Y[, v] - D %*% fit$beta[, v])^2))
+    A <- vapply(seq_len(max(codes)), function(g) rowSums(D[, codes == g, drop = FALSE]),
+                numeric(p$n))
+    sum(vapply(seq_len(p$T), function(i) {
+      other <- A
+      other[, codes[i]] <- other[, codes[i]] - D[, i]
+      r <- if (is.null(groups)) fit$other[i, v] else fit$other[i, , v]
+      sum((Y[, v] - D[, i] * fit$beta[i, v] - other %*% r)^2)
+    }, numeric(1)))
+  }, numeric(1))
+}
+
+test_that("reported objectives score the final returned amplitudes", {
+  p <- make_rank1_problem(V = 2, sd = 1)
+  for (args in list(list(model = "joint"), list(model = "separate"),
+                    list(model = "separate", trial_groups = p$events$condition))) {
+    for (iters in c(1L, 5L)) {
+      fit <- do.call(lss_rank1, c(list(
+        p$Y, p$events, p$basis, p$sframe, nuisance_regs = p$N,
+        init = "reference", max_iter = iters, tol = 0
+      ), args))
+      expect_equal(unname(fit$objective), rank1_returned_rss(p, fit, args$trial_groups),
+                   tolerance = 1e-10)
+    }
+  }
+})
+
+test_that("separate fits preserve event-amplitude units at small and large scales", {
+  p <- make_rank1_problem(V = 2, basis = fmrihrf::HRF_SPMG1, h = 1)
+  for (groups in list(NULL, p$events$condition)) {
+    ref <- lss_rank1(p$Y, p$events, p$basis, p$sframe, nuisance_regs = p$N,
+                     trial_groups = groups, init = "reference")
+    for (scale in c(1e-3, 1e-4, 1e3)) {
+      events <- p$events
+      events$amplitude <- scale
+      fit <- lss_rank1(p$Y, events, p$basis, p$sframe, nuisance_regs = p$N,
+                       trial_groups = groups, init = "reference")
+      expect_equal(fit$beta * scale, ref$beta, tolerance = 1e-9)
+      expect_equal(fit$other * scale, ref$other, tolerance = 1e-9)
+      expect_equal(fit$objective, ref$objective, tolerance = 1e-10)
+    }
+  }
+})
+
+test_that("dependent other-trial groups preserve their estimable span", {
+  p <- make_rank1_problem(n = 200, n_trials = 20, V = 2,
+                          basis = fmrihrf::HRF_SPMG1, h = 1)
+  # Duplicate B as C: A trial effects remain identifiable, and B+C spans
+  # exactly the original nuisance space. K=1 removes HRF shape ambiguity.
+  events <- rbind(p$events, p$events[p$events$condition == "B", ])
+  events$condition[(p$T + 1L):nrow(events)] <- "C"
+  fit <- lss_rank1(p$Y, events, p$basis, p$sframe, nuisance_regs = p$N,
+                   trial_groups = events$condition, init = "reference")
+  ref <- lss_rank1(p$Y, p$events, p$basis, p$sframe, nuisance_regs = p$N,
+                   trial_groups = p$events$condition, init = "reference")
+  target <- which(p$events$condition == "A")
+  expect_equal(fit$beta[target, ], ref$beta[target, ], tolerance = 1e-9)
+
+  Q <- qr.Q(qr(cbind(1, p$N)))
+  X <- .voxhrf_trial_basis(events, p$basis, p$sframe)$X
+  X <- X - Q %*% crossprod(Q, X)
+  Y <- p$Y - Q %*% crossprod(Q, p$Y)
+  groups <- match(events$condition, unique(events$condition))
+  for (v in seq_len(p$V)) {
+    D <- X * fit$hrf$coefficients[1, v]
+    A <- vapply(1:3, function(g) rowSums(D[, groups == g, drop = FALSE]), numeric(p$n))
+    for (i in target) {
+      other <- A
+      other[, groups[i]] <- other[, groups[i]] - D[, i]
+      design <- cbind(D[, i], other)
+      # Independent SVD least squares in time space.
+      coef <- drop(MASS::ginv(design) %*% Y[, v])
+      got <- c(fit$beta[i, v], fit$other[i, , v])
+      expect_equal(drop(design %*% got), drop(design %*% coef), tolerance = 1e-9)
+    }
+  }
+})

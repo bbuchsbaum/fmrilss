@@ -2,6 +2,14 @@
 
 ## fmrilss (development version)
 
+### Rank-1 estimation fixes
+
+- Make rank-1 Gram solves invariant to event-amplitude units and preserve
+  the estimable span of dependent other-trial groups instead of dropping
+  all other-trial regressors.
+- Report the residual sum of squares at the final returned amplitudes in
+  both separate and joint ALS models.
+
 ### Performance
 - The optimized LSS backends (`r_optimized`, `cpp_optimized`, `cpp`) now
   build the n x T LSS weight matrix from the residualized trial design and

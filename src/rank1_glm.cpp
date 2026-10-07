@@ -21,19 +21,27 @@ using namespace arma;
 
 namespace {
 
-// Solve a small SPD system; fall back to a jittered solve, then keep `fallback`.
+// Solve a Gram system, retaining its estimable subspace when singular.
+// One common scale preserves the minimum-norm solution and makes rank tests
+// invariant to the units of the design. No ridge penalty is introduced.
 vec spd_solve(const mat& A, const vec& b, const vec& fallback) {
+    const double scale = abs(A.diag()).max();
+    if (!(scale > 0.0)) return vec(b.n_elem, fill::zeros);
+    const mat As = 0.5 * (A + A.t()) / scale;
+    const vec bs = b / scale;
     mat R;
-    if (chol(R, A)) {
-        vec z = solve(trimatl(R.t()), b);
+    if (chol(R, As) && min(R.diag()) > 1e-6 * max(R.diag())) {
+        vec z = solve(trimatl(R.t()), bs);
         return solve(trimatu(R), z);
     }
-    double jitter = 1e-10 * std::max(1.0, trace(A) / A.n_rows);
-    mat Aj = A;
-    Aj.diag() += jitter;
-    vec out;
-    if (solve(out, Aj, b, solve_opts::no_approx) && out.is_finite()) return out;
-    return fallback;
+    vec values;
+    mat vectors;
+    if (!eig_sym(values, vectors, As)) return fallback;
+    const uvec keep = find(values > 1e-12 * values.max());
+    if (keep.is_empty()) return vec(b.n_elem, fill::zeros);
+    const mat V = vectors.cols(keep);
+    const vec out = V * ((V.t() * bs) / values.elem(keep));
+    return out.is_finite() ? out : fallback;
 }
 
 }  // namespace
@@ -136,12 +144,14 @@ Rcpp::List r1glms_fit_cpp(const arma::mat& U, const arma::cube& Gii,
                     const double bb = GAh[0] - 2.0 * sa[0] + cc;
                     const double by = ay[0] - cy;
                     const double det = cc * bb - cb * cb;
-                    if (bb > eps * std::max(1.0, cc) && det > 1e-12 * std::max(1.0, cc * bb)) {
+                    if (cc > 0.0 && bb > eps * cc && det > eps * cc * bb) {
                         beta[i] = (bb * cy - cb * by) / det;
                         ri[0] = (cc * by - cb * cy) / det;
                     } else {
-                        beta[i] = cc > 0 ? cy / cc : 0.0;
-                        ri[0] = 0.0;
+                        mat gram = {{cc, cb}, {cb, bb}};
+                        vec coeff = spd_solve(gram, vec({cy, by}), vec(2, fill::zeros));
+                        beta[i] = coeff[0];
+                        ri[0] = coeff[1];
                     }
                     continue;
                 }
@@ -159,12 +169,13 @@ Rcpp::List r1glms_fit_cpp(const arma::mat& U, const arma::cube& Gii,
                             GAh[p * G + q] - dq * sa[p] - dp * sa[q] + dp * dq * cc;
                     }
                 }
-                // Keep the trial column and non-empty group columns, then
-                // solve by Cholesky on the kept rows/columns.
+                // Remove empty columns using a relative, unit-invariant
+                // threshold, then try the fast small Cholesky solve.
+                double gram_scale = 0.0;
+                for (uword p = 0; p < D; ++p) gram_scale = std::max(gram_scale, M[p * D + p]);
                 uword nk = 0;
-                keep[nk++] = 0;
-                for (uword p = 0; p < G; ++p)
-                    if (M[(p + 1) * D + p + 1] > eps * std::max(1.0, cc)) keep[nk++] = p + 1;
+                for (uword p = 0; p < D; ++p)
+                    if (M[p * D + p] > eps * gram_scale) keep[nk++] = p;
                 // In-place Cholesky (lower, column-major) of the kept block.
                 for (uword a2 = 0; a2 < nk; ++a2) {
                     bk[a2] = rhs[keep[a2]];
@@ -174,7 +185,7 @@ Rcpp::List r1glms_fit_cpp(const arma::mat& U, const arma::cube& Gii,
                 for (uword j = 0; j < nk && pd; ++j) {
                     double d = L[j * nk + j];
                     for (uword k2 = 0; k2 < j; ++k2) d -= L[k2 * nk + j] * L[k2 * nk + j];
-                    if (!(d > 1e-14 * std::max(1.0, std::abs(L[j * nk + j])))) { pd = false; break; }
+                    if (!(d > eps * std::abs(L[j * nk + j]))) { pd = false; break; }
                     d = std::sqrt(d);
                     L[j * nk + j] = d;
                     for (uword a2 = j + 1; a2 < nk; ++a2) {
@@ -196,8 +207,18 @@ Rcpp::List r1glms_fit_cpp(const arma::mat& U, const arma::cube& Gii,
                         bk[a2] = x / L[a2 * nk + a2];
                     }
                     for (uword a2 = 0; a2 < nk; ++a2) sol[keep[a2]] = bk[a2];
-                } else if (cc > 0) {
-                    sol[0] = cy / cc;
+                } else {
+                    // Dependent nuisance groups must not remove their whole
+                    // span: solve for all estimable coefficients together.
+                    mat gram(nk, nk);
+                    vec target(nk);
+                    for (uword a2 = 0; a2 < nk; ++a2) {
+                        target[a2] = rhs[keep[a2]];
+                        for (uword b2 = 0; b2 < nk; ++b2)
+                            gram(a2, b2) = M[keep[b2] * D + keep[a2]];
+                    }
+                    const vec coeff = spd_solve(gram, target, vec(nk, fill::zeros));
+                    for (uword a2 = 0; a2 < nk; ++a2) sol[keep[a2]] = coeff[a2];
                 }
                 beta[i] = sol[0];
                 for (uword p = 0; p < G; ++p) ri[p] = sol[p + 1];
@@ -251,6 +272,20 @@ Rcpp::List r1glms_fit_cpp(const arma::mat& U, const arma::cube& Gii,
             prev = cur;
         }
         beta_step(h);
+        // beta_step changes the returned amplitudes after the last h step.
+        // Score those final parameters, reusing its h-dependent products.
+        cur = T * yy[v];
+        for (uword i = 0; i < T; ++i) {
+            const double* ri = &r[i * G];
+            const double a = beta[i] - ri[groups[i]];
+            double cy = 0.0;
+            for (uword k = 0; k < K; ++k) cy += u[i * K + k] * h[k];
+            cur += a * a * quad(gii + i * KK, h.memptr()) - 2.0 * a * cy;
+            for (uword p = 0; p < G; ++p) {
+                cur += 2.0 * ri[p] * (a * quad(sp + (i * G + p) * KK, h.memptr()) - ay[p]);
+                for (uword q = 0; q < G; ++q) cur += ri[p] * ri[q] * GAh[p * G + q];
+            }
+        }
         H.col(v) = h;
         for (uword i = 0; i < T; ++i) B(i, v) = beta[i];
         for (uword e = 0; e < T * G; ++e) Rm(e, v) = r[e];
@@ -303,6 +338,7 @@ Rcpp::List r1glm_fit_cpp(const arma::mat& U, const arma::mat& G,
             }
             DtD = 0.5 * (DtD + DtD.t());
             beta = spd_solve(DtD, Dty, beta);
+            return yy[v] - 2.0 * dot(beta, Dty) + as_scalar(beta.t() * DtD * beta);
         };
 
         double prev = datum::inf, cur = datum::inf;
@@ -333,7 +369,7 @@ Rcpp::List r1glm_fit_cpp(const arma::mat& U, const arma::mat& G,
             }
             prev = cur;
         }
-        beta_step(h);
+        cur = beta_step(h);
         H.col(v) = h;
         B.col(v) = beta;
         obj[v] = cur;
