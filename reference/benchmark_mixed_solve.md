@@ -50,15 +50,15 @@ benchmark_mixed_solve(X, Z, Y = Y, n_reps = 2)
 #> 
 #> Results:
 #>      method   mean_time median_time    min_time    max_time      sd_time
-#> 1  standard 0.005804777 0.005804777 0.005312443 0.006297112 0.0006962659
-#> 2 optimized 0.010582924 0.010582924 0.005228758 0.015937090 0.0075719342
+#> 1  standard 0.005525112 0.005525112 0.005077124 0.005973101 0.0006335514
+#> 2 optimized 0.017022133 0.017022133 0.010108948 0.023935318 0.0097767202
 #> 
 #> Per-voxel timing:
-#> Standard: 0.0012 sec/voxel
-#> Optimized: 0.0021 sec/voxel
-#> Speedup: 0.55x 
+#> Standard: 0.0011 sec/voxel
+#> Optimized: 0.0034 sec/voxel
+#> Speedup: 0.32x 
 #>      method   mean_time median_time    min_time    max_time      sd_time
-#> 1  standard 0.005804777 0.005804777 0.005312443 0.006297112 0.0006962659
-#> 2 optimized 0.010582924 0.010582924 0.005228758 0.015937090 0.0075719342
+#> 1  standard 0.005525112 0.005525112 0.005077124 0.005973101 0.0006335514
+#> 2 optimized 0.017022133 0.017022133 0.010108948 0.023935318 0.0097767202
 # }
 ```

@@ -209,7 +209,7 @@ c(
 #> max_relative_objective_difference               max_beta_difference 
 #>                      1.832845e-09                      9.227377e-04 
 #>                       als_seconds                     lbfgs_seconds 
-#>                      6.800000e-02                      5.430000e-01
+#>                      7.400000e-02                      5.340000e-01
 ```
 
 ## Which variant to use
