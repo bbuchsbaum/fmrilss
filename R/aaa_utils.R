@@ -98,7 +98,7 @@
   out <- c(
     "method", "p", "q", "p_max", "pooling", "runs", "parcels",
     "exact_first", "compute_residuals", "design", "acvf_correction",
-    "correction_max_lag"
+    "correction_max_lag", "voxel_bins"
   )
   if (internal) c(out, ".whiten_plan") else out
 }

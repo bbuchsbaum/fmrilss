@@ -47,6 +47,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// voxel_acf_cpp
+arma::mat voxel_acf_cpp(const arma::mat& E, const arma::uvec& run_starts, int max_lag);
+RcppExport SEXP _fmrilss_voxel_acf_cpp(SEXP ESEXP, SEXP run_startsSEXP, SEXP max_lagSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type E(ESEXP);
+    Rcpp::traits::input_parameter< const arma::uvec& >::type run_starts(run_startsSEXP);
+    Rcpp::traits::input_parameter< int >::type max_lag(max_lagSEXP);
+    rcpp_result_gen = Rcpp::wrap(voxel_acf_cpp(E, run_starts, max_lag));
+    return rcpp_result_gen;
+END_RCPP
+}
 // lss_weight_matrix_cpp
 arma::mat lss_weight_matrix_cpp(const arma::mat& C, const arma::ivec& groups, double eps);
 RcppExport SEXP _fmrilss_lss_weight_matrix_cpp(SEXP CSEXP, SEXP groupsSEXP, SEXP epsSEXP) {
@@ -352,6 +365,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_compute_residuals_cpp", (DL_FUNC) &_fmrilss_compute_residuals_cpp, 3},
     {"_fmrilss_lss_compute_cpp", (DL_FUNC) &_fmrilss_lss_compute_cpp, 2},
     {"_fmrilss_all_finite_cpp", (DL_FUNC) &_fmrilss_all_finite_cpp, 1},
+    {"_fmrilss_voxel_acf_cpp", (DL_FUNC) &_fmrilss_voxel_acf_cpp, 3},
     {"_fmrilss_lss_weight_matrix_cpp", (DL_FUNC) &_fmrilss_lss_weight_matrix_cpp, 3},
     {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 6},
     {"_fmrilss_lss_engine_vox_hrf_cpp", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf_cpp, 4},

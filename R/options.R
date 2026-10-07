@@ -217,6 +217,10 @@ oasis_options <- function(
 #' @param correction_max_lag Positive integer lag budget used when `design` is
 #'   supplied. See `fmriAR::fit_noise()` for the computational and filtering
 #'   requirements of the correction.
+#' @param voxel_bins Positive integer number of autocorrelation bins used by
+#'   `pooling = "voxel"` in the weight-matrix LSS methods. Voxels with similar
+#'   residual autocorrelation share one AR model refitted from their pooled
+#'   residuals (default 50).
 #'
 #' @return A list with class `"fmrilss_prewhiten_options"`.
 #' @examples
@@ -235,7 +239,8 @@ prewhiten_options <- function(
   compute_residuals = TRUE,
   design = NULL,
   acvf_correction = NULL,
-  correction_max_lag = 25L
+  correction_max_lag = 25L,
+  voxel_bins = 50L
 ) {
   method <- match.arg(method)
   pooling <- match.arg(pooling)
@@ -279,7 +284,8 @@ prewhiten_options <- function(
     compute_residuals = compute_residuals,
     design = design,
     acvf_correction = acvf_correction,
-    correction_max_lag = correction_max_lag
+    correction_max_lag = correction_max_lag,
+    voxel_bins = voxel_bins
   )
   opts <- .resolve_prewhiten_options(opts, internal = FALSE)
   option_names <- .prewhiten_option_names(internal = FALSE)

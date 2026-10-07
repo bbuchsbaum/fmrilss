@@ -191,14 +191,19 @@ One of:
 \item{\code{"global"}}{(default) A single set of AR coefficients is
 estimated from the median autocorrelation across all voxels.
 Fast and usually adequate.}
-\item{\code{"voxel"}}{Fit a separate AR model per voxel. Shared-design
-\code{lss()} calls reject this mode because each voxel would require
-its own matching filtered design.}
+\item{\code{"voxel"}}{Voxel-adaptive noise model. Per-voxel residual
+autocorrelations are estimated, voxels are grouped into
+\code{voxel_bins} bins (default 50) of similar autocorrelation, and an
+AR model is refitted per bin; each bin gets its own filtered design,
+as in Nilearn's AR(1) GLM. Supported by methods
+\code{"r_optimized"}, \code{"cpp_optimized"} and \code{"cpp"}; other
+methods reject it.}
 \item{\code{"run"}}{Fit one AR model per run (requires \code{runs}).
 Useful when noise structure differs between runs.}
 \item{\code{"parcel"}}{Fit one AR model per parcel (requires
-\code{parcels}). Shared-design \code{lss()} calls reject this mode
-until parcel-specific filtered designs are fitted separately.}
+\code{parcels}); each parcel is fitted with its own filtered design.
+Supported by methods \code{"r_optimized"}, \code{"cpp_optimized"}
+and \code{"cpp"}.}
 }
 \item \code{runs}: Integer vector of length \code{nrow(Y)} giving
 run/block labels. Required for \code{pooling = "run"} and recommended
@@ -223,6 +228,8 @@ that fmrilss adds when none is already represented.
 matrices from \code{fmriAR::acvf_bias_matrix()}, used instead of
 \code{design} when reusing a correction across datasets. The two fields
 are mutually exclusive.
+\item \code{voxel_bins}: Positive integer number of autocorrelation bins
+for \code{pooling = "voxel"} (default 50).
 \item \code{correction_max_lag}: Positive integer lag budget used when
 \code{design} is supplied (default 25). The correction is intended for
 high-pass-filtered designs; without high-pass filtering, the required

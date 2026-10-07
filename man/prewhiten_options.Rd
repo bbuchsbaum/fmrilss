@@ -16,7 +16,8 @@ prewhiten_options(
   compute_residuals = TRUE,
   design = NULL,
   acvf_correction = NULL,
-  correction_max_lag = 25L
+  correction_max_lag = 25L,
+  voxel_bins = 50L
 )
 }
 \arguments{
@@ -52,6 +53,11 @@ produced by \code{fmriAR::acvf_bias_matrix()}. This is a cached alternative to
 \item{correction_max_lag}{Positive integer lag budget used when \code{design} is
 supplied. See \code{fmriAR::fit_noise()} for the computational and filtering
 requirements of the correction.}
+
+\item{voxel_bins}{Positive integer number of autocorrelation bins used by
+\code{pooling = "voxel"} in the weight-matrix LSS methods. Voxels with similar
+residual autocorrelation share one AR model refitted from their pooled
+residuals (default 50).}
 }
 \value{
 A list with class \code{"fmrilss_prewhiten_options"}.

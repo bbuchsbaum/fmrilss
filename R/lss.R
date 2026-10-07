@@ -161,14 +161,19 @@
 #'       \item{\code{"global"}}{(default) A single set of AR coefficients is
 #'         estimated from the median autocorrelation across all voxels.
 #'         Fast and usually adequate.}
-#'       \item{\code{"voxel"}}{Fit a separate AR model per voxel. Shared-design
-#'         \code{lss()} calls reject this mode because each voxel would require
-#'         its own matching filtered design.}
+#'       \item{\code{"voxel"}}{Voxel-adaptive noise model. Per-voxel residual
+#'         autocorrelations are estimated, voxels are grouped into
+#'         \code{voxel_bins} bins (default 50) of similar autocorrelation, and an
+#'         AR model is refitted per bin; each bin gets its own filtered design,
+#'         as in Nilearn's AR(1) GLM. Supported by methods
+#'         \code{"r_optimized"}, \code{"cpp_optimized"} and \code{"cpp"}; other
+#'         methods reject it.}
 #'       \item{\code{"run"}}{Fit one AR model per run (requires \code{runs}).
 #'         Useful when noise structure differs between runs.}
 #'       \item{\code{"parcel"}}{Fit one AR model per parcel (requires
-#'         \code{parcels}). Shared-design \code{lss()} calls reject this mode
-#'         until parcel-specific filtered designs are fitted separately.}
+#'         \code{parcels}); each parcel is fitted with its own filtered design.
+#'         Supported by methods \code{"r_optimized"}, \code{"cpp_optimized"}
+#'         and \code{"cpp"}.}
 #'     }
 #'   \item \code{runs}: Integer vector of length \code{nrow(Y)} giving
 #'     run/block labels. Required for \code{pooling = "run"} and recommended
@@ -193,6 +198,8 @@
 #'     matrices from \code{fmriAR::acvf_bias_matrix()}, used instead of
 #'     \code{design} when reusing a correction across datasets. The two fields
 #'     are mutually exclusive.
+#'   \item \code{voxel_bins}: Positive integer number of autocorrelation bins
+#'     for \code{pooling = "voxel"} (default 50).
 #'   \item \code{correction_max_lag}: Positive integer lag budget used when
 #'     \code{design} is supplied (default 25). The correction is intended for
 #'     high-pass-filtered designs; without high-pass filtering, the required
@@ -410,7 +417,28 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   
   # Step 1: Apply prewhitening if requested
   whiten_plan <- NULL
-  if (!is.null(prewhiten) && !is.null(prewhiten$method) && prewhiten$method != "none") {
+  prewhiten_active <- !is.null(prewhiten) && !is.null(prewhiten$method) &&
+    prewhiten$method != "none"
+  if (prewhiten_active && method %in% c("r_optimized", "cpp_optimized", "cpp")) {
+    # Weight-matrix path: one filtered design per whitening operator, which
+    # also supports voxel- and parcel-specific noise models.
+    fit <- .lss_prewhitened(Y, X, Z, Nuisance, prewhiten, groups = groups,
+                            method = method)
+    result <- fit$beta
+    rownames(result) <- trial_names
+    colnames(result) <- voxel_names
+    return(.attach_whiten_plan(result, fit$whiten_plan))
+  }
+  if (prewhiten_active) {
+    if (prewhiten$pooling %in% c("voxel", "parcel")) {
+      stop(
+        "pooling='", prewhiten$pooling, "' estimates voxel-specific whitening ",
+        "operators, which cannot be applied to a shared design matrix with ",
+        "method='", method, "'. Use method='r_optimized', 'cpp_optimized' or ",
+        "'cpp', or pooling='global'/'run'.",
+        call. = FALSE
+      )
+    }
     whitened <- .prewhiten_data(Y, X, Z, Nuisance, prewhiten)
     whiten_plan <- whitened$whiten_plan
     Y <- whitened$Y_whitened

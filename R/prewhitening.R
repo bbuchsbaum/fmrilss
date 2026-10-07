@@ -23,6 +23,7 @@
 #'     \item{design}{Optional design matrix for residual-autocovariance bias correction}
 #'     \item{acvf_correction}{Optional cached bias-correction matrix or list of matrices}
 #'     \item{correction_max_lag}{Positive integer lag budget for bias correction}
+#'     \item{voxel_bins}{Number of autocorrelation bins for pooling = "voxel"}
 #'   }
 #' @return List containing:
 #'   \describe{
@@ -41,7 +42,7 @@
   )
   required_if_named <- c(
     "method", "p", "q", "p_max", "pooling", "exact_first",
-    "compute_residuals", "correction_max_lag"
+    "compute_residuals", "correction_max_lag", "voxel_bins"
   )
   null_fields <- required_if_named[
     required_if_named %in% names(prewhiten) &
@@ -65,7 +66,8 @@
     compute_residuals = TRUE,
     design = NULL,
     acvf_correction = NULL,
-    correction_max_lag = 25L
+    correction_max_lag = 25L,
+    voxel_bins = 50L
   )
 
   # Merge with user options
@@ -85,6 +87,7 @@
   opts$correction_max_lag <- .as_positive_integer(
     opts$correction_max_lag, "prewhiten$correction_max_lag"
   )
+  opts$voxel_bins <- .as_positive_integer(opts$voxel_bins, "prewhiten$voxel_bins")
   if (opts$method == "arma" && opts$q == 0L) {
     stop("prewhiten$q must be positive when method = 'arma'", call. = FALSE)
   }
@@ -226,67 +229,20 @@
     }
   }
 
-  # Prepare residuals for AR estimation
-  if (opts$compute_residuals) {
-    # Combine all design matrices
-    design_full <- NULL
-
-    if (!is.null(Z)) {
-      if (!is.matrix(Z)) Z <- as.matrix(Z)
-      design_full <- cbind(design_full, Z)
-    }
-
-    if (!is.null(X)) {
-      if (!is.matrix(X)) X <- as.matrix(X)
-      design_full <- cbind(design_full, X)
-    }
-
-    if (!is.null(Nuisance)) {
-      if (!is.matrix(Nuisance)) Nuisance <- as.matrix(Nuisance)
-      design_full <- cbind(design_full, Nuisance)
-    }
-
-    # If we have design matrices, compute residuals robustly (rank-safe)
-    if (!is.null(design_full)) {
-      # Add intercept only if the constant vector is NOT in the span already
-      # This is robust to run-wise intercept dummies (one-hot per run) and
-      # avoids creating perfect multicollinearity.
-      n_time <- nrow(Y)
-      qr0 <- qr(design_full)
-      r1  <- qr.resid(qr0, rep(1, n_time))
-      in_span <- sqrt(sum(r1^2)) < 1e-8
-      if (!in_span) design_full <- cbind(1, design_full)
-
-      # Rank-safe residualization
-      qrX <- qr(design_full)
-      resid <- qr.resid(qrX, Y)
-    } else {
-      # No design matrices, use demeaned data
-      resid <- sweep(Y, 2, colMeans(Y))
-    }
-  } else {
-    # Use Y directly as "residuals" (e.g., if already residualized)
-    resid <- Y
-  }
+  # Design whose OLS residuals feed the noise model; an intercept is added
+  # only if the constant vector is not already in its span (robust to
+  # run-wise intercepts).
+  design_full <- NULL
+  if (!is.null(Z)) Z <- as.matrix(Z)
+  if (!is.null(X)) X <- as.matrix(X)
+  if (!is.null(Nuisance)) Nuisance <- as.matrix(Nuisance)
+  if (opts$compute_residuals) design_full <- cbind(Z, X, Nuisance)
 
   # Fit the noise model unless a caller is deliberately reusing one plan
   # across several algebraically equivalent stages of the same estimator.
   whiten_plan <- opts$.whiten_plan
   if (is.null(whiten_plan)) {
-    whiten_plan <- fmriAR::fit_noise(
-      resid = resid,
-      runs = opts$runs,
-      method = opts$method,
-      p = opts$p,
-      q = opts$q,
-      p_max = opts$p_max,
-      exact_first = opts$exact_first,
-      pooling = opts$pooling,
-      parcels = opts$parcels,
-      design = opts$design,
-      acvf_correction = opts$acvf_correction,
-      correction_max_lag = opts$correction_max_lag
-    )
+    whiten_plan <- .fit_noise_plan(Y, design_full, opts)
   }
 
   # Apply whitening to all matrices

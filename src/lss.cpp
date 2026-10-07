@@ -97,3 +97,36 @@ bool all_finite_cpp(SEXP x) {
     }
     Rcpp::stop("all_finite_cpp expects a numeric array");
 }
+
+// Per-voxel autocorrelations at lags 1..max_lag of a residual matrix, using
+// the biased (PSD) autocovariance estimator. The mean is removed per run and
+// lag products never span a run boundary. `run_starts` are 0-based.
+// Returns a max_lag x V matrix.
+// [[Rcpp::export]]
+arma::mat voxel_acf_cpp(const arma::mat& E, const arma::uvec& run_starts,
+                        int max_lag) {
+    const uword n = E.n_rows;
+    const uword V = E.n_cols;
+    const uword L = static_cast<uword>(std::max(max_lag, 1));
+    arma::uvec bounds = arma::join_cols(run_starts, arma::uvec({n}));
+    arma::mat out(L, V, arma::fill::zeros);
+
+    #ifdef _OPENMP
+    #pragma omp parallel for schedule(static)
+    #endif
+    for (uword v = 0; v < V; ++v) {
+        arma::vec gam(L + 1, arma::fill::zeros);
+        for (uword r = 0; r + 1 < bounds.n_elem; ++r) {
+            const uword a = bounds[r], b = bounds[r + 1];
+            if (b <= a) continue;
+            arma::vec e = E.col(v).subvec(a, b - 1);
+            e -= arma::mean(e);
+            const uword m = e.n_elem;
+            for (uword k = 0; k <= L && k < m; ++k) {
+                gam[k] += arma::dot(e.head(m - k), e.tail(m - k));
+            }
+        }
+        if (gam[0] > 0) out.col(v) = gam.tail(L) / gam[0];
+    }
+    return out;
+}

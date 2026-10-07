@@ -13,6 +13,10 @@ all_finite_cpp <- function(x) {
     .Call(`_fmrilss_all_finite_cpp`, x)
 }
 
+voxel_acf_cpp <- function(E, run_starts, max_lag) {
+    .Call(`_fmrilss_voxel_acf_cpp`, E, run_starts, max_lag)
+}
+
 lss_weight_matrix_cpp <- function(C, groups, eps = 1e-12) {
     .Call(`_fmrilss_lss_weight_matrix_cpp`, C, groups, eps)
 }

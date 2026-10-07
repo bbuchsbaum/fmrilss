@@ -934,7 +934,7 @@ test_that("fmridesign non-trial event terms are fixed rather than targets", {
   )
 })
 
-test_that("voxel and parcel whitening fail closed for a shared design", {
+test_that("voxel and parcel whitening fail closed for generic-whitening methods", {
   skip_if_not_installed("fmriAR")
   Y <- matrix(rnorm(80 * 4), 80, 4)
   X <- matrix(rnorm(80 * 5), 80, 5)
@@ -942,9 +942,13 @@ test_that("voxel and parcel whitening fail closed for a shared design", {
     opts <- list(method = "ar", p = 1, pooling = pooling)
     if (pooling == "parcel") opts$parcels <- c(1, 1, 2, 2)
     expect_error(
-      lss(Y, X, prewhiten = opts),
+      lss(Y, X, method = "naive", prewhiten = opts),
       "cannot be applied to a shared design matrix"
     )
+    # Weight-matrix methods fit one filtered design per whitening operator.
+    result <- lss(Y, X, prewhiten = opts)
+    expect_equal(dim(result), c(5L, 4L))
+    expect_identical(attr(result, "whiten_plan")$pooling, "parcel")
   }
 })
 
