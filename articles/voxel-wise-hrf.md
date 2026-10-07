@@ -33,7 +33,8 @@ that ambiguity as follows.
 | lss_with_hrf() beta; unit-amplitude impulse | trial response on the unit-peak HRF scale | peak-response amplitude |
 | lss_with_hrf() beta; nonzero duration or non-unit amplitude | coefficient on the supplied duration- and amplitude-coded event design | event-design coefficient |
 
-The normalization contract for the public voxel-HRF workflow. {.table}
+HRF normalization and coefficient scale in the voxel-wise workflow.
+{.table}
 
 `amplitude_scale` is useful for reconstructing the raw pooled-fit
 coefficients, but it is not a trial beta. With unit-amplitude impulses,
@@ -45,8 +46,9 @@ supplied HRF shape has unit positive peak.
 Estimating a shape and trial betas from the same response is adaptive
 and can make an in-sample comparison optimistic. This example uses
 independent calibration and analysis responses with the same scan
-timing. It is a mechanism and contract demonstration, not a
-population-level performance study.
+timing. This separates shape estimation from trial estimation in a
+controlled example; it does not establish performance across
+participants or acquisitions.
 
 ``` r
 
@@ -70,7 +72,7 @@ analysis_events <- data.frame(
 )
 ```
 
-### Simulate genuine latency and width differences
+### Simulate latency and width differences
 
 Time dilation changes width; scalar multiplication does not. The helper
 below evaluates the canonical HRF at `(time - delay) / dilation`, then
@@ -108,7 +110,8 @@ The simulated shapes keep unit peak while peak time and FWHM change.
 
 ![Four unit-peak HRF curves. Peak times progress from 3.85 to 6.25
 seconds and FWHM increases from 4.45 to 6.00 seconds across voxels 1
-through 4.](voxel-wise-hrf_files/figure-html/true-shape-plot-1.png)
+through
+4.](voxel-wise-hrf_files/figure-html/true-shape-plot-1.png)![](voxel-wise-hrf_files/figure-html/true-shape-plot-1.phone.png)
 
 The four simulated HRFs all peak at one, while later voxels have later
 and wider responses.
@@ -180,11 +183,11 @@ colnames(analysis_response) <- voxel_names
 
 ## Estimate normalized voxel HRFs
 
-The public estimator takes physical-time onsets and durations plus an
-explicit sampling frame. `HRF_SPMG3` supplies canonical,
-temporal-derivative, and dispersion-derivative basis functions; the
-returned weights define a reconstructed curve, not three directly
-interpretable physiological measurements.
+The estimator takes onsets and durations in seconds plus an explicit
+sampling frame. `HRF_SPMG3` supplies canonical, temporal-derivative, and
+dispersion-derivative basis functions; the returned weights define a
+reconstructed curve, not three directly interpretable physiological
+measurements.
 
 ``` r
 
@@ -228,8 +231,8 @@ c(
 
 The estimator pools all supplied events into one shape per voxel.
 Condition labels are retained as metadata but do not request
-condition-specific HRFs; the zero relabeling discrepancy above binds
-that contract in this example.
+condition-specific HRFs; changing those labels leaves the estimates
+unchanged in the check above.
 
 ### Inspect reconstructed shapes
 
@@ -245,7 +248,7 @@ Reconstructed-shape agreement in the calibration simulation. {.table}
 ![Four panels compare solid true and dashed estimated unit-peak HRFs.
 Shape correlations range from 0.998 to 1.000; the largest width
 difference is 0.15
-seconds.](voxel-wise-hrf_files/figure-html/estimated-shape-plot-1.png)
+seconds.](voxel-wise-hrf_files/figure-html/estimated-shape-plot-1.png)![](voxel-wise-hrf_files/figure-html/estimated-shape-plot-1.phone.png)
 
 Estimated SPMG3 curves closely follow the independently generated
 unit-peak HRFs.
@@ -316,8 +319,8 @@ Return types, realized engines, dimensions, and coefficient units.
 The reference below fits every trial and voxel with the known unit-peak
 HRF, the same fixed regressors, and the same nuisance span. A canonical
 comparator also uses a unit-peak HRF. All rows therefore target
-peak-response amplitude; no derivative-basis coefficient is relabeled as
-an amplitude.
+peak-response amplitude; the comparison keeps HRF scale consistent
+across methods.
 
 | Estimator | RMSE_to_true_amplitude | RMSE_to_known_HRF_oracle |
 |:---|---:|---:|
@@ -338,14 +341,13 @@ Absolute scale recovery for amplitudes 2 through 5. {.table}
 
 In this deliberately constructed four-voxel example, the estimated-shape
 fit is closer to truth than the canonical fit. Its largest error is in
-voxel_4 (mean error -0.323): the canonical HRF’s post-stimulus
-undershoot, stretched by that voxel’s dilation, is not exactly
-representable by the three SPMG3 basis functions, and the residual tail
-overlaps neighbouring trials. A high shape correlation does not by
-itself guarantee unbiased amplitudes. That result diagnoses this
-fixture; it is not a universal method ranking. Real performance depends
-on calibration quality, basis adequacy, event timing, noise, and
-nuisance modeling.
+voxel_4 (mean error -0.323). One possible contributor is basis mismatch:
+the three SPMG3 functions need not exactly reproduce a time-dilated HRF,
+including its undershoot, and remaining shape errors can affect
+estimates when responses overlap. This example does not isolate that
+contribution from calibration error. A high shape correlation alone does
+not guarantee unbiased amplitudes. Performance also depends on
+calibration quality, event timing, noise, and nuisance modeling.
 
 ## Check physical time and run boundaries
 
@@ -353,14 +355,14 @@ The same public pipeline also runs at non-unit TR. The table below
 repeats a correctly specified one-basis coefficient experiment at TR 0.8
 and 2 seconds, including nonzero durations, with true coefficients 2 and
 4. These rows are event-design coefficients rather than peak responses.
-The court also compares R with chunked C++ output.
+The check also compares R with chunked C++ output.
 
 | TR_seconds | RMSE_to_truth | Maximum_engine_difference | Mean_coefficient_2 | Mean_coefficient_4 |
 |---:|---:|---:|---:|---:|
 | 0.8 | 0 | 0 | 2 | 4 |
 | 2.0 | 0 | 0 | 2 | 4 |
 
-Non-unit-TR event-design coefficient and R/C++ identity court. {.table}
+Event-design coefficients and R/C++ agreement at two TRs. {.table}
 
 For multiple runs, add an exact-integer `run` column and keep event
 onsets relative to their run. The design is built separately inside each
@@ -371,7 +373,8 @@ run, so an HRF tail cannot leak across an acquisition boundary.
 | run-1 event inside run 2 |                             0 |
 | run-2 event inside run 1 |                             0 |
 
-Unequal-run HRF convolution boundary court. {.table}
+HRF convolution stays within each run despite unequal run lengths.
+{.table}
 
 ## Know the boundaries of the workflow
 
@@ -382,10 +385,10 @@ Unequal-run HRF convolution boundary court. {.table}
 - The calibration model assumes one pooled event amplitude per voxel.
   Strongly heterogeneous calibration amplitudes can distort the
   estimated shape.
-- The returned trial betas do not include uncertainty for estimated HRF
-  shapes. Use them as conditional point estimates; this article makes no
-  standard-error or $`t`$-reference claim. These helpers also do not
-  implement an estimated-prewhitening path.
+- The returned trial betas are point estimates conditional on the
+  estimated HRF shapes. They do not include shape uncertainty or provide
+  standard errors and $`t`$-tests. These helpers also do not implement
+  estimated prewhitening.
 - Pass the same scientifically required fixed and nuisance spans to
   shape estimation and trial fitting. The functions add run intercepts
   when they are absent. If that complete common span contains the pooled

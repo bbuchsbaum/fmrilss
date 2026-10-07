@@ -2,9 +2,11 @@
 
 You have a preprocessed fMRI run and an event design with one regressor
 per trial. Your goal is a beta estimate for every trial and voxel, even
-though nearby haemodynamic responses overlap. `fmrilss` fits each trial
-in a separate model and returns the estimates as a trial-by-voxel matrix
-that can feed an MVPA, RSA, connectivity, or reliability analysis.
+though nearby haemodynamic responses overlap. Least squares separate
+(LSS) fits a model for each target trial, combining the other trials
+into one regressor. `fmrilss` returns the estimates as a trial-by-voxel
+matrix for multivariate pattern analysis, representational similarity
+analysis, connectivity, or reliability analysis.
 
 This article follows one complete workflow: build a trial design, fit
 LSS, check the result, handle nuisance regressors correctly, and compare
@@ -18,8 +20,8 @@ from your preprocessing and design pipeline.
 matrices with time along the rows:
 
 - `Y` contains the observed data: time points by voxels.
-- `X` contains one HRF-convolved column per trial: time points by
-  trials.
+- `X` contains one column per trial, convolved with the haemodynamic
+  response function (HRF): time points by trials.
 - `Z` contains regressors retained in every trial-wise model, such as
   run intercepts or trends.
 - `Nuisance` contains regressors to project out, such as motion or
@@ -117,8 +119,8 @@ Matrix shapes in the example workflow. {.table}
 
 ## How do I estimate the trial betas?
 
-The default optimized R backend is the clearest first path. Supply all
-parts of the model in the same call:
+Start with the default optimized R backend and supply all parts of the
+model in the same call:
 
 ``` r
 
@@ -127,8 +129,8 @@ dim(beta_lss)
 #> [1] 24  8
 ```
 
-`beta_lss` is the promised 24 by 8 trial-by-voxel matrix. A small
-preview is usually more useful than printing the whole object:
+`beta_lss` has 24 trial rows and 8 voxel columns. Inspect the first few
+estimates:
 
 ``` r
 
@@ -148,7 +150,7 @@ or rank-deficient design informative.
 
 ![Heatmap with 24 trial rows and 8 voxel columns. Dark red cells are
 strongly negative and dark blue cells are strongly
-positive.](fmrilss_files/figure-html/beta-heatmap-1.png)
+positive.](fmrilss_files/figure-html/beta-heatmap-1.png)![](fmrilss_files/figure-html/beta-heatmap-1.phone.png)
 
 Estimated single-trial responses for the eight simulated voxels. Red is
 negative and blue is positive; deeper colour indicates larger magnitude,
@@ -156,10 +158,12 @@ not statistical significance.
 
 ## How should I handle nuisance regressors?
 
-The safest route is to pass `Nuisance` directly to
+Pass `Nuisance` directly to
 [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md), as
-above. The package applies a rank-aware Frisch–Waugh–Lovell step for the
-shared `Z` and `Nuisance` span before fitting the trial models.
+above. Before fitting the trial models, the package removes the shared
+effects of `Z` and `Nuisance` from both the response and trial design.
+This Frisch–Waugh–Lovell projection accounts for linearly dependent
+nuisance columns.
 
 If you deliberately cache a projection for repeated analyses, apply it
 to every matrix that remains in the model. Here we project only
@@ -179,9 +183,9 @@ c(maximum_absolute_difference = max(abs(beta_lss - beta_projected)))
 ```
 
 Leaving `Z` unprojected changes the model and can change the trial
-estimates. Also note that
+estimates.
 [`project_confounds()`](https://bbuchsbaum.github.io/fmrilss/reference/project_confounds.md)
-materializes an $`n \times n`$ matrix; passing `Nuisance` to
+also materializes an $`n \times n`$ matrix; passing `Nuisance` to
 [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md) avoids
 that storage and should be your default.
 
@@ -189,8 +193,7 @@ that storage and should be your default.
 
 Least Squares All (LSA) estimates every trial column simultaneously. LSS
 replaces the non-target columns with their sum in each trial-specific
-model. That creates a bias–variance trade-off rather than a universal
-winner.
+model. The choice involves a bias–variance trade-off.
 
 To make the comparison reproducible, the next experiment holds `X`,
 `true_betas`, and all nuisance effects fixed. Because both estimators
@@ -220,7 +223,7 @@ close to the exact values in the table.
 ![Grouped bar chart comparing LSS and LSA squared bias, variance, and
 mean squared error on a common beta-squared scale. LSS has higher
 squared bias and lower variance and mean squared
-error.](fmrilss_files/figure-html/comparison-plot-1.png)
+error.](fmrilss_files/figure-html/comparison-plot-1.png)![](fmrilss_files/figure-html/comparison-plot-1.phone.png)
 
 At noise SD 2.5, LSS has more squared bias but sufficiently lower
 variance to produce lower mean squared error than LSA.
@@ -238,19 +241,18 @@ Conditional RMSE on both sides of the design-specific crossover.
 {.table}
 
 At noise SD 0.41, below the crossover, LSA has lower RMSE; at the
-illustrated SD 2.5, LSS has lower RMSE. The example therefore
-demonstrates both sides of the trade-off rather than supplying a general
-estimator-selection rule. Event spacing, noise, HRF mismatch, and the
-distribution of true trial effects can all move the crossover. Simulate
-conditions that resemble your own acquisition.
+illustrated SD 2.5, LSS has lower RMSE. The preferred estimator
+therefore depends on the noise level even in this one design. Event
+spacing, noise, HRF mismatch, and the distribution of true trial effects
+can all move the crossover. Simulate conditions that resemble your own
+acquisition.
 
 ## What should I change for real data?
 
 Real fMRI errors are temporally correlated. Once the design is correct,
-pass a validated prewhitening specification so the response and every
-design matrix receive the same filter. This call also selects the
-optimized C++ backend; prewhitening has the same model meaning across
-backends:
+pass a prewhitening specification so the response and every design
+matrix receive the same filter. This call also selects the optimized C++
+backend; prewhitening has the same model meaning across backends:
 
 ``` r
 
@@ -321,18 +323,22 @@ scientific model.
   multi-basis designs.
 - Then read
   [`vignette("oasis_theory")`](https://bbuchsbaum.github.io/fmrilss/articles/oasis_theory.md)
-  for the derivation and computational contract behind that practical
-  guide.
+  for the derivation and computational calculations behind that
+  practical guide.
 - Next, use
   [`vignette("lss_with_fmridesign")`](https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.md)
   when your inputs are event tables, formulas, and multiple runs.
 - Continue to
   [`vignette("voxel-wise-hrf")`](https://bbuchsbaum.github.io/fmrilss/articles/voxel-wise-hrf.md)
   for estimated voxel-wise HRF shapes and trial coefficients.
-- Finish with
+- Use
   [`vignette("sbhm")`](https://bbuchsbaum.github.io/fmrilss/articles/sbhm.md)
   for library-constrained voxel-specific shapes, score margins, and
   trial coefficients.
+- Use
+  [`vignette("glmsingle")`](https://bbuchsbaum.github.io/fmrilss/articles/glmsingle.md)
+  for library HRF selection, GLMdenoise, and voxel-wise ridge selection
+  when conditions repeat across runs.
 
 ## Reference
 

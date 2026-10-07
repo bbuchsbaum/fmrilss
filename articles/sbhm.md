@@ -2,16 +2,17 @@
 
 ## What this workflow estimates
 
-This is the final specialist article in the learning path. Read
+Shared-basis HRF matching (SBHM) selects a voxel’s HRF from a finite
+library or forms an explicitly requested blend of library members. It
+provides an alternative to the continuous basis fit in
+[`vignette("voxel-wise-hrf")`](https://bbuchsbaum.github.io/fmrilss/articles/voxel-wise-hrf.md).
+Read that article,
 [`vignette("fmrilss")`](https://bbuchsbaum.github.io/fmrilss/articles/fmrilss.md),
-[`vignette("oasis_method")`](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md),
 and
-[`vignette("voxel-wise-hrf")`](https://bbuchsbaum.github.io/fmrilss/articles/voxel-wise-hrf.md)
-first. The voxel-wise HRF article estimates a continuous shape in a
-small basis. This article instead restricts each voxel to a finite
-library, or to a declared blend of nearby library members.
+[`vignette("oasis_method")`](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md)
+first for HRF normalization and trial estimation.
 
-SBHM separates two quantities:
+SBHM estimates two quantities separately:
 
 1.  a voxel-specific HRF **shape coordinate** in a shared basis; and
 2.  a trial-wise **coefficient on the event design built from that
@@ -27,9 +28,9 @@ amplitude. Changing any of those changes the coefficient scale.
 
 SBHM produces adaptive point estimates. Shape matching, optional
 blending, ridge penalties, and reuse of the same data for shape
-selection and coefficient estimation are not covered by a calibrated
-standard-error or test-statistic contract. Every SBHM amplitude route
-rejects `return_se = TRUE`.
+selection and coefficient estimation are not accounted for by calibrated
+standard errors or test statistics. Every SBHM amplitude route rejects
+`return_se = TRUE`.
 
 ``` r
 
@@ -64,12 +65,13 @@ knitr::kable(contract, caption = "The estimands and boundaries used throughout t
 
 The estimands and boundaries used throughout this article. {.table}
 
-## Build one transparent library
+## Build a candidate library
 
 For a compact computational example, we use a grid of positive gamma
-curves. It is a demonstration library, not a package recommendation and
-not a claim that the grid spans physiological HRFs. A scientific
-analysis must justify its own candidates, preprocessing, and coverage.
+curves. These curves illustrate the computation; they are not intended
+to cover the range of physiological HRFs. For a scientific analysis,
+choose candidates and preprocessing appropriate to the responses you
+expect.
 
 ``` r
 
@@ -109,11 +111,10 @@ sbhm <- sbhm_build(
 
 [`sbhm_build()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_build.md)
 performs one decomposition and retains the full singular-value spectrum
-as metadata. The cumulative fraction below uses total squared
-singular-value energy—not the energy of the largest rank we happened to
-plot. Rank four is a modeling choice for this fixture; the table makes
-its approximation error inspectable rather than turning it into a
-generic rule.
+as metadata. The cumulative fraction below uses the sum of squared
+singular values across the full spectrum as its denominator. We retain
+rank four for this example; the table shows how much library energy that
+choice preserves.
 
 ``` r
 
@@ -151,13 +152,13 @@ coordinates `A` reconstruct the rank-four candidate waveforms as
 `B %*% A`; basis vectors are algebraic modes, not direct estimates of
 latency, width, or physiology.
 
-## A truth-referenced fixture
+## Simulate known shapes and trial coefficients
 
-The fixture contains twelve voxels. Six use an exact library member and
-six use an off-library convex mixture. This tests both interpolation and
-the limitation of hard matching. Trial coefficients vary across trials
-and voxels. Motion-like nuisance signals and independent Gaussian noise
-are added explicitly.
+The simulation contains twelve voxels. Six use an exact library member
+and six use an off-library convex mixture. This tests both interpolation
+and the limitation of hard matching. Trial coefficients vary across
+trials and voxels. Motion-like nuisance signals and independent Gaussian
+noise are added explicitly.
 
 ``` r
 
@@ -227,10 +228,9 @@ Y <- Y_mean + matrix(rnorm(n_time * n_voxels, sd = 0.04), n_time, n_voxels)
 colnames(Y) <- voxel_names
 ```
 
-The main call makes every consequential choice explicit. Zero penalties
-are used so the later direct-GLM oracle has the same estimand. Hard
-matching is used first; soft matching is evaluated separately rather
-than being hidden in a default.
+We first fit with hard matching and zero penalties. Zero penalties allow
+a direct comparison with an unpenalized GLM using the selected shape.
+Later we compare hard matching with soft matching on the same data.
 
 ``` r
 
@@ -271,7 +271,7 @@ output_contract <- data.frame(
     "named event-design scale metadata aligned with amplitude rows"
   )
 )
-knitr::kable(output_contract, caption = "Reader-facing SBHM output contract for the fitted fixture.")
+knitr::kable(output_contract, caption = "SBHM outputs for the simulated data.")
 ```
 
 | Component | Shape | Meaning |
@@ -283,7 +283,7 @@ knitr::kable(output_contract, caption = "Reader-facing SBHM output contract for 
 | shape_mode | 12 | hard, soft, or fallback shape policy actually used |
 | event_amplitude / event_duration | 8 / 8 | named event-design scale metadata aligned with amplitude rows |
 
-Reader-facing SBHM output contract for the fitted fixture. {.table}
+SBHM outputs for the simulated data. {.table}
 
 ## Evaluate the shape actually used
 
@@ -330,15 +330,16 @@ local({
 
 ![Twelve panels compare true solid and hard-matched dashed rank-four
 waveforms. Mean angular error is 0.000 radians on-library and 0.091
-radians off-library.](sbhm_files/figure-html/shape-plot-1.png)
+radians
+off-library.](sbhm_files/figure-html/shape-plot-1.png)![](sbhm_files/figure-html/shape-plot-1.phone.png)
 
 True and hard-matched rank-four waveforms for every voxel. Solid blue is
 truth; dashed orange is the coordinate actually used by the amplitude
 refit. Panels marked ‘(off)’ contain off-library mixtures and are
 intentionally harder.
 
-For the six on-library voxels, exact candidate identity is also
-judgeable:
+For the six voxels generated from library members, we can also check
+whether the selected index matches the generating index:
 
 ``` r
 
@@ -352,11 +353,12 @@ data.frame(OnLibraryExactCandidateAccuracy = exact_index_accuracy)
 
 ## Hard and soft matching answer different questions
 
-Soft matching uses cosine-score softmax weights; those weights are not
-mixture fractions and the score margin is not calibrated confidence. We
-compare an explicit soft policy with the explicit hard fit against the
-same truth. The result is descriptive for this fixture, not a rule that
-soft matching reduces variance or improves interpolation.
+Soft matching blends candidate coordinates using softmax weights derived
+from cosine scores. These weights are not estimates of the mixture
+fractions used to generate the data, and the score margin is not a
+confidence measure. The comparison below shows how hard and soft
+matching perform in this simulation; it does not establish a general
+advantage for either method.
 
 ``` r
 
@@ -398,7 +400,7 @@ policy_table <- rbind(
 policy_table[-1] <- lapply(policy_table[-1], round, 5)
 knitr::kable(
   policy_table,
-  caption = "Truth-referenced hard and soft results for this fixed fixture."
+  caption = "Hard and soft matching compared with the known simulated shapes and coefficients."
 )
 ```
 
@@ -407,21 +409,24 @@ knitr::kable(
 | Hard top-1 |                12 |          0.04569 |      -0.01927 |       0.06106 |
 | Soft top-3 |                12 |          0.06821 |      -0.00646 |       0.06817 |
 
-Truth-referenced hard and soft results for this fixed fixture. {.table}
+Hard and soft matching compared with the known simulated shapes and
+coefficients. {.table}
 
-The returned `margin` is simply the top-one minus top-two cosine score.
-Low margin can reveal near-ties, but no universal `min_margin` or
-`blend_margin` follows from it. If gating is used, inspect `shape_mode`
-and `fallback_low_conf`; `matched_name` remains the top-scoring
-candidate, whereas `alpha_coords` records the shape actually used.
+The returned `margin` is the difference between the highest and
+second-highest cosine scores. Low margin can reveal near-ties, but no
+universal `min_margin` or `blend_margin` follows from it. If gating is
+used, inspect `shape_mode` and `fallback_low_conf`; `matched_name`
+remains the top-scoring candidate, whereas `alpha_coords` records the
+shape actually used.
 
-## Bind the coefficient estimator to an independent GLM
+## Compare trial coefficients with a direct GLM fit
 
 With `amplitude$method = "global_ls"` and zero ridge, the final stage is
-an ordinary trial-wise GLM conditional on the selected shape. The
-following oracle assembles every voxel model independently from the
-public `fmrihrf` regressors. It proves implementation identity; it does
-not remove shape-selection bias.
+an ordinary GLM that fits all trial columns jointly, conditional on the
+selected shape. The comparison below constructs each voxel’s model
+independently using public `fmrihrf` regressors. Agreement checks the
+coefficient calculation for these selected shapes; it does not remove
+shape-selection bias.
 
 ``` r
 
@@ -459,25 +464,25 @@ grid()
 
 ![Scatter of 96 true and hard-match event-design coefficients. Bias is
 -0.019 and RMSE is 0.061; a diagonal reference line is
-shown.](sbhm_files/figure-html/amplitude-plot-1.png)
+shown.](sbhm_files/figure-html/amplitude-plot-1.png)![](sbhm_files/figure-html/amplitude-plot-1.phone.png)
 
 Hard-match event-design coefficients against truth for all trials and
 voxels. The red dashed line is equality; the displayed bias and RMSE are
 conditional on this fixed simulation.
 
-## Factorization accelerates only the prepass
+## Use a factorization for the initial shape calculation
 
 `data_fac` represents `Y` as `scores %*% loadings`, where scores are
 $`T \times q`$ and loadings are $`q \times V`$. The full `Y` is still
 required by
 [`lss_sbhm()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm.md)
-for OASIS and the amplitude stage. The shortcut therefore reduces only
-prepass multiplication; it does not make the full pipeline independent
-of $`V`$. Named factor axes must agree between scores and loadings; when
-`Y` has voxel names, loadings must carry the same names and are aligned
-before use. Active prewhitening with `data_fac` fails explicitly because
-the supplied factorization is not a factorization of the estimated
-whitened data.
+for OASIS and the amplitude stage. The shortcut therefore reduces
+multiplication in the initial shape calculation (the prepass); the full
+pipeline still depends on $`V`$. Named factor axes must agree between
+scores and loadings; when `Y` has voxel names, loadings must carry the
+same names and are aligned before use. Active prewhitening with
+`data_fac` fails explicitly because the supplied factorization is not a
+factorization of the estimated whitened data.
 
 ``` r
 
@@ -558,7 +563,7 @@ obtains those run identities and heterogeneous durations from the unique
 trialwise `fmridesign` term; non-trial event terms and baseline-model
 columns enter the fixed nuisance span. See
 [`vignette("lss_with_fmridesign")`](https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.md)
-for the event-model identity contract.
+for how event models preserve trial identity.
 
 If estimated prewhitening is requested, SBHM applies the same
 transformation to the response, trial basis, other-condition span, and
@@ -594,22 +599,22 @@ by any of these labels. Ridge may return symmetric finite coefficients,
 but it does not restore identification. None of the three engines
 returns calibrated SBHM standard errors.
 
-## Takeaways
+## Applying SBHM to your data
 
-SBHM is a constrained shape-selection and coefficient-estimation
-workflow. Its useful compression comes with visible assumptions: the
-library defines the shape space, rank truncation defines the
-approximation, matching or blending defines the voxel waveform, and the
-supplied event design defines coefficient units. Judge the waveform
-actually used (`alpha_coords`), retain the identity maps, and evaluate
-hard, soft, fallback, ridge, and whitening policies against truth or
-external calibration before using them in a scientific conclusion.
+Choose the library and retained rank by examining the waveforms they can
+represent. Inspect the waveform reconstructed from `alpha_coords`,
+retain the trial and voxel identity maps, and interpret coefficients in
+the units of the supplied event design. Evaluate matching, fallback,
+ridge, and whitening choices against known truth or external calibration
+suited to your analysis.
 
-This is the end of the vignette learning path. Continue with
+See
 [`?sbhm_build`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_build.md),
 [`?sbhm_match`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_match.md),
 [`?sbhm_prepass`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_prepass.md),
 [`?lss_sbhm`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm.md),
 and
 [`?lss_sbhm_design`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm_design.md)
-for the complete API contracts.
+for the complete interfaces. For library HRF selection combined with
+GLMdenoise and cross-validated ridge, see
+[`vignette("glmsingle")`](https://bbuchsbaum.github.io/fmrilss/articles/glmsingle.md).

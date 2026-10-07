@@ -75,11 +75,11 @@
 
     
     
-<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><p>OASIS is an algebraic implementation of least-squares-separate (LSS).
-It does not define a different unpenalized estimator. It identifies the
-work that all trial-wise LSS models share, computes that work once, and
-solves the small trial-specific systems in batches. With ridge
-penalties, it instead computes a penalized LSS estimator.</p>
+<script>(function(b){b.className=b.className.replace(/\b(palette|preset|style)-[a-z]+\b/g,"").trim();b.classList.add("palette-red","preset-homage","style-minimal");document.documentElement.setAttribute("data-albers-marks","");})(document.body);</script><p>OASIS computes least squares separate (LSS) estimates by reusing the
+calculations shared across trial models, then solving the small
+trial-specific systems in batches. With zero ridge penalties, it gives
+the ordinary LSS estimator. Nonzero penalties give a regularized LSS
+estimator.</p>
 <p>This article establishes the estimand, derives the one- and
 multi-basis systems, and maps each mathematical object to the current
 implementation. Read it after <code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code> and
@@ -164,10 +164,10 @@ For
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K=1</annotation></semantics></math>,
 each trial contributes one scalar coefficient per voxel. For
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>&gt;</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K&gt;1</annotation></semantics></math>,
-the
+each trial contributes
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math>
-returned rows are basis coefficients; they are not automatically a
-single response-amplitude estimate.</p>
+rows of basis coefficients. Converting those coefficients to a single
+response amplitude requires a separate definition and normalization.</p>
 </div>
 <div class="section level2">
 <h2 id="one-basis-system">One-basis system<a class="anchor" aria-label="anchor" href="#one-basis-system"></a>
@@ -265,16 +265,14 @@ the corresponding target-only system is
 <div class="section level2">
 <h2 id="an-executable-equality-check">An executable equality check<a class="anchor" aria-label="anchor" href="#an-executable-equality-check"></a>
 </h2>
-<p>The strongest check of the algebra is not agreement between two OASIS
-helpers; it is agreement with independently assembled trial-wise GLMs.
-The following fixed example checks every trial, basis coefficient, and
-voxel for both
+<p>We check the implementation against independently assembled
+trial-wise GLMs. The fixed example below compares every trial, basis
+coefficient, and voxel for both
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K=1</annotation></semantics></math>
 and
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>=</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">K=3</annotation></semantics></math>.</p>
-<p>The exact public call for ordinary, unpenalized LSS is short; the
-zeros are important because the OASIS default is fractionally
-penalized.</p>
+<p>Set both penalties to zero for ordinary LSS; OASIS uses fractional
+ridge by default.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">unpenalized</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/oasis_options.html">oasis_options</a></span><span class="op">(</span></span>
 <span>  ridge_mode <span class="op">=</span> <span class="st">"absolute"</span>,</span>
@@ -308,9 +306,9 @@ GLMs.</caption>
 </table>
 <p>These checks use a correctly specified fixed design with common
 coefficients for the summed trial signal and independent Gaussian
-errors. They establish implementation equality with the corresponding
-GLMs. They do not establish uncertainty for ridge, estimated whitening,
-or data-adaptive HRF selection.</p>
+errors. They verify numerical agreement with the corresponding GLMs in
+these examples. Uncertainty for ridge, estimated whitening, and
+data-adaptive HRF selection requires additional methods.</p>
 </div>
 <div class="section level2">
 <h2 id="ridge-changes-the-estimator">Ridge changes the estimator<a class="anchor" aria-label="anchor" href="#ridge-changes-the-estimator"></a>
@@ -357,8 +355,8 @@ only the target block; <code>ridge_b</code> is then irrelevant.</p>
 <div class="section level2">
 <h2 id="what-the-standard-errors-mean">What the standard errors mean<a class="anchor" aria-label="anchor" href="#what-the-standard-errors-mean"></a>
 </h2>
-<p>OASIS returns model-based standard errors only when all of the
-following hold:</p>
+<p>The model-based standard errors below apply under the following
+conditions:</p>
 <ul>
 <li>
 <code>ridge_x = ridge_b = 0</code>;</li>
@@ -373,11 +371,15 @@ the target
 model is full rank;</li>
 <li>prewhitening is not estimated in the same call;</li>
 <li>the chosen HRF design is treated as fixed;</li>
+<li>residual degrees of freedom are positive;</li>
 <li>conditional errors have spherical covariance,
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mi mathvariant="normal">Var</mi><mo>⁡</mo></mrow><mo stretchy="false" form="prefix">(</mo><msub><mi>ε</mi><mrow><mi>⋅</mi><mi>v</mi></mrow></msub><mo>∣</mo><msub><mi>A</mi><mi>j</mi></msub><mo>,</mo><msub><mi>B</mi><mi>j</mi></msub><mo>,</mo><mi>C</mi><mo stretchy="false" form="postfix">)</mo><mo>=</mo><msubsup><mi>σ</mi><mrow><mi>j</mi><mi>v</mi></mrow><mn>2</mn></msubsup><msub><mi>I</mi><mi>T</mi></msub></mrow><annotation encoding="application/x-tex">\operatorname{Var}(\varepsilon_{\cdot v}\mid A_j,B_j,C)=\sigma_{jv}^2I_T</annotation></semantics></math>
 for each voxel
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math>.</li>
 </ul>
+<p>The API checks the rank, penalty, and fitting-mode restrictions. The
+error covariance assumption must be assessed for the data; the function
+cannot verify it from the design alone.</p>
 <p>For trial
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math>,
 let
@@ -395,7 +397,7 @@ The implementation computes</p>
 \widehat\sigma^2_{jv}=\frac{\operatorname{SSE}_{jv}}
 {T-p-\operatorname{rank}(G_j)}
 </annotation></semantics></math></p>
-<p>and takes the relevant diagonal of
+<p>and takes the square roots of the relevant diagonal entries of
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mover><mi>σ</mi><mo accent="true">̂</mo></mover><mrow><mi>j</mi><mi>v</mi></mrow><mn>2</mn></msubsup><msubsup><mi>G</mi><mi>j</mi><mrow><mi>−</mi><mn>1</mn></mrow></msubsup></mrow><annotation encoding="application/x-tex">\widehat\sigma^2_{jv}G_j^{-1}</annotation></semantics></math>.
 Thus the reported values are the same conditional, homoskedastic-model
 standard errors as in the corresponding full GLM under uncorrelated,
@@ -430,8 +432,8 @@ runs.</p>
 labels. The legacy <code>oasis$whiten</code> field is deprecated,
 ignored, and emits a note; it must not be used to describe the current
 algorithm. Coefficients remain available after estimated whitening, but
-<code>return_se = TRUE</code> fails closed because feasible-GLS
-uncertainty is not calibrated here.</p>
+<code>return_se = TRUE</code> is rejected because these SEs do not
+account for uncertainty in the estimated whitening model.</p>
 </div>
 <div class="section level2">
 <h2 id="design-construction-and-identity">Design construction and identity<a class="anchor" aria-label="anchor" href="#design-construction-and-identity"></a>
@@ -455,32 +457,34 @@ dimensions alone. It therefore requires explicit <code>K</code>,
 every uniquely named column. The output contains
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mi>K</mi></mrow><annotation encoding="application/x-tex">NK</annotation></semantics></math>
 rows in canonical trial-by-basis order. Supplying an incorrect grouping
-would change the estimand, so ambiguous inference is rejected.</p>
+would change the model being fitted, so ambiguous trial/basis mappings
+are rejected.</p>
 <p>If <code>design_spec$hrf_grid</code> is supplied, the implementation
 chooses a candidate using the observed data before fitting. That is a
 model-selection step. Treat the resulting coefficients as conditional on
 the selected design. Because ordinary post-selection standard errors are
-not established by the fixed-design formula above,
-<code>return_se = TRUE</code> fails closed on this route.</p>
-<p>Hidden executable contracts also bind output shapes, diagnostic
-shapes, permutation-safe multi-basis identity, event-built multi-basis
-dimensions, scale equivariance, and the principal fail-closed inference
-boundaries.</p>
+not established by the fixed-design formula above, this route rejects
+<code>return_se = TRUE</code>.</p>
+<p>The vignette also checks output and diagnostic dimensions,
+preservation of trial/basis identity after column permutations, and the
+expected response to rescaling. It checks that unsupported
+standard-error requests produce errors.</p>
 </div>
 <div class="section level2">
-<h2 id="work-and-memory-inventory">Work and memory inventory<a class="anchor" aria-label="anchor" href="#work-and-memory-inventory"></a>
+<h2 id="computational-cost-and-memory">Computational cost and memory<a class="anchor" aria-label="anchor" href="#computational-cost-and-memory"></a>
 </h2>
-<p>The former shorthand “one
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mo>×</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">T\times T</annotation></semantics></math>
-QR instead of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math>
-such QRs” is not the relevant comparison. An LSS design has
+<p>For multiple trials, each full LSS design has
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo>+</mo><mn>2</mn><mi>K</mi></mrow><annotation encoding="application/x-tex">p+2K</annotation></semantics></math>
-effective columns, not
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>
-columns. The table below exposes every leading term instead. It assumes
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>K</mi><mi>z</mi></msub><mo>≤</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">K_z\le T</annotation></semantics></math>,
-a dense design, and a nuisance rank
+effective columns:
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>
+common columns,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math>
+target columns, and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math>
+aggregate-other columns. The table below lists the leading costs for a
+dense design with
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>K</mi><mi>z</mi></msub><mo>≤</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">K_z\le T</annotation></semantics></math>
+and nuisance rank
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>.</p>
 <table class="table">
 <caption>Leading arithmetic terms in the current dense OASIS
@@ -548,11 +552,10 @@ factorizations of
 designs and repeatedly forms trial-specific products with
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>.
 OASIS reuses the nuisance projection, aggregate design, Gram terms, and
-batched products. That structural reuse is exact; a universal wall-clock
-speedup is not. Runtime depends on
+batched products. The time saved depends on
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mo>,</mo><mi>N</mi><mo>,</mo><mi>V</mi><mo>,</mo><mi>K</mi><mo>,</mo><mi>p</mi></mrow><annotation encoding="application/x-tex">T,N,V,K,p</annotation></semantics></math>,
-BLAS, memory bandwidth, block size, and the competing implementation, so
-this article makes no synthetic timing claim.</p>
+BLAS, memory bandwidth, block size, and the implementation used for
+comparison; the operation counts do not imply a fixed speedup.</p>
 </div>
 <div class="section level2">
 <h2 id="implementation-map">Implementation map<a class="anchor" aria-label="anchor" href="#implementation-map"></a>
@@ -653,10 +656,9 @@ result.</li>
 <ul>
 <li>Continue to <code><a href="../articles/lss_with_fmridesign.html">vignette("lss_with_fmridesign")</a></code> for
 run-aware event-table construction and trial/basis identity.</li>
-<li>For a backward reference, <code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code>
-contains the practical fitting and diagnostics workflow, and
-<code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code> contains the foundational LSS
-introduction.</li>
+<li>Return to <code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code> for fitting and
+diagnostics, or <code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code> for the basic LSS
+workflow.</li>
 <li>Later articles cover explicitly normalized voxel-specific HRF shapes
 in <code><a href="../articles/voxel-wise-hrf.html">vignette("voxel-wise-hrf")</a></code> and library-constrained
 shapes and trial coefficients in <code><a href="../articles/sbhm.html">vignette("sbhm")</a></code>.</li>

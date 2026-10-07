@@ -75,14 +75,14 @@
 
     
     
-<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><p>OASIS is the <code><a href="../reference/lss.html">lss()</a></code> backend to use when trial-wise
-estimation needs more than a fixed one-basis design: event-based
-construction, multiple HRF bases, ridge regularization, blocked voxel
-products, or model-based standard errors. This guide follows
-<code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code>, keeps the public workflow visible, and
-routes the derivation to <code><a href="../articles/oasis_theory.html">vignette("oasis_theory")</a></code>.</p>
+<script>(function(b){b.className=b.className.replace(/\b(palette|preset|style)-[a-z]+\b/g,"").trim();b.classList.add("palette-red","preset-homage","style-minimal");document.documentElement.setAttribute("data-albers-marks","");})(document.body);</script><p>The OASIS backend extends <code><a href="../reference/lss.html">lss()</a></code> to event-based designs,
+multiple HRF bases, ridge regularization, and model-based standard
+errors. It also processes voxel products in blocks to limit temporary
+memory. This guide shows how to choose those options and interpret the
+results. Start with <code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code> for basic LSS; see
+<code><a href="../articles/oasis_theory.html">vignette("oasis_theory")</a></code> for the derivation.</p>
 <div class="section level2">
-<h2 id="choose-the-contract-before-fitting">Choose the contract before fitting<a class="anchor" aria-label="anchor" href="#choose-the-contract-before-fitting"></a>
+<h2 id="choose-the-estimator-and-output-before-fitting">Choose the estimator and output before fitting<a class="anchor" aria-label="anchor" href="#choose-the-estimator-and-output-before-fitting"></a>
 </h2>
 <table class="table">
 <caption>OASIS choices that change the estimand or the available
@@ -118,9 +118,9 @@ one amplitude</td>
 </tr>
 </tbody>
 </table>
-<p>The bare call <code><a href="../reference/oasis_options.html">oasis_options()</a></code> is penalized. It is not
-the configuration for an exact comparison with an unpenalized LSS
-backend. Likewise, <code>return_se = TRUE</code> is intentionally
+<p><code><a href="../reference/oasis_options.html">oasis_options()</a></code> uses ridge by default. Set both
+penalties to zero when comparing it with an unpenalized LSS backend.
+Model-based standard errors (<code>return_se = TRUE</code>) are
 unavailable with ridge, estimated prewhitening, HRF-grid selection, or
 voxel-adaptive HRFs.</p>
 </div>
@@ -129,9 +129,9 @@ voxel-adaptive HRFs.</p>
 </h2>
 <p>The example has one target condition, one explicitly modeled other
 condition, a shared intercept and drift, heterogeneous target-trial
-coefficients, and a fixed iid noise scale. Keeping the mean signal
-separate lets us calculate the ridge bias–variance trade-off exactly for
-this design.</p>
+coefficients, and a fixed noise scale with independent, identically
+distributed (iid) errors. Keeping the mean signal separate lets us
+calculate the ridge bias–variance trade-off exactly for this design.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">20260811</span><span class="op">)</span></span>
 <span><span class="co"># Canonical HRF scaled to a unit peak, so betas are in units of peak response.</span></span>
@@ -166,10 +166,10 @@ this design.</p>
 <span>  precision <span class="op">=</span> <span class="fl">0.1</span>,</span>
 <span>  method <span class="op">=</span> <span class="st">"conv"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>For the simulation and independent oracles, the same trial and
-other-condition regressors are also evaluated explicitly. In an
-analysis, <code>Y</code> would normally be the observed time-by-voxel
-response rather than a simulated matrix.</p>
+<p>We also construct the trial and other-condition regressors explicitly
+for the simulation and independent GLM comparisons. In an analysis,
+<code>Y</code> would normally be the observed time-by-voxel response
+rather than a simulated matrix.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">true_beta</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_trials</span> <span class="op">*</span> <span class="va">n_voxels</span>, mean <span class="op">=</span> <span class="fl">1</span>, sd <span class="op">=</span> <span class="fl">0.35</span><span class="op">)</span>,</span>
@@ -224,7 +224,7 @@ response rather than a simulated matrix.</p>
 <p>Put the condition whose trial coefficients you want in
 <code>cond</code>. Put modeled conditions that should not become trial
 targets in <code>others</code>; OASIS adds their aggregate basis columns
-to the common span.</p>
+to the regressors shared by every trial model.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_default</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
@@ -243,9 +243,9 @@ to the common span.</p>
 <span><span class="co">#&gt; Trial_4 1.3235624 1.2075484 -0.9014281</span></span></code></pre></div>
 <p>The default result is an <code>n_trials</code> by
 <code>n_voxels</code> matrix because this is a one-basis design. These
-are fractionally penalized coefficients. The simulation really contains
-condition B, so <code>others</code> is doing identifiable work rather
-than decorating the call.</p>
+are fractionally penalized coefficients. Including condition B in
+<code>others</code> adjusts each target-trial estimate for the B signal
+present in the simulation.</p>
 </div>
 <div class="section level2">
 <h2 id="match-ordinary-lss-exactly-when-that-is-the-target">Match ordinary LSS exactly when that is the target<a class="anchor" aria-label="anchor" href="#match-ordinary-lss-exactly-when-that-is-the-target"></a>
@@ -286,9 +286,9 @@ same workflow.</p>
 </h2>
 <p>Ridge reduces sampling variance by accepting bias. A smaller spread
 of fitted trials is not, by itself, evidence of improvement. For this
-fixed design and truth, OASIS is linear in <code>Y</code>, so applying
-each fit to the noise-free signal and to the identity matrix gives exact
-conditional bias and variance under the iid noise model.</p>
+fixed design, truth, and penalty, OASIS is linear in <code>Y</code>, so
+applying each fit to the noise-free signal and to the identity matrix
+gives exact conditional bias and variance under the iid noise model.</p>
 <table class="table">
 <caption>Exact conditional ridge metrics and a 100-repetition check for
 this design, truth, and noise scale.</caption>
@@ -340,8 +340,8 @@ this design, truth, and noise scale.</caption>
 </tr>
 </tbody>
 </table>
-<div class="figure">
-<img src="oasis_method_files/figure-html/ridge-plot-1.png" class="r-plt" alt="Grouped bars show mean MSE of 0.639 at zero ridge and 0.579 at fractional ridge 0.05; variance falls and squared bias rises as the ridge grows." width="1200"><p class="caption">
+<div class="figure" style="text-align: center">
+<img src="oasis_method_files/figure-html/ridge-plot-1.png" class="r-plt" alt="Grouped bars show mean MSE of 0.639 at zero ridge and 0.579 at fractional ridge 0.05; variance falls and squared bias rises as the ridge grows." width="100%"><img class="albers-phone-twin" src="oasis_method_files/figure-html/ridge-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="515" hidden><p class="caption">
 Exact squared bias, variance, and MSE for three fractional-ridge
 settings in the fixed simulation; all bars use squared-beta units.
 </p>
@@ -390,7 +390,7 @@ trials, but they are not a condition number, a ridge calibration, or an
 inferential test.</p>
 </div>
 <div class="section level2">
-<h2 id="multi-basis-output-is-not-one-amplitude">Multi-basis output is not one amplitude<a class="anchor" aria-label="anchor" href="#multi-basis-output-is-not-one-amplitude"></a>
+<h2 id="interpret-multi-basis-coefficients">Interpret multi-basis coefficients<a class="anchor" aria-label="anchor" href="#interpret-multi-basis-coefficients"></a>
 </h2>
 <p>An event-built SPMG3 design has three rows per trial: canonical,
 temporal derivative, and dispersion-derivative coefficients in that
@@ -414,22 +414,23 @@ basis. Their scale depends on the basis definition.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="va">fit_spmg3</span><span class="op">$</span><span class="va">beta</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">6</span><span class="op">]</span></span>
 <span><span class="co">#&gt; [1] "Trial_1:Basis_1" "Trial_1:Basis_2" "Trial_1:Basis_3" "Trial_2:Basis_1"</span></span>
 <span><span class="co">#&gt; [5] "Trial_2:Basis_2" "Trial_2:Basis_3"</span></span></code></pre></div>
-<p>The <code>NK</code> by <code>V</code> output is in canonical
-trial-major, basis-minor order. Keep the row names or reshape
-explicitly; do not infer a scalar response amplitude from the canonical
-row alone unless a separate normalization and estimand justify that
-operation.</p>
-<p>If you already have a raw multi-basis matrix, identity is part of the
-input contract. <code>X_multi</code> must have unique, non-empty column
-names, and the map must identify every column with one exact-integer
-trial and basis pair. OASIS canonicalizes the matrix to trial-major,
-basis-minor order and attaches the canonical map to the returned beta
-matrix.</p>
-<p>For this controlled source construction, we know the trial-major,
-basis-minor order and capture those identities <em>before</em>
-deliberately permuting its columns. For a different upstream design, use
-that producer’s metadata; never infer identity from the order in which
-an arbitrary matrix happens to arrive.</p>
+<p>For <code>N</code> trials, <code>K</code> basis functions, and
+<code>V</code> voxels, the output is <code>NK</code> by <code>V</code>:
+each trial has <code>K</code> consecutive rows in basis order. Keep the
+row names or reshape explicitly; do not infer a scalar response
+amplitude from the canonical row alone unless a separate normalization
+and estimand justify that operation.</p>
+<p>If you already have a raw multi-basis matrix, supply the trial and
+basis identity of every column. <code>X_multi</code> must have unique,
+non-empty column names, and the map must identify every column with one
+exact-integer trial and basis pair. OASIS canonicalizes the matrix to
+trial-major, basis-minor order and attaches the canonical map to the
+returned beta matrix.</p>
+<p>Here we construct the source matrix in trial-major, basis-minor order
+and record those identities <em>before</em> deliberately permuting its
+columns. For a different upstream design, use that producer’s metadata;
+never infer identity from the order in which an arbitrary matrix happens
+to arrive.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">K</span> <span class="op">&lt;-</span> <span class="va">K_spmg3</span></span>
 <span><span class="va">source_map</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
@@ -480,7 +481,7 @@ whitened-and-residualized design when whitening is active.</p>
 <div class="section level2">
 <h2 id="standard-errors-require-the-unpenalized-fixed-design-model">Standard errors require the unpenalized fixed-design model<a class="anchor" aria-label="anchor" href="#standard-errors-require-the-unpenalized-fixed-design-model"></a>
 </h2>
-<p>For a judgeable SE example, generate data that exactly satisfy each
+<p>To check the standard errors (SEs), generate data that satisfy each
 LSS model: all target trials share a common coefficient vector,
 condition B and <code>Z</code> are in the fitted common span, and the
 temporal errors are iid Gaussian.</p>
@@ -514,21 +515,22 @@ GLMs.</caption>
 <td align="right">0</td>
 </tr></tbody>
 </table>
-<p>These are conditional, coefficient-scale model SEs under spherical
-temporal errors. They are not robust to autocorrelation or
-heteroskedasticity. The result does not carry a ready-made
-multiple-testing or population-inference procedure, and estimated
+<p>These SEs describe coefficient uncertainty conditional on the fixed
+design and uncorrelated, constant-variance temporal errors. They do not
+account for autocorrelation or heteroskedasticity, and they do not
+provide a multiple-testing or population-inference procedure. Estimated
 whitening cannot be combined with <code>return_se = TRUE</code>.</p>
 </div>
 <div class="section level2">
 <h2 id="fir-coefficients-and-their-uncertainty">FIR coefficients and their uncertainty<a class="anchor" aria-label="anchor" href="#fir-coefficients-and-their-uncertainty"></a>
 </h2>
-<p>FIR output also has one row per basis coefficient, trial, and voxel.
-To keep the uncertainty unit honest, the next plot shows one trial and
-one voxel with its coefficient-wise model SE. It is not an across-voxel
-or across-trial SE for an average HRF. The data generator uses a
-correctly specified FIR target-plus-other-trials model with iid Gaussian
-errors, and the verification assembles every corresponding GLM
+<p>A finite impulse response (FIR) design also returns basis
+coefficients for each trial and voxel. The next plot shows one trial in
+one voxel, with one model SE for each coefficient. These intervals
+describe individual coefficients; they do not describe uncertainty in an
+average HRF across trials or voxels. The data generator uses a correctly
+specified FIR target-plus-other-trials model with iid Gaussian errors,
+and the verification assembles every corresponding GLM
 independently.</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_fir</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
@@ -559,17 +561,16 @@ independently.</p>
 <td align="right">0</td>
 </tr></tbody>
 </table>
-<div class="figure">
-<img src="oasis_method_files/figure-html/fir-plot-1.png" class="r-plt" alt="Six FIR estimates for one trial and voxel: the first is positive, the second is near zero, and the remaining four are negative; one-SE intervals are wide, with the second crossing zero." width="1200"><p class="caption">
+<div class="figure" style="text-align: center">
+<img src="oasis_method_files/figure-html/fir-plot-1.png" class="r-plt" alt="Six FIR estimates for one trial and voxel: the first is positive, the second is near zero, and the remaining four are negative; one-SE intervals are wide, with the second crossing zero." width="100%"><img class="albers-phone-twin" src="oasis_method_files/figure-html/fir-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="515" hidden><p class="caption">
 FIR basis coefficients plus or minus one conditional model SE for trial
 1, voxel 1; the y-axis is coefficient scale, not a normalized HRF
 amplitude.
 </p>
 </div>
 <p>FIR models can be poorly conditioned because each trial contributes
-many columns. Ridge may be scientifically useful, but ridge and
-<code>return_se = TRUE</code> are different contracts; the package does
-not report inferential FIR SEs for a penalized fit.</p>
+many columns. Ridge may help stabilize the fit, but the package does not
+report model SEs for penalized FIR coefficients.</p>
 </div>
 <div class="section level2">
 <h2 id="hrf-grid-selection-is-exploratory">HRF-grid selection is exploratory<a class="anchor" aria-label="anchor" href="#hrf-grid-selection-is-exploratory"></a>
@@ -600,8 +601,8 @@ selection-adjusted uncertainty.</p>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">fit_grid</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 12  6</span></span></code></pre></div>
-<p>The following known-truth check makes that conditioning rule
-judgeable. Its target signal is Gaussian, while a much stronger
+<p>The next simulation checks whether HRF selection accounts for the
+common regressors. Its target signal is Gaussian, while a much stronger
 other-condition signal uses SPMG1. The grid fit must match the otherwise
 identical fit with the Gaussian target fixed in advance.</p>
 <table class="table">
@@ -615,10 +616,10 @@ on a strong SPMG1 other condition.</caption>
 </tr></tbody>
 </table>
 <p>Because selection and estimation use the same data, treat this as
-exploratory or validate the selection out of sample.
-<code>return_se = TRUE</code> fails closed on this route. For explicitly
-normalized voxel-specific shapes, continue to
-<code><a href="../articles/voxel-wise-hrf.html">vignette("voxel-wise-hrf")</a></code>.</p>
+exploratory or validate the selection out of sample. This route rejects
+<code>return_se = TRUE</code> because it does not account for selection
+uncertainty. For explicitly normalized voxel-specific shapes, continue
+to <code><a href="../articles/voxel-wise-hrf.html">vignette("voxel-wise-hrf")</a></code>.</p>
 </div>
 <div class="section level2">
 <h2 id="prewhitening-changes-the-fitted-space">Prewhitening changes the fitted space<a class="anchor" aria-label="anchor" href="#prewhitening-changes-the-fitted-space"></a>
@@ -660,11 +661,12 @@ estimated whitening.</caption>
 <td align="right">0</td>
 </tr></tbody>
 </table>
-<p>This demonstrates the coefficient path, not that AR(1) is adequate
-for every dataset. Choose the order and pooling from residual
-diagnostics and the study design. A shared OASIS design supports global
-or run-level operators; voxel- and parcel-specific operators are
-rejected because they cannot be applied to one shared design matrix.</p>
+<p>This example demonstrates how to fit coefficients after whitening; it
+does not establish that AR(1) is adequate for every dataset. Choose the
+order and pooling from residual diagnostics and the study design. A
+shared OASIS design supports global or run-level operators; voxel- and
+parcel-specific operators are rejected because they cannot be applied to
+one shared design matrix.</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">run_lengths</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">90L</span>, <span class="fl">90L</span><span class="op">)</span></span>
 <span><span class="va">run_id</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along</a></span><span class="op">(</span><span class="va">run_lengths</span><span class="op">)</span>, times <span class="op">=</span> <span class="va">run_lengths</span><span class="op">)</span></span>
@@ -689,11 +691,11 @@ SEs.</p>
 </h2>
 <ul>
 <li>Use a standard LSS backend for a fixed one-basis <code>X</code> when
-you want the leanest unpenalized path.</li>
+you want the basic unpenalized fit.</li>
 <li>Use OASIS for event construction, modeled other conditions, multiple
 bases, ridge, blocked products, or fixed-design model SEs.</li>
-<li>Treat ridge, HRF selection, and estimated whitening as changes to
-the estimation contract, not harmless speed options.</li>
+<li>Ridge, HRF selection, and estimated whitening change the estimator
+and the interpretation of its uncertainty.</li>
 <li>Preserve row names and trial/basis identity whenever
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>&gt;</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K&gt;1</annotation></semantics></math>.</li>
 </ul>

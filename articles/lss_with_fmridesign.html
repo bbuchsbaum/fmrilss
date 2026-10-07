@@ -75,12 +75,13 @@
 
     
     
-<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><p><code><a href="../reference/lss_design.html">lss_design()</a></code> is the run-aware adapter between
-<code>fmridesign</code> event and baseline models and the OASIS
-estimator. Read this after <code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code> and
-<code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code>. The adapter is useful when event
-tables have run-relative onsets, the baseline is structured by run, or
-non-trial event terms must remain in the common model.</p>
+<script>(function(b){b.className=b.className.replace(/\b(palette|preset|style)-[a-z]+\b/g,"").trim();b.classList.add("palette-red","preset-homage","style-minimal");document.documentElement.setAttribute("data-albers-marks","");})(document.body);</script><p><code><a href="../reference/lss_design.html">lss_design()</a></code> fits LSS directly from
+<code>fmridesign</code> event and baseline models using the OASIS
+backend. Use it when event onsets are relative to each run, baseline
+terms differ by run, or additional event terms must be retained in every
+trial model. Read <code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code> and
+<code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code> first for the matrix interface and
+OASIS options.</p>
 <p>This article requires the suggested <code>fmridesign</code> package.
 Load the three packages used below before copying the workflow into a
 fresh session.</p>
@@ -91,7 +92,7 @@ fresh session.</p>
 <span>  <span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/" class="external-link">fmrihrf</a></span><span class="op">)</span></span>
 <span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
 <div class="section level2">
-<h2 id="know-the-adapter-contract">Know the adapter contract<a class="anchor" aria-label="anchor" href="#know-the-adapter-contract"></a>
+<h2 id="how-event-and-baseline-terms-enter-the-model">How event and baseline terms enter the model<a class="anchor" aria-label="anchor" href="#how-event-and-baseline-terms-enter-the-model"></a>
 </h2>
 <table class="table">
 <caption>The fmridesign-to-LSS mapping used by lss_design().</caption>
@@ -123,10 +124,10 @@ Nuisance</td>
 </tr>
 </tbody>
 </table>
-<p>The function requires one—and only one—trialwise event term. A
-parametric or condition-level event term can accompany it, but that term
-is part of every trial’s common design. It does not create another set
-of trial targets.</p>
+<p>The function requires exactly one trialwise event term. A parametric
+or condition-level event term can accompany it, but that term is part of
+every trial’s common design. It does not create another set of trial
+targets.</p>
 </div>
 <div class="section level2">
 <h2 id="start-from-a-two-run-event-table">Start from a two-run event table<a class="anchor" aria-label="anchor" href="#start-from-a-two-run-event-table"></a>
@@ -185,8 +186,8 @@ columns arrived in a particular order.</p>
 <div class="section level2">
 <h2 id="verify-the-run-boundary">Verify the run boundary<a class="anchor" aria-label="anchor" href="#verify-the-run-boundary"></a>
 </h2>
-<p>The target matrix is block diagonal by run: trials 1–5 have no energy
-in run 2, and trials 6–10 have no energy in run 1.</p>
+<p>The target matrix is block diagonal by run: trial columns 1–5 are
+zero in run 2, and trial columns 6–10 are zero in run 1.</p>
 <table class="table">
 <caption>Cross-run leakage in the trialwise design.</caption>
 <thead><tr class="header">
@@ -204,8 +205,8 @@ in run 2, and trials 6–10 have no energy in run 1.</p>
 </tr>
 </tbody>
 </table>
-<div class="figure">
-<img src="lss_with_fmridesign_files/figure-html/run-boundary-plot-1.png" class="r-plt" alt="Heatmap with activity for trials 1 through 5 only before scan 110 and trials 6 through 10 only after scan 110; no trial regressor crosses the run boundary." width="1200"><p class="caption">
+<div class="figure" style="text-align: center">
+<img src="lss_with_fmridesign_files/figure-html/run-boundary-plot-1.png" class="r-plt" alt="Heatmap with activity for trials 1 through 5 only before scan 110 and trials 6 through 10 only after scan 110; no trial regressor crosses the run boundary." width="100%"><img class="albers-phone-twin" src="lss_with_fmridesign_files/figure-html/run-boundary-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="515" hidden><p class="caption">
 The trialwise design is block diagonal by run; the vertical line marks
 the boundary after scan 110.
 </p>
@@ -247,8 +248,9 @@ instead.</p>
 <p>The simulation below is correctly specified for every LSS model:
 target trials share a coefficient within each voxel, while drift, run
 intercepts, motion, and the RT modulator all have their own common
-coefficients. This is an adapter court, not evidence about recovery in
-arbitrary designs.</p>
+coefficients. This lets us check that the adapter constructs the
+intended models; it does not establish recovery for designs with
+arbitrary trial effects.</p>
 <p>Use explicit zero ridge when the goal is ordinary LSS. The default
 OASIS configuration is penalized.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
@@ -282,8 +284,8 @@ full-design condition-number warning; it does not disable the mandatory
 trial/basis identity mapping. The full trialwise matrix contains
 <code>RT_c</code> as a weighted sum of trial columns, so that screening
 matrix is rank deficient even though each target-specific LSS model
-below is full rank. The independent court checks the actual per-target
-designs and every returned cell.</p>
+below is full rank. We check each of those models separately and compare
+every returned coefficient with a direct GLM fit.</p>
 <table class="table">
 <caption>lss_design() versus independently assembled full
 GLMs.</caption>
@@ -303,8 +305,9 @@ GLMs.</caption>
 <td align="right">11</td>
 </tr></tbody>
 </table>
-<p>The zero discrepancy also proves that the RT event term and baseline
-nuisance span entered the model without becoming extra trial rows.</p>
+<p>Agreement with the direct fits confirms, for this example, that the
+RT event term and baseline nuisance regressors entered the intended
+models without creating extra trial rows.</p>
 </div>
 <div class="section level2">
 <h2 id="decide-whether-other-trial-effects-are-pooled-across-runs">Decide whether other-trial effects are pooled across runs<a class="anchor" aria-label="anchor" href="#decide-whether-other-trial-effects-are-pooled-across-runs"></a>
@@ -315,9 +318,9 @@ target columns to one OASIS fit, whose other-trial regressor aggregates
 trials from both runs. A run-1 target can therefore change when the
 run-2 response changes. This is a pooled multi-run estimand, not leakage
 in the event convolution.</p>
-<p>The next mutation adds signal only in run 2. It changes the joint
-fit’s run-1 coefficients, while two explicitly separate run fits leave
-run 1 unchanged.</p>
+<p>The next check adds signal only in run 2. It changes the joint fit’s
+run-1 coefficients, while two explicitly separate run fits leave run 1
+unchanged.</p>
 <table class="table">
 <caption>Effect of a run-2-only response mutation on run-1
 coefficients.</caption>
@@ -339,9 +342,9 @@ coefficients.</caption>
 <p>Use one joint call only when that cross-run pooling is the intended
 LSS model. For run-local coefficients, fit each run with its own event
 and baseline models, then restore global event identifiers in both row
-names and the trial/basis map before combining rows, as the helper above
-does. Run-specific prewhitening does not by itself change the pooled
-other-trial estimand.</p>
+names and the trial/basis map before combining rows. Run-specific
+prewhitening does not by itself change the pooling of other-trial
+effects.</p>
 </div>
 <div class="section level2">
 <h2 id="preserve-output-identity">Preserve output identity<a class="anchor" aria-label="anchor" href="#preserve-output-identity"></a>
@@ -372,9 +375,10 @@ reconstruct trial identity from a presumed source-column order.</p>
 <h2 id="multi-basis-designs-return-coefficients-not-amplitudes">Multi-basis designs return coefficients, not amplitudes<a class="anchor" aria-label="anchor" href="#multi-basis-designs-return-coefficients-not-amplitudes"></a>
 </h2>
 <p>With SPMG3, <code><a href="../reference/lss_design.html">lss_design()</a></code> detects three basis columns per
-trial and returns rows in trial-major, basis-minor order. The next
-simulation is correctly specified in that three-dimensional basis and is
-checked against independent full GLMs.</p>
+trial and returns three consecutive rows per trial, with basis
+coefficients ordered within each trial. The next simulation is correctly
+specified in that three-dimensional basis and is checked against
+independent full GLMs.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_spmg3</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_design.html">lss_design</a></span><span class="op">(</span></span>
 <span>  <span class="va">Y_spmg3</span>,</span>
@@ -424,9 +428,10 @@ separately defined shape and amplitude estimand justifies a
 reduction.</p>
 </div>
 <div class="section level2">
-<h2 id="ridge-standard-errors-and-whitening-retain-oasis-semantics">Ridge, standard errors, and whitening retain OASIS semantics<a class="anchor" aria-label="anchor" href="#ridge-standard-errors-and-whitening-retain-oasis-semantics"></a>
+<h2 id="ridge-standard-errors-and-whitening">Ridge, standard errors, and whitening<a class="anchor" aria-label="anchor" href="#ridge-standard-errors-and-whitening"></a>
 </h2>
-<p>The adapter does not change the inference contract:</p>
+<p>The same OASIS options and restrictions apply through
+<code><a href="../reference/lss_design.html">lss_design()</a></code>:</p>
 <ul>
 <li>
 <code><a href="../reference/oasis_options.html">oasis_options()</a></code> uses fractional ridge by default.</li>
@@ -439,10 +444,10 @@ used.</li>
 </ul>
 <p>For multiple runs, whitening needs scan-level segmentation.
 <code><a href="../reference/lss_design.html">lss_design()</a></code> infers it from the sampling frame. The
-explicit vector below is equivalent and shows the underlying contract;
-if supplied, it must encode the same boundaries. The event model’s
-<code>blockids</code> describe events, not scans, so do not pass that
-shorter vector as <code>prewhiten$runs</code>.</p>
+explicit vector below is equivalent and shows the required scan-level
+labels. If supplied, it must encode the same boundaries. The event
+model’s <code>blockids</code> describe events, not scans, so do not pass
+that shorter vector as <code>prewhiten$runs</code>.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">scan_run</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along</a></span><span class="op">(</span><span class="va">run_lengths</span><span class="op">)</span>, times <span class="op">=</span> <span class="va">run_lengths</span><span class="op">)</span></span>
 <span></span>
@@ -459,10 +464,10 @@ shorter vector as <code>prewhiten$runs</code>.</p>
 <span>    runs <span class="op">=</span> <span class="va">scan_run</span></span>
 <span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>This is a recipe, not a recommendation that AR(1) fits every dataset.
-Choose the noise model from residual diagnostics. Shared-design OASIS
-calls reject voxel- or parcel-specific whitening operators because those
-require correspondingly voxel- or parcel-specific filtered designs.</p>
+<p>AR(1) illustrates the interface. Choose the noise model from residual
+diagnostics for your dataset. Shared-design OASIS calls reject voxel- or
+parcel-specific whitening operators because those require
+correspondingly voxel- or parcel-specific filtered designs.</p>
 </div>
 <div class="section level2">
 <h2 id="validation-and-failure-modes">Validation and failure modes<a class="anchor" aria-label="anchor" href="#validation-and-failure-modes"></a>
@@ -476,7 +481,7 @@ screening, not as a characterization of every residualized LSS target
 model. Mandatory semantic checks remain active regardless of the flag:
 the event design must have metadata, exactly one trialwise term, a
 complete trial/basis rectangle, and stable identities.</p>
-<p>Common failures are direct:</p>
+<p>Before fitting, check the following:</p>
 <ul>
 <li>
 <code>nrow(Y)</code> must equal

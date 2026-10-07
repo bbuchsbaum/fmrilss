@@ -75,7 +75,7 @@
 
     
     
-<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><p><code><a href="../reference/estimate_voxel_hrf.html">estimate_voxel_hrf()</a></code> estimates one HRF shape per voxel;
+<script>(function(b){b.className=b.className.replace(/\b(palette|preset|style)-[a-z]+\b/g,"").trim();b.classList.add("palette-red","preset-homage","style-minimal");document.documentElement.setAttribute("data-albers-marks","");})(document.body);</script><p><code><a href="../reference/estimate_voxel_hrf.html">estimate_voxel_hrf()</a></code> estimates one HRF shape per voxel;
 <code><a href="../reference/lss_with_hrf.html">lss_with_hrf()</a></code> then estimates one LSS coefficient per trial
 and voxel. For unit-amplitude impulses, unit-peak HRF normalization
 makes that coefficient a peak-response amplitude. Read this after
@@ -97,7 +97,7 @@ and dividing its beta by
 leaves the fitted signal unchanged. The public workflow resolves that
 ambiguity as follows.</p>
 <table class="table">
-<caption>The normalization contract for the public voxel-HRF
+<caption>HRF normalization and coefficient scale in the voxel-wise
 workflow.</caption>
 <colgroup>
 <col width="37%">
@@ -146,8 +146,9 @@ because the supplied HRF shape has unit positive peak.</p>
 <p>Estimating a shape and trial betas from the same response is adaptive
 and can make an in-sample comparison optimistic. This example uses
 independent calibration and analysis responses with the same scan
-timing. It is a mechanism and contract demonstration, not a
-population-level performance study.</p>
+timing. This separates shape estimation from trial estimation in a
+controlled example; it does not establish performance across
+participants or acquisitions.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">20260822</span><span class="op">)</span></span>
 <span></span>
@@ -168,7 +169,7 @@ population-level performance study.</p>
 <span>  condition <span class="op">=</span> <span class="st">"analysis"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <div class="section level3">
-<h3 id="simulate-genuine-latency-and-width-differences">Simulate genuine latency and width differences<a class="anchor" aria-label="anchor" href="#simulate-genuine-latency-and-width-differences"></a>
+<h3 id="simulate-latency-and-width-differences">Simulate latency and width differences<a class="anchor" aria-label="anchor" href="#simulate-latency-and-width-differences"></a>
 </h3>
 <p>Time dilation changes width; scalar multiplication does not. The
 helper below evaluates the canonical HRF at
@@ -245,8 +246,8 @@ change.</caption>
 </tr>
 </tbody>
 </table>
-<div class="figure">
-<img src="voxel-wise-hrf_files/figure-html/true-shape-plot-1.png" class="r-plt" alt="Four unit-peak HRF curves. Peak times progress from 3.85 to 6.25 seconds and FWHM increases from 4.45 to 6.00 seconds across voxels 1 through 4." width="1200"><p class="caption">
+<div class="figure" style="text-align: center">
+<img src="voxel-wise-hrf_files/figure-html/true-shape-plot-1.png" class="r-plt" alt="Four unit-peak HRF curves. Peak times progress from 3.85 to 6.25 seconds and FWHM increases from 4.45 to 6.00 seconds across voxels 1 through 4." width="100%"><img class="albers-phone-twin" src="voxel-wise-hrf_files/figure-html/true-shape-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="515" hidden><p class="caption">
 The four simulated HRFs all peak at one, while later voxels have later
 and wider responses.
 </p>
@@ -316,8 +317,8 @@ far away from one.</p>
 <div class="section level2">
 <h2 id="estimate-normalized-voxel-hrfs">Estimate normalized voxel HRFs<a class="anchor" aria-label="anchor" href="#estimate-normalized-voxel-hrfs"></a>
 </h2>
-<p>The public estimator takes physical-time onsets and durations plus an
-explicit sampling frame. <code>HRF_SPMG3</code> supplies canonical,
+<p>The estimator takes onsets and durations in seconds plus an explicit
+sampling frame. <code>HRF_SPMG3</code> supplies canonical,
 temporal-derivative, and dispersion-derivative basis functions; the
 returned weights define a reconstructed curve, not three directly
 interpretable physiological measurements.</p>
@@ -360,8 +361,8 @@ interpretable physiological measurements.</p>
 <span><span class="co">#&gt;                    "0e+00"</span></span></code></pre></div>
 <p>The estimator pools all supplied events into one shape per voxel.
 Condition labels are retained as metadata but do not request
-condition-specific HRFs; the zero relabeling discrepancy above binds
-that contract in this example.</p>
+condition-specific HRFs; changing those labels leaves the estimates
+unchanged in the check above.</p>
 <div class="section level3">
 <h3 id="inspect-reconstructed-shapes">Inspect reconstructed shapes<a class="anchor" aria-label="anchor" href="#inspect-reconstructed-shapes"></a>
 </h3>
@@ -401,8 +402,8 @@ simulation.</caption>
 </tr>
 </tbody>
 </table>
-<div class="figure">
-<img src="voxel-wise-hrf_files/figure-html/estimated-shape-plot-1.png" class="r-plt" alt="Four panels compare solid true and dashed estimated unit-peak HRFs. Shape correlations range from 0.998 to 1.000; the largest width difference is 0.15 seconds." width="1200"><p class="caption">
+<div class="figure" style="text-align: center">
+<img src="voxel-wise-hrf_files/figure-html/estimated-shape-plot-1.png" class="r-plt" alt="Four panels compare solid true and dashed estimated unit-peak HRFs. Shape correlations range from 0.998 to 1.000; the largest width difference is 0.15 seconds." width="100%"><img class="albers-phone-twin" src="voxel-wise-hrf_files/figure-html/estimated-shape-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="515" hidden><p class="caption">
 Estimated SPMG3 curves closely follow the independently generated
 unit-peak HRFs.
 </p>
@@ -490,8 +491,8 @@ units.</caption>
 <p>The reference below fits every trial and voxel with the known
 unit-peak HRF, the same fixed regressors, and the same nuisance span. A
 canonical comparator also uses a unit-peak HRF. All rows therefore
-target peak-response amplitude; no derivative-basis coefficient is
-relabeled as an amplitude.</p>
+target peak-response amplitude; the comparison keeps HRF scale
+consistent across methods.</p>
 <table class="table">
 <caption>A fair comparison on the common peak-response-amplitude
 scale.</caption>
@@ -560,14 +561,14 @@ scale.</caption>
 </table>
 <p>In this deliberately constructed four-voxel example, the
 estimated-shape fit is closer to truth than the canonical fit. Its
-largest error is in voxel_4 (mean error -0.323): the canonical HRF’s
-post-stimulus undershoot, stretched by that voxel’s dilation, is not
-exactly representable by the three SPMG3 basis functions, and the
-residual tail overlaps neighbouring trials. A high shape correlation
-does not by itself guarantee unbiased amplitudes. That result diagnoses
-this fixture; it is not a universal method ranking. Real performance
-depends on calibration quality, basis adequacy, event timing, noise, and
-nuisance modeling.</p>
+largest error is in voxel_4 (mean error -0.323). One possible
+contributor is basis mismatch: the three SPMG3 functions need not
+exactly reproduce a time-dilated HRF, including its undershoot, and
+remaining shape errors can affect estimates when responses overlap. This
+example does not isolate that contribution from calibration error. A
+high shape correlation alone does not guarantee unbiased amplitudes.
+Performance also depends on calibration quality, event timing, noise,
+and nuisance modeling.</p>
 </div>
 <div class="section level2">
 <h2 id="check-physical-time-and-run-boundaries">Check physical time and run boundaries<a class="anchor" aria-label="anchor" href="#check-physical-time-and-run-boundaries"></a>
@@ -576,10 +577,10 @@ nuisance modeling.</p>
 repeats a correctly specified one-basis coefficient experiment at TR 0.8
 and 2 seconds, including nonzero durations, with true coefficients 2 and
 4. These rows are event-design coefficients rather than peak responses.
-The court also compares R with chunked C++ output.</p>
+The check also compares R with chunked C++ output.</p>
 <table class="table">
-<caption>Non-unit-TR event-design coefficient and R/C++ identity
-court.</caption>
+<caption>Event-design coefficients and R/C++ agreement at two
+TRs.</caption>
 <colgroup>
 <col width="12%">
 <col width="15%">
@@ -616,7 +617,8 @@ keep event onsets relative to their run. The design is built separately
 inside each run, so an HRF tail cannot leak across an acquisition
 boundary.</p>
 <table class="table">
-<caption>Unequal-run HRF convolution boundary court.</caption>
+<caption>HRF convolution stays within each run despite unequal run
+lengths.</caption>
 <thead><tr class="header">
 <th align="left">Check</th>
 <th align="right">Maximum_absolute_design_value</th>
@@ -645,12 +647,11 @@ justified.</li>
 <li>The calibration model assumes one pooled event amplitude per voxel.
 Strongly heterogeneous calibration amplitudes can distort the estimated
 shape.</li>
-<li>The returned trial betas do not include uncertainty for estimated
-HRF shapes. Use them as conditional point estimates; this article makes
-no standard-error or
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>t</mi><annotation encoding="application/x-tex">t</annotation></semantics></math>-reference
-claim. These helpers also do not implement an estimated-prewhitening
-path.</li>
+<li>The returned trial betas are point estimates conditional on the
+estimated HRF shapes. They do not include shape uncertainty or provide
+standard errors and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>t</mi><annotation encoding="application/x-tex">t</annotation></semantics></math>-tests.
+These helpers also do not implement estimated prewhitening.</li>
 <li>Pass the same scientifically required fixed and nuisance spans to
 shape estimation and trial fitting. The functions add run intercepts
 when they are absent. If that complete common span contains the pooled

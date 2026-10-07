@@ -75,12 +75,14 @@
 
     
     
-<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><p>You have a preprocessed fMRI run and an event design with one
+<script>(function(b){b.className=b.className.replace(/\b(palette|preset|style)-[a-z]+\b/g,"").trim();b.classList.add("palette-red","preset-homage","style-minimal");document.documentElement.setAttribute("data-albers-marks","");})(document.body);</script><p>You have a preprocessed fMRI run and an event design with one
 regressor per trial. Your goal is a beta estimate for every trial and
-voxel, even though nearby haemodynamic responses overlap.
-<code>fmrilss</code> fits each trial in a separate model and returns the
-estimates as a trial-by-voxel matrix that can feed an MVPA, RSA,
-connectivity, or reliability analysis.</p>
+voxel, even though nearby haemodynamic responses overlap. Least squares
+separate (LSS) fits a model for each target trial, combining the other
+trials into one regressor. <code>fmrilss</code> returns the estimates as
+a trial-by-voxel matrix for multivariate pattern analysis,
+representational similarity analysis, connectivity, or reliability
+analysis.</p>
 <p>This article follows one complete workflow: build a trial design, fit
 LSS, check the result, handle nuisance regressors correctly, and compare
 LSS with a simultaneous trial-wise GLM. The example is synthetic so that
@@ -95,8 +97,8 @@ matrices come from your preprocessing and design pipeline.</p>
 <code>Y</code> contains the observed data: time points by
 voxels.</li>
 <li>
-<code>X</code> contains one HRF-convolved column per trial: time
-points by trials.</li>
+<code>X</code> contains one column per trial, convolved with the
+haemodynamic response function (HRF): time points by trials.</li>
 <li>
 <code>Z</code> contains regressors retained in every trial-wise
 model, such as run intercepts or trends.</li>
@@ -220,15 +222,14 @@ time-by-voxel matrix.</p>
 <div class="section level2">
 <h2 id="how-do-i-estimate-the-trial-betas">How do I estimate the trial betas?<a class="anchor" aria-label="anchor" href="#how-do-i-estimate-the-trial-betas"></a>
 </h2>
-<p>The default optimized R backend is the clearest first path. Supply
-all parts of the model in the same call:</p>
+<p>Start with the default optimized R backend and supply all parts of
+the model in the same call:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">beta_lss</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_lss</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 24  8</span></span></code></pre></div>
-<p><code>beta_lss</code> is the promised 24 by 8 trial-by-voxel matrix.
-A small preview is usually more useful than printing the whole
-object:</p>
+<p><code>beta_lss</code> has 24 trial rows and 8 voxel columns. Inspect
+the first few estimates:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">beta_lss</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">4</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">4</span><span class="op">]</span>, <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="co">#&gt;          voxel_01 voxel_02 voxel_03 voxel_04</span></span>
@@ -241,8 +242,8 @@ sum of all other trials, and the shared regressors. The target
 coefficient becomes the reported beta. Repeating that model for every
 trial reduces competition among individual trial columns, but it does
 not make a poor or rank-deficient design informative.</p>
-<div class="figure">
-<img src="fmrilss_files/figure-html/beta-heatmap-1.png" class="r-plt" alt="Heatmap with 24 trial rows and 8 voxel columns. Dark red cells are strongly negative and dark blue cells are strongly positive." width="1050"><p class="caption">
+<div class="figure" style="text-align: center">
+<img src="fmrilss_files/figure-html/beta-heatmap-1.png" class="r-plt" alt="Heatmap with 24 trial rows and 8 voxel columns. Dark red cells are strongly negative and dark blue cells are strongly positive." width="100%"><img class="albers-phone-twin" src="fmrilss_files/figure-html/beta-heatmap-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="482" hidden><p class="caption">
 Estimated single-trial responses for the eight simulated voxels. Red is
 negative and blue is positive; deeper colour indicates larger magnitude,
 not statistical significance.
@@ -252,10 +253,11 @@ not statistical significance.
 <div class="section level2">
 <h2 id="how-should-i-handle-nuisance-regressors">How should I handle nuisance regressors?<a class="anchor" aria-label="anchor" href="#how-should-i-handle-nuisance-regressors"></a>
 </h2>
-<p>The safest route is to pass <code>Nuisance</code> directly to
-<code><a href="../reference/lss.html">lss()</a></code>, as above. The package applies a rank-aware
-Frisch–Waugh–Lovell step for the shared <code>Z</code> and
-<code>Nuisance</code> span before fitting the trial models.</p>
+<p>Pass <code>Nuisance</code> directly to <code><a href="../reference/lss.html">lss()</a></code>, as above.
+Before fitting the trial models, the package removes the shared effects
+of <code>Z</code> and <code>Nuisance</code> from both the response and
+trial design. This Frisch–Waugh–Lovell projection accounts for linearly
+dependent nuisance columns.</p>
 <p>If you deliberately cache a projection for repeated analyses, apply
 it to every matrix that remains in the model. Here we project only
 <code>Nuisance</code>, so the same projection must transform
@@ -271,8 +273,8 @@ it to every matrix that remains in the model. Here we project only
 <span><span class="co">#&gt; maximum_absolute_difference </span></span>
 <span><span class="co">#&gt;                9.200973e-14</span></span></code></pre></div>
 <p>Leaving <code>Z</code> unprojected changes the model and can change
-the trial estimates. Also note that <code><a href="../reference/project_confounds.html">project_confounds()</a></code>
-materializes an
+the trial estimates. <code><a href="../reference/project_confounds.html">project_confounds()</a></code> also materializes
+an
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>×</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">n \times n</annotation></semantics></math>
 matrix; passing <code>Nuisance</code> to <code><a href="../reference/lss.html">lss()</a></code> avoids that
 storage and should be your default.</p>
@@ -282,8 +284,7 @@ storage and should be your default.</p>
 </h2>
 <p>Least Squares All (LSA) estimates every trial column simultaneously.
 LSS replaces the non-target columns with their sum in each
-trial-specific model. That creates a bias–variance trade-off rather than
-a universal winner.</p>
+trial-specific model. The choice involves a bias–variance trade-off.</p>
 <p>To make the comparison reproducible, the next experiment holds
 <code>X</code>, <code>true_betas</code>, and all nuisance effects fixed.
 Because both estimators are linear here, we can calculate conditional
@@ -346,8 +347,8 @@ comparison.</caption>
 </table>
 <p>The 100-repetition check gave MSE = 2.285 for LSS and 5.296 for LSA,
 close to the exact values in the table.</p>
-<div class="figure">
-<img src="fmrilss_files/figure-html/comparison-plot-1.png" class="r-plt" alt="Grouped bar chart comparing LSS and LSA squared bias, variance, and mean squared error on a common beta-squared scale. LSS has higher squared bias and lower variance and mean squared error." width="1050"><p class="caption">
+<div class="figure" style="text-align: center">
+<img src="fmrilss_files/figure-html/comparison-plot-1.png" class="r-plt" alt="Grouped bar chart comparing LSS and LSA squared bias, variance, and mean squared error on a common beta-squared scale. LSS has higher squared bias and lower variance and mean squared error." width="100%"><img class="albers-phone-twin" src="fmrilss_files/figure-html/comparison-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="482" hidden><p class="caption">
 At noise SD 2.5, LSS has more squared bias but sufficiently lower
 variance to produce lower mean squared error than LSA.
 </p>
@@ -381,18 +382,18 @@ crossover.</caption>
 </tbody>
 </table>
 <p>At noise SD 0.41, below the crossover, LSA has lower RMSE; at the
-illustrated SD 2.5, LSS has lower RMSE. The example therefore
-demonstrates both sides of the trade-off rather than supplying a general
-estimator-selection rule. Event spacing, noise, HRF mismatch, and the
-distribution of true trial effects can all move the crossover. Simulate
-conditions that resemble your own acquisition.</p>
+illustrated SD 2.5, LSS has lower RMSE. The preferred estimator
+therefore depends on the noise level even in this one design. Event
+spacing, noise, HRF mismatch, and the distribution of true trial effects
+can all move the crossover. Simulate conditions that resemble your own
+acquisition.</p>
 </div>
 <div class="section level2">
 <h2 id="what-should-i-change-for-real-data">What should I change for real data?<a class="anchor" aria-label="anchor" href="#what-should-i-change-for-real-data"></a>
 </h2>
 <p>Real fMRI errors are temporally correlated. Once the design is
-correct, pass a validated prewhitening specification so the response and
-every design matrix receive the same filter. This call also selects the
+correct, pass a prewhitening specification so the response and every
+design matrix receive the same filter. This call also selects the
 optimized C++ backend; prewhitening has the same model meaning across
 backends:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
@@ -458,13 +459,16 @@ complete core interface.</li>
 solver, explicit ridge regularization, diagnostics, and multi-basis
 designs.</li>
 <li>Then read <code><a href="../articles/oasis_theory.html">vignette("oasis_theory")</a></code> for the derivation
-and computational contract behind that practical guide.</li>
+and computational calculations behind that practical guide.</li>
 <li>Next, use <code><a href="../articles/lss_with_fmridesign.html">vignette("lss_with_fmridesign")</a></code> when your
 inputs are event tables, formulas, and multiple runs.</li>
 <li>Continue to <code><a href="../articles/voxel-wise-hrf.html">vignette("voxel-wise-hrf")</a></code> for estimated
 voxel-wise HRF shapes and trial coefficients.</li>
-<li>Finish with <code><a href="../articles/sbhm.html">vignette("sbhm")</a></code> for library-constrained
+<li>Use <code><a href="../articles/sbhm.html">vignette("sbhm")</a></code> for library-constrained
 voxel-specific shapes, score margins, and trial coefficients.</li>
+<li>Use <code><a href="../articles/glmsingle.html">vignette("glmsingle")</a></code> for library HRF selection,
+GLMdenoise, and voxel-wise ridge selection when conditions repeat across
+runs.</li>
 </ul>
 </div>
 <div class="section level2">

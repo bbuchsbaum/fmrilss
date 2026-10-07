@@ -75,16 +75,17 @@
 
     
     
-<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><div class="section level2">
+<script>(function(b){b.className=b.className.replace(/\b(palette|preset|style)-[a-z]+\b/g,"").trim();b.classList.add("palette-red","preset-homage","style-minimal");document.documentElement.setAttribute("data-albers-marks","");})(document.body);</script><div class="section level2">
 <h2 id="what-this-workflow-estimates">What this workflow estimates<a class="anchor" aria-label="anchor" href="#what-this-workflow-estimates"></a>
 </h2>
-<p>This is the final specialist article in the learning path. Read
-<code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code>, <code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code>,
-and <code><a href="../articles/voxel-wise-hrf.html">vignette("voxel-wise-hrf")</a></code> first. The voxel-wise HRF
-article estimates a continuous shape in a small basis. This article
-instead restricts each voxel to a finite library, or to a declared blend
-of nearby library members.</p>
-<p>SBHM separates two quantities:</p>
+<p>Shared-basis HRF matching (SBHM) selects a voxel’s HRF from a finite
+library or forms an explicitly requested blend of library members. It
+provides an alternative to the continuous basis fit in
+<code><a href="../articles/voxel-wise-hrf.html">vignette("voxel-wise-hrf")</a></code>. Read that article,
+<code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code>, and
+<code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code> first for HRF normalization and
+trial estimation.</p>
+<p>SBHM estimates two quantities separately:</p>
 <ol style="list-style-type: decimal">
 <li>a voxel-specific HRF <strong>shape coordinate</strong> in a shared
 basis; and</li>
@@ -101,9 +102,9 @@ duration and amplitude. Changing any of those changes the coefficient
 scale.</p>
 <p>SBHM produces adaptive point estimates. Shape matching, optional
 blending, ridge penalties, and reuse of the same data for shape
-selection and coefficient estimation are not covered by a calibrated
-standard-error or test-statistic contract. Every SBHM amplitude route
-rejects <code>return_se = TRUE</code>.</p>
+selection and coefficient estimation are not accounted for by calibrated
+standard errors or test statistics. Every SBHM amplitude route rejects
+<code>return_se = TRUE</code>.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">suppressPackageStartupMessages</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>  <span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/" class="external-link">fmrihrf</a></span><span class="op">)</span></span>
@@ -162,13 +163,13 @@ are not calibrated</td>
 </table>
 </div>
 <div class="section level2">
-<h2 id="build-one-transparent-library">Build one transparent library<a class="anchor" aria-label="anchor" href="#build-one-transparent-library"></a>
+<h2 id="build-a-candidate-library">Build a candidate library<a class="anchor" aria-label="anchor" href="#build-a-candidate-library"></a>
 </h2>
 <p>For a compact computational example, we use a grid of positive gamma
-curves. It is a demonstration library, not a package recommendation and
-not a claim that the grid spans physiological HRFs. A scientific
-analysis must justify its own candidates, preprocessing, and
-coverage.</p>
+curves. These curves illustrate the computation; they are not intended
+to cover the range of physiological HRFs. For a scientific analysis,
+choose candidates and preprocessing appropriate to the responses you
+expect.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">TR</span> <span class="op">&lt;-</span> <span class="fl">1</span></span>
 <span><span class="va">n_time</span> <span class="op">&lt;-</span> <span class="fl">180L</span></span>
@@ -205,10 +206,9 @@ coverage.</p>
 </h3>
 <p><code><a href="../reference/sbhm_build.html">sbhm_build()</a></code> performs one decomposition and retains the
 full singular-value spectrum as metadata. The cumulative fraction below
-uses total squared singular-value energy—not the energy of the largest
-rank we happened to plot. Rank four is a modeling choice for this
-fixture; the table makes its approximation error inspectable rather than
-turning it into a generic rule.</p>
+uses the sum of squared singular values across the full spectrum as its
+denominator. We retain rank four for this example; the table shows how
+much library energy that choice preserves.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">singular_values</span> <span class="op">&lt;-</span> <span class="va">sbhm</span><span class="op">$</span><span class="va">meta</span><span class="op">$</span><span class="va">singular_values_full</span></span>
 <span><span class="va">rank_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
@@ -273,13 +273,13 @@ not direct estimates of latency, width, or physiology.</p>
 </div>
 </div>
 <div class="section level2">
-<h2 id="a-truth-referenced-fixture">A truth-referenced fixture<a class="anchor" aria-label="anchor" href="#a-truth-referenced-fixture"></a>
+<h2 id="simulate-known-shapes-and-trial-coefficients">Simulate known shapes and trial coefficients<a class="anchor" aria-label="anchor" href="#simulate-known-shapes-and-trial-coefficients"></a>
 </h2>
-<p>The fixture contains twelve voxels. Six use an exact library member
-and six use an off-library convex mixture. This tests both interpolation
-and the limitation of hard matching. Trial coefficients vary across
-trials and voxels. Motion-like nuisance signals and independent Gaussian
-noise are added explicitly.</p>
+<p>The simulation contains twelve voxels. Six use an exact library
+member and six use an off-library convex mixture. This tests both
+interpolation and the limitation of hard matching. Trial coefficients
+vary across trials and voxels. Motion-like nuisance signals and
+independent Gaussian noise are added explicitly.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">n_voxels</span> <span class="op">&lt;-</span> <span class="fl">12L</span></span>
 <span><span class="va">voxel_names</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"voxel_"</span>, <span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"%02d"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_voxels</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
@@ -345,10 +345,10 @@ noise are added explicitly.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">812</span><span class="op">)</span></span>
 <span><span class="va">Y</span> <span class="op">&lt;-</span> <span class="va">Y_mean</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_time</span> <span class="op">*</span> <span class="va">n_voxels</span>, sd <span class="op">=</span> <span class="fl">0.04</span><span class="op">)</span>, <span class="va">n_time</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="va">voxel_names</span></span></code></pre></div>
-<p>The main call makes every consequential choice explicit. Zero
-penalties are used so the later direct-GLM oracle has the same estimand.
-Hard matching is used first; soft matching is evaluated separately
-rather than being hidden in a default.</p>
+<p>We first fit with hard matching and zero penalties. Zero penalties
+allow a direct comparison with an unpenalized GLM using the selected
+shape. Later we compare hard matching with soft matching on the same
+data.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_hard</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span></span>
 <span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
@@ -384,10 +384,9 @@ rather than being hidden in a default.</p>
 <span>    <span class="st">"named event-design scale metadata aligned with amplitude rows"</span></span>
 <span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span>
-<span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="va">output_contract</span>, caption <span class="op">=</span> <span class="st">"Reader-facing SBHM output contract for the fitted fixture."</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="va">output_contract</span>, caption <span class="op">=</span> <span class="st">"SBHM outputs for the simulated data."</span><span class="op">)</span></span></code></pre></div>
 <table class="table">
-<caption>Reader-facing SBHM output contract for the fitted
-fixture.</caption>
+<caption>SBHM outputs for the simulated data.</caption>
 <colgroup>
 <col width="31%">
 <col width="10%">
@@ -493,16 +492,16 @@ coverage.</caption>
 <span>    <span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span>h <span class="op">=</span> <span class="fl">0</span>, col <span class="op">=</span> <span class="st">"gray85"</span><span class="op">)</span></span>
 <span>  <span class="op">}</span></span>
 <span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
-<div class="figure">
-<img src="sbhm_files/figure-html/shape-plot-1.png" class="r-plt" alt="Twelve panels compare true solid and hard-matched dashed rank-four waveforms. Mean angular error is 0.000 radians on-library and 0.091 radians off-library." width="1500"><p class="caption">
+<div class="figure" style="text-align: center">
+<img src="sbhm_files/figure-html/shape-plot-1.png" class="r-plt" alt="Twelve panels compare true solid and hard-matched dashed rank-four waveforms. Mean angular error is 0.000 radians on-library and 0.091 radians off-library." width="100%"><img class="albers-phone-twin" src="sbhm_files/figure-html/shape-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="576" hidden><p class="caption">
 True and hard-matched rank-four waveforms for every voxel. Solid blue is
 truth; dashed orange is the coordinate actually used by the amplitude
 refit. Panels marked ‘(off)’ contain off-library mixtures and are
 intentionally harder.
 </p>
 </div>
-<p>For the six on-library voxels, exact candidate identity is also
-judgeable:</p>
+<p>For the six voxels generated from library members, we can also check
+whether the selected index matches the generating index:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">exact_index_accuracy</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span></span>
 <span>  <span class="va">fit_hard</span><span class="op">$</span><span class="va">matched_name</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">6</span><span class="op">]</span> <span class="op">==</span> <span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">A</span><span class="op">)</span><span class="op">[</span><span class="va">on_library_idx</span><span class="op">]</span></span>
@@ -514,11 +513,12 @@ judgeable:</p>
 <div class="section level2">
 <h2 id="hard-and-soft-matching-answer-different-questions">Hard and soft matching answer different questions<a class="anchor" aria-label="anchor" href="#hard-and-soft-matching-answer-different-questions"></a>
 </h2>
-<p>Soft matching uses cosine-score softmax weights; those weights are
-not mixture fractions and the score margin is not calibrated confidence.
-We compare an explicit soft policy with the explicit hard fit against
-the same truth. The result is descriptive for this fixture, not a rule
-that soft matching reduces variance or improves interpolation.</p>
+<p>Soft matching blends candidate coordinates using softmax weights
+derived from cosine scores. These weights are not estimates of the
+mixture fractions used to generate the data, and the score margin is not
+a confidence measure. The comparison below shows how hard and soft
+matching perform in this simulation; it does not establish a general
+advantage for either method.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_soft</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span></span>
 <span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
@@ -555,11 +555,11 @@ that soft matching reduces variance or improves interpolation.</p>
 <span><span class="va">policy_table</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">policy_table</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span>, <span class="va">round</span>, <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span></span>
 <span>  <span class="va">policy_table</span>,</span>
-<span>  caption <span class="op">=</span> <span class="st">"Truth-referenced hard and soft results for this fixed fixture."</span></span>
+<span>  caption <span class="op">=</span> <span class="st">"Hard and soft matching compared with the known simulated shapes and coefficients."</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <table class="table">
-<caption>Truth-referenced hard and soft results for this fixed
-fixture.</caption>
+<caption>Hard and soft matching compared with the known simulated shapes
+and coefficients.</caption>
 <colgroup>
 <col width="14%">
 <col width="24%">
@@ -591,22 +591,23 @@ fixture.</caption>
 </tr>
 </tbody>
 </table>
-<p>The returned <code>margin</code> is simply the top-one minus top-two
-cosine score. Low margin can reveal near-ties, but no universal
-<code>min_margin</code> or <code>blend_margin</code> follows from it. If
-gating is used, inspect <code>shape_mode</code> and
-<code>fallback_low_conf</code>; <code>matched_name</code> remains the
-top-scoring candidate, whereas <code>alpha_coords</code> records the
-shape actually used.</p>
+<p>The returned <code>margin</code> is the difference between the
+highest and second-highest cosine scores. Low margin can reveal
+near-ties, but no universal <code>min_margin</code> or
+<code>blend_margin</code> follows from it. If gating is used, inspect
+<code>shape_mode</code> and <code>fallback_low_conf</code>;
+<code>matched_name</code> remains the top-scoring candidate, whereas
+<code>alpha_coords</code> records the shape actually used.</p>
 </div>
 <div class="section level2">
-<h2 id="bind-the-coefficient-estimator-to-an-independent-glm">Bind the coefficient estimator to an independent GLM<a class="anchor" aria-label="anchor" href="#bind-the-coefficient-estimator-to-an-independent-glm"></a>
+<h2 id="compare-trial-coefficients-with-a-direct-glm-fit">Compare trial coefficients with a direct GLM fit<a class="anchor" aria-label="anchor" href="#compare-trial-coefficients-with-a-direct-glm-fit"></a>
 </h2>
 <p>With <code>amplitude$method = "global_ls"</code> and zero ridge, the
-final stage is an ordinary trial-wise GLM conditional on the selected
-shape. The following oracle assembles every voxel model independently
-from the public <code>fmrihrf</code> regressors. It proves
-implementation identity; it does not remove shape-selection bias.</p>
+final stage is an ordinary GLM that fits all trial columns jointly,
+conditional on the selected shape. The comparison below constructs each
+voxel’s model independently using public <code>fmrihrf</code>
+regressors. Agreement checks the coefficient calculation for these
+selected shapes; it does not remove shape-selection bias.</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">amplitude_display</span> <span class="op">&lt;-</span> <span class="va">amplitude_table</span></span>
 <span><span class="va">amplitude_display</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">amplitude_display</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span>, <span class="va">round</span>, <span class="fl">5</span><span class="op">)</span></span>
@@ -656,8 +657,8 @@ identity check.</caption>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, col <span class="op">=</span> <span class="st">"#d7301f"</span>, lwd <span class="op">=</span> <span class="fl">2</span>, lty <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/grid.html" class="external-link">grid</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<div class="figure">
-<img src="sbhm_files/figure-html/amplitude-plot-1.png" class="r-plt" alt="Scatter of 96 true and hard-match event-design coefficients. Bias is -0.019 and RMSE is 0.061; a diagonal reference line is shown." width="1200"><p class="caption">
+<div class="figure" style="text-align: center">
+<img src="sbhm_files/figure-html/amplitude-plot-1.png" class="r-plt" alt="Scatter of 96 true and hard-match event-design coefficients. Bias is -0.019 and RMSE is 0.061; a diagonal reference line is shown." width="100%"><img class="albers-phone-twin" src="sbhm_files/figure-html/amplitude-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="515" hidden><p class="caption">
 Hard-match event-design coefficients against truth for all trials and
 voxels. The red dashed line is equality; the displayed bias and RMSE are
 conditional on this fixed simulation.
@@ -665,7 +666,7 @@ conditional on this fixed simulation.
 </div>
 </div>
 <div class="section level2">
-<h2 id="factorization-accelerates-only-the-prepass">Factorization accelerates only the prepass<a class="anchor" aria-label="anchor" href="#factorization-accelerates-only-the-prepass"></a>
+<h2 id="use-a-factorization-for-the-initial-shape-calculation">Use a factorization for the initial shape calculation<a class="anchor" aria-label="anchor" href="#use-a-factorization-for-the-initial-shape-calculation"></a>
 </h2>
 <p><code>data_fac</code> represents <code>Y</code> as
 <code>scores %*% loadings</code>, where scores are
@@ -673,9 +674,9 @@ conditional on this fixed simulation.
 and loadings are
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>q</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">q \times V</annotation></semantics></math>.
 The full <code>Y</code> is still required by <code><a href="../reference/lss_sbhm.html">lss_sbhm()</a></code> for
-OASIS and the amplitude stage. The shortcut therefore reduces only
-prepass multiplication; it does not make the full pipeline independent
-of
+OASIS and the amplitude stage. The shortcut therefore reduces
+multiplication in the initial shape calculation (the prepass); the full
+pipeline still depends on
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>V</mi><annotation encoding="application/x-tex">V</annotation></semantics></math>.
 Named factor axes must agree between scores and loadings; when
 <code>Y</code> has voxel names, loadings must carry the same names and
@@ -756,8 +757,8 @@ intercepts, so an HRF tail cannot cross a run boundary.
 heterogeneous durations from the unique trialwise
 <code>fmridesign</code> term; non-trial event terms and baseline-model
 columns enter the fixed nuisance span. See
-<code><a href="../articles/lss_with_fmridesign.html">vignette("lss_with_fmridesign")</a></code> for the event-model
-identity contract.</p>
+<code><a href="../articles/lss_with_fmridesign.html">vignette("lss_with_fmridesign")</a></code> for how event models
+preserve trial identity.</p>
 <p>If estimated prewhitening is requested, SBHM applies the same
 transformation to the response, trial basis, other-condition span, and
 nuisance design in the prepass, diagnostics, and final amplitude
@@ -798,21 +799,19 @@ coefficients, but it does not restore identification. None of the three
 engines returns calibrated SBHM standard errors.</p>
 </div>
 <div class="section level2">
-<h2 id="takeaways">Takeaways<a class="anchor" aria-label="anchor" href="#takeaways"></a>
+<h2 id="applying-sbhm-to-your-data">Applying SBHM to your data<a class="anchor" aria-label="anchor" href="#applying-sbhm-to-your-data"></a>
 </h2>
-<p>SBHM is a constrained shape-selection and coefficient-estimation
-workflow. Its useful compression comes with visible assumptions: the
-library defines the shape space, rank truncation defines the
-approximation, matching or blending defines the voxel waveform, and the
-supplied event design defines coefficient units. Judge the waveform
-actually used (<code>alpha_coords</code>), retain the identity maps, and
-evaluate hard, soft, fallback, ridge, and whitening policies against
-truth or external calibration before using them in a scientific
-conclusion.</p>
-<p>This is the end of the vignette learning path. Continue with
-<code><a href="../reference/sbhm_build.html">?sbhm_build</a></code>, <code><a href="../reference/sbhm_match.html">?sbhm_match</a></code>,
+<p>Choose the library and retained rank by examining the waveforms they
+can represent. Inspect the waveform reconstructed from
+<code>alpha_coords</code>, retain the trial and voxel identity maps, and
+interpret coefficients in the units of the supplied event design.
+Evaluate matching, fallback, ridge, and whitening choices against known
+truth or external calibration suited to your analysis.</p>
+<p>See <code><a href="../reference/sbhm_build.html">?sbhm_build</a></code>, <code><a href="../reference/sbhm_match.html">?sbhm_match</a></code>,
 <code><a href="../reference/sbhm_prepass.html">?sbhm_prepass</a></code>, <code><a href="../reference/lss_sbhm.html">?lss_sbhm</a></code>, and
-<code><a href="../reference/lss_sbhm_design.html">?lss_sbhm_design</a></code> for the complete API contracts.</p>
+<code><a href="../reference/lss_sbhm_design.html">?lss_sbhm_design</a></code> for the complete interfaces. For library
+HRF selection combined with GLMdenoise and cross-validated ridge, see
+<code><a href="../articles/glmsingle.html">vignette("glmsingle")</a></code>.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

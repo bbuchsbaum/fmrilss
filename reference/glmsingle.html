@@ -120,7 +120,9 @@ x voxel matrix with <code>runs</code> giving the run of each row.</p></dd>
 <dd><p>Either a list of time x condition 0/1 matrices, one per run
 (GLMsingle's format; a 1 marks a trial onset), or a data frame with
 columns <code>run</code>, <code>onset</code> (seconds; must be on the TR grid) and
-<code>condition</code>. Repeated conditions drive the cross-validation.</p></dd>
+<code>condition</code>. Repeated conditions drive the cross-validation.
+For matrix <code>Y</code>, event run IDs are matched to <code>runs</code> in data order.
+For list <code>Y</code>, ascending event run IDs correspond to the list order.</p></dd>
 
 
 <dt id="arg-tr">tr<a class="anchor" aria-label="anchor" href="#arg-tr"></a></dt>
@@ -159,7 +161,9 @@ cross-validation and uses that fraction.</p></dd>
 
 
 <dt id="arg-n-pcs">n_pcs<a class="anchor" aria-label="anchor" href="#arg-n-pcs"></a></dt>
-<dd><p>Maximum number of noise PCs to evaluate.</p></dd>
+<dd><p>Maximum number of noise PCs to evaluate. Capped, with a
+warning, at the available noise-pool rank across runs. Empty or
+rank-zero pools use zero PCs and skip PC-count cross-validation.</p></dd>
 
 
 <dt id="arg-pcstop">pcstop<a class="anchor" aria-label="anchor" href="#arg-pcstop"></a></dt>
@@ -195,7 +199,9 @@ pool.</p></dd>
 
 <dt id="arg-brain-r-">brain_r2<a class="anchor" aria-label="anchor" href="#arg-brain-r-"></a></dt>
 <dd><p>ON-OFF R^2 (percent) below which bright voxels enter the
-noise pool. Default: estimated tail threshold.</p></dd>
+noise pool. Default: estimated tail threshold. With fewer than two
+distinct finite ON-OFF R^2 values, uses the common value (or zero if
+none are finite). Thresholds are only estimated when denoising is used.</p></dd>
 
 
 <dt id="arg-brain-exclude">brain_exclude<a class="anchor" aria-label="anchor" href="#arg-brain-exclude"></a></dt>

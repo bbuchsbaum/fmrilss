@@ -75,41 +75,48 @@
 
     
     
-<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><div class="section level2">
+<script>(function(b){b.className=b.className.replace(/\b(palette|preset|style)-[a-z]+\b/g,"").trim();b.classList.add("palette-red","preset-homage","style-minimal");document.documentElement.setAttribute("data-albers-marks","");})(document.body);</script><div class="section level2">
 <h2 id="what-glmsingle-estimates">What GLMsingle estimates<a class="anchor" aria-label="anchor" href="#what-glmsingle-estimates"></a>
 </h2>
 <p>GLMsingle (Prince et al., 2022) estimates one response amplitude per
-trial and voxel. It adds three data-driven steps to a single-trial
-GLM:</p>
+trial and voxel. Use <code><a href="../reference/glmsingle.html">glmsingle()</a></code> when you want to select an
+HRF from a library, estimate shared noise regressors, and choose ridge
+shrinkage from repeated conditions across runs. The procedure builds on
+a single-trial general linear model (GLM):</p>
 <ol style="list-style-type: decimal">
 <li>
-<strong>A library HRF per voxel.</strong> Each voxel uses whichever
-of 20 canonical HRF shapes best explains its time series (type B).</li>
+<strong>Select an HRF per voxel (type B).</strong> Choose the
+best-fitting shape from a library of 20 haemodynamic response functions
+(HRFs).</li>
 <li>
-<strong>GLMdenoise.</strong> Principal components of the residual
-time series in a “noise pool” of task-unresponsive voxels become
-nuisance regressors. The number of components is chosen by
-cross-validation (type C).</li>
+<strong>Add GLMdenoise regressors (type C).</strong> Identify a pool
+of voxels with weak task fit, remove polynomial trends from their time
+series, and use principal components (PCs) of the normalized residuals
+as nuisance regressors. Cross-validation selects the number of PCs.</li>
 <li>
-<strong>Fractional ridge regression.</strong> Each voxel gets its
-own amount of shrinkage, chosen by cross-validation, and the result is
-rescaled to the unregularised betas (type D).</li>
+<strong>Apply fractional ridge regression (type D).</strong>
+Cross-validation selects shrinkage separately for each voxel. By
+default, the ridge estimates are then rescaled and offset to best match
+the unregularised estimates.</li>
 </ol>
-<p>Both cross-validations compare single-trial betas for the
-<strong>same condition in different runs</strong>, so the design must
-repeat conditions across runs.</p>
-<p><code><a href="../reference/glmsingle.html">glmsingle()</a></code> computes the same estimator as the reference
-GLMsingle implementation, but organises the work so that each run is
-solved separately, data are touched once per stage, and every candidate
-model is scored from small summary matrices.</p>
+<p>An initial ON-OFF model (type A) uses one regressor for all trials
+and helps define the noise pool. Both default cross-validations compare
+trial betas for <strong>the same condition in different runs</strong>.
+Without those repeats, their data-driven choices are unavailable; the
+function warns and disables the stages that require them.</p>
+<p>The implementation solves each run separately and reuses matrix
+products to score candidate models. The final sections describe the
+differences from the reference implementation and how numerical
+agreement is tested.</p>
 </div>
 <div class="section level2">
 <h2 id="a-simulated-experiment">A simulated experiment<a class="anchor" aria-label="anchor" href="#a-simulated-experiment"></a>
 </h2>
-<p>Four runs of 110 TRs. Each run shows trials from 8 conditions; every
-condition repeats across runs. Voxels differ in HRF shape, and all
-voxels share slow structured noise, which GLMdenoise can learn from
-voxels that do not respond to the task.</p>
+<p>The simulation has four runs of 110 time points, sampled every
+second. Each run contains trials from eight conditions, with every
+condition repeated across runs. Voxels differ in HRF shape and share
+slow structured noise. Eighty voxels respond to the task; the remaining
+forty provide a potential noise pool for GLMdenoise.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrilss/">fmrilss</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">2024</span><span class="op">)</span></span>
@@ -140,11 +147,17 @@ voxels that do not respond to the task.</p>
 <span>  <span class="va">true_beta</span><span class="op">[[</span><span class="va">r</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">amp</span></span>
 <span><span class="op">}</span></span>
 <span><span class="va">true_beta</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="va">true_beta</span><span class="op">)</span>  <span class="co"># trials x voxels, chronological</span></span></code></pre></div>
-<p><code>design</code> is in GLMsingle’s format: one time x condition
-0/1 matrix per run, with a 1 at each trial onset. A data frame with
-columns <code>run</code>, <code>onset</code> (in seconds) and
-<code>condition</code> works too, as does an fmridesign event model via
-<code><a href="../reference/glmsingle_design.html">glmsingle_design()</a></code>.</p>
+<p><code>design</code> contains one time-by-condition 0/1 matrix per
+run, with a 1 at each trial onset. Unlike the trial matrices passed to
+<code><a href="../reference/lss.html">lss()</a></code>, these are onset indicators, not HRF-convolved
+regressors.</p>
+<p>You can also supply a data frame with <code>run</code>,
+<code>onset</code> (seconds, on the TR grid), and <code>condition</code>
+columns, or use <code><a href="../reference/glmsingle_design.html">glmsingle_design()</a></code> with an fmridesign event
+model. For list-valued <code>Y</code>, ascending event run IDs
+correspond to the list order. For a single data matrix, supply
+scan-level <code>runs</code>; event IDs are matched to the runs in data
+order.</p>
 </div>
 <div class="section level2">
 <h2 id="fitting">Fitting<a class="anchor" aria-label="anchor" href="#fitting"></a>
@@ -158,9 +171,12 @@ columns <code>run</code>, <code>onset</code> (in seconds) and
 <span><span class="co">#&gt;   noise PCs selected: 3</span></span>
 <span><span class="co">#&gt;   median ridge fraction: 0.70</span></span>
 <span><span class="co">#&gt;   elapsed: 0.4 s</span></span></code></pre></div>
-<p>Each model type is a list with GLMsingle’s field names. Betas are
-trials x voxels in chronological trial order and, by default, in percent
-signal change.</p>
+<p>The result contains <code>typea</code>, <code>typeb</code>,
+<code>typec</code>, and <code>typed</code> lists using GLMsingle’s field
+names. Types B–D contain trial-by-voxel betas, ordered by run and then
+by onset within each run. Betas are in percent signal change by default.
+<code>coef(fit)</code> extracts type D; pass <code>"b"</code> or
+<code>"c"</code> to extract an earlier stage.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span><span class="op">)</span>            <span class="co"># type D</span></span>
 <span><span class="co">#&gt; [1]  96 120</span></span>
@@ -172,14 +188,19 @@ signal change.</p>
 <span><span class="co">#&gt;   22    5    2    1    2    2    8    4    2    1    1    2    4    6    7    9 </span></span>
 <span><span class="co">#&gt; 0.85  0.9 0.95    1 </span></span>
 <span><span class="co">#&gt;   15   13   12    2</span></span></code></pre></div>
+<p>A ridge fraction of 1 means no shrinkage; smaller fractions request
+more shrinkage before the final rescaling. <code>pcnum</code> is the
+selected number of noise components, shared across voxels;
+<code>FRACvalue</code> contains one fraction per voxel.</p>
 </div>
 <div class="section level2">
 <h2 id="did-the-data-driven-steps-help">Did the data-driven steps help?<a class="anchor" aria-label="anchor" href="#did-the-data-driven-steps-help"></a>
 </h2>
-<p>The truth is known here, so each model type can be scored by how well
-its betas correlate with the true trial amplitudes in responsive voxels.
-Betas are in percent signal change and the simulation scales signal by
-1% of the baseline, so the scale matches.</p>
+<p>Because the generating amplitudes are known, we can compare estimated
+and true betas in the responsive voxels. The score below averages their
+within-voxel correlations. It measures agreement in trial-to-trial
+variation, but does not measure amplitude bias or absolute estimation
+error.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">score</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">B</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/which.html" class="external-link">which</a></span><span class="op">(</span><span class="va">responsive</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">v</span><span class="op">)</span> <span class="fu">stats</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="va">B</span><span class="op">[</span>, <span class="va">v</span><span class="op">]</span>, <span class="va">true_beta</span><span class="op">[</span>, <span class="va">v</span><span class="op">]</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">numeric</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
@@ -187,8 +208,9 @@ Betas are in percent signal change and the simulation scales signal by
 <span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>B <span class="op">=</span> <span class="fu">score</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"b"</span><span class="op">)</span><span class="op">)</span>, C <span class="op">=</span> <span class="fu">score</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"c"</span><span class="op">)</span><span class="op">)</span>, D <span class="op">=</span> <span class="fu">score</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"d"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span><span class="co">#&gt;     B     C     D </span></span>
 <span><span class="co">#&gt; 0.334 0.601 0.660</span></span></code></pre></div>
-<p>HRF selection can also be checked directly. Neighbouring library HRFs
-are very similar, so a near miss is still a good shape:</p>
+<p>We can also count how often the selected HRF index lies within two
+positions of the generating index. This is a rough check of library
+selection; index distance does not directly measure waveform error:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">fit</span><span class="op">$</span><span class="va">typeb</span><span class="op">$</span><span class="va">HRFindex</span><span class="op">[</span><span class="va">responsive</span><span class="op">]</span> <span class="op">-</span> <span class="va">true_hrf</span><span class="op">[</span><span class="va">responsive</span><span class="op">]</span><span class="op">)</span> <span class="op">&lt;=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0.7875</span></span></code></pre></div>
@@ -196,10 +218,8 @@ are very similar, so a near miss is still a good shape:</p>
 <div class="section level2">
 <h2 id="choices-that-differ-from-the-reference-implementation">Choices that differ from the reference implementation<a class="anchor" aria-label="anchor" href="#choices-that-differ-from-the-reference-implementation"></a>
 </h2>
-<p>The defaults reproduce GLMsingle (Python, commit
-<code>1ab54a6</code>) except where GLMsingle is internally inconsistent.
-Each difference is an argument whose other value reproduces
-GLMsingle:</p>
+<p>Two defaults differ from the pinned Python reference (commit
+<code>1ab54a6</code>):</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -208,50 +228,46 @@ GLMsingle:</p>
 </colgroup>
 <thead><tr class="header">
 <th>Argument</th>
-<th>Default</th>
-<th>GLMsingle behaviour</th>
+<th>fmrilss default</th>
+<th>Option that follows the Python reference</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
 <td><code>extras_in_denoise</code></td>
 <td>
-<code>"always"</code>: user nuisance regressors (e.g. motion) are in
-every GLMdenoise and ridge fit</td>
+<code>"always"</code>: retain user nuisance regressors, such as
+motion, in every GLMdenoise and ridge fit</td>
 <td>
-<code>"with_pcs"</code>: dropped when zero PCs are used, including
+<code>"with_pcs"</code>: omit them when zero PCs are used, including
 from the cross-validation reference</td>
 </tr>
 <tr class="even">
 <td><code>zero_sd_cv</code></td>
 <td>
-<code>"zero"</code>: voxels whose reference betas have zero variance
-carry no cross-validation weight</td>
+<code>"zero"</code>: give zero cross-validation weight to voxels
+whose reference betas have zero variance</td>
 <td>
-<code>"python"</code>: treated inconsistently across candidates by
-an in-place division helper</td>
-</tr>
-<tr class="odd">
-<td><code>singular</code></td>
-<td>
-<code>"error"</code>, as GLMsingle</td>
-<td>
-<code>"pinv"</code> gives a minimum-norm solution</td>
-</tr>
-<tr class="even">
-<td><code>frac_alpha</code></td>
-<td>
-<code>"fracridge"</code>: GLMsingle’s grid interpolation of the
-ridge penalty</td>
-<td>
-<code>"exact"</code> solves the fraction equation exactly
-(experimental)</td>
+<code>"python"</code>: reproduce the reference helper’s
+candidate-dependent treatment of zero variance</td>
 </tr>
 </tbody>
 </table>
+<p>Two further options control singular designs and the ridge
+calculation. <code>singular = "error"</code> follows GLMsingle’s
+default; <code>"pinv"</code> instead returns a minimum-norm solution
+with a warning. <code>frac_alpha = "fracridge"</code> uses the reference
+grid interpolation to obtain ridge penalties; <code>"exact"</code>
+solves the fraction equation directly and is experimental.</p>
 <p>The automatic ON-OFF R^2 threshold uses a deterministic
-Gaussian-mixture fit with a small variance floor (as in GLMsingle’s
-MATLAB code). Pass <code>brain_r2</code> and <code>pc_r2_cutoff</code>
-to fix the thresholds yourself.</p>
+Gaussian-mixture fit with a small variance floor, following the MATLAB
+approach; the Python mixture fit is unseeded. Pass <code>brain_r2</code>
+and <code>pc_r2_cutoff</code> to set the thresholds explicitly. Empty or
+rank-zero noise pools use zero PCs; otherwise the maximum PC count is
+capped at the available rank across runs.</p>
+<p>fmrilss computes in double precision, uses 1-based HRF indices, and
+applies <code>want_percent_bold</code> to all model types. The Python
+reference uses single precision and always scales types C and D to
+percent signal change.</p>
 <p><code>full_glmbadness = TRUE</code> fills the PC cross-validation
 diagnostic for every voxel. By default only the voxels that decide the
 number of PCs are evaluated, which gives identical estimates.</p>
@@ -263,13 +279,17 @@ number of PCs are evaluated, which gives identical estimates.</p>
 GLMsingle on 11 simulated scenarios: default settings, extra regressors,
 two sessions with grouped folds, unequal run lengths, unrepeated
 conditions, rapid events, near-collinear regressors, an all-zero voxel,
-a single ridge fraction, and no HRF library. Every HRF choice, number of
-PCs and ridge fraction matches. Betas and R^2 agree to about 1e-6, the
-precision of GLMsingle’s single-precision arithmetic. For rapid designs
-the agreement is limited by GLMsingle’s float32 normal equations
-(relative error grows with the square of the design’s condition number).
-Separate tests check every stage in double precision against literal
-re-implementations of GLMsingle’s stacked computations.</p>
+a single ridge fraction, and no HRF library. The tests require matching
+HRF choices and PC counts. Beta and ridge-fraction comparisons exclude
+cases classified as numerically unstable in the Python reference. Beta
+tolerances depend on the design’s condition number, accounting for the
+loss of precision in float32 normal equations; they do not impose a
+uniform 1e-6 bound.</p>
+<p>Separate tests compare the computational stages in double precision
+with dense implementations of GLMsingle’s stacked calculations.
+Together, these checks test implementation agreement in the specified
+scenarios; they do not establish which estimator is best for a new
+acquisition.</p>
 </div>
 <div class="section level2">
 <h2 id="reference">Reference<a class="anchor" aria-label="anchor" href="#reference"></a>

@@ -3,34 +3,40 @@
 ## What GLMsingle estimates
 
 GLMsingle (Prince et al., 2022) estimates one response amplitude per
-trial and voxel. It adds three data-driven steps to a single-trial GLM:
-
-1.  **A library HRF per voxel.** Each voxel uses whichever of 20
-    canonical HRF shapes best explains its time series (type B).
-2.  **GLMdenoise.** Principal components of the residual time series in
-    a “noise pool” of task-unresponsive voxels become nuisance
-    regressors. The number of components is chosen by cross-validation
-    (type C).
-3.  **Fractional ridge regression.** Each voxel gets its own amount of
-    shrinkage, chosen by cross-validation, and the result is rescaled to
-    the unregularised betas (type D).
-
-Both cross-validations compare single-trial betas for the **same
-condition in different runs**, so the design must repeat conditions
-across runs.
-
+trial and voxel. Use
 [`glmsingle()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle.md)
-computes the same estimator as the reference GLMsingle implementation,
-but organises the work so that each run is solved separately, data are
-touched once per stage, and every candidate model is scored from small
-summary matrices.
+when you want to select an HRF from a library, estimate shared noise
+regressors, and choose ridge shrinkage from repeated conditions across
+runs. The procedure builds on a single-trial general linear model (GLM):
+
+1.  **Select an HRF per voxel (type B).** Choose the best-fitting shape
+    from a library of 20 haemodynamic response functions (HRFs).
+2.  **Add GLMdenoise regressors (type C).** Identify a pool of voxels
+    with weak task fit, remove polynomial trends from their time series,
+    and use principal components (PCs) of the normalized residuals as
+    nuisance regressors. Cross-validation selects the number of PCs.
+3.  **Apply fractional ridge regression (type D).** Cross-validation
+    selects shrinkage separately for each voxel. By default, the ridge
+    estimates are then rescaled and offset to best match the
+    unregularised estimates.
+
+An initial ON-OFF model (type A) uses one regressor for all trials and
+helps define the noise pool. Both default cross-validations compare
+trial betas for **the same condition in different runs**. Without those
+repeats, their data-driven choices are unavailable; the function warns
+and disables the stages that require them.
+
+The implementation solves each run separately and reuses matrix products
+to score candidate models. The final sections describe the differences
+from the reference implementation and how numerical agreement is tested.
 
 ## A simulated experiment
 
-Four runs of 110 TRs. Each run shows trials from 8 conditions; every
-condition repeats across runs. Voxels differ in HRF shape, and all
-voxels share slow structured noise, which GLMdenoise can learn from
-voxels that do not respond to the task.
+The simulation has four runs of 110 time points, sampled every second.
+Each run contains trials from eight conditions, with every condition
+repeated across runs. Voxels differ in HRF shape and share slow
+structured noise. Eighty voxels respond to the task; the remaining forty
+provide a potential noise pool for GLMdenoise.
 
 ``` r
 
@@ -65,11 +71,17 @@ for (r in seq_len(n_runs)) {
 true_beta <- do.call(rbind, true_beta)  # trials x voxels, chronological
 ```
 
-`design` is in GLMsingle’s format: one time x condition 0/1 matrix per
-run, with a 1 at each trial onset. A data frame with columns `run`,
-`onset` (in seconds) and `condition` works too, as does an fmridesign
-event model via
-[`glmsingle_design()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_design.md).
+`design` contains one time-by-condition 0/1 matrix per run, with a 1 at
+each trial onset. Unlike the trial matrices passed to
+[`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md), these
+are onset indicators, not HRF-convolved regressors.
+
+You can also supply a data frame with `run`, `onset` (seconds, on the TR
+grid), and `condition` columns, or use
+[`glmsingle_design()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_design.md)
+with an fmridesign event model. For list-valued `Y`, ascending event run
+IDs correspond to the list order. For a single data matrix, supply
+scan-level `runs`; event IDs are matched to the runs in data order.
 
 ## Fitting
 
@@ -85,9 +97,11 @@ fit
 #>   elapsed: 0.4 s
 ```
 
-Each model type is a list with GLMsingle’s field names. Betas are trials
-x voxels in chronological trial order and, by default, in percent signal
-change.
+The result contains `typea`, `typeb`, `typec`, and `typed` lists using
+GLMsingle’s field names. Types B–D contain trial-by-voxel betas, ordered
+by run and then by onset within each run. Betas are in percent signal
+change by default. `coef(fit)` extracts type D; pass `"b"` or `"c"` to
+extract an earlier stage.
 
 ``` r
 
@@ -103,12 +117,18 @@ table(fit$typed$FRACvalue)
 #>   15   13   12    2
 ```
 
+A ridge fraction of 1 means no shrinkage; smaller fractions request more
+shrinkage before the final rescaling. `pcnum` is the selected number of
+noise components, shared across voxels; `FRACvalue` contains one
+fraction per voxel.
+
 ## Did the data-driven steps help?
 
-The truth is known here, so each model type can be scored by how well
-its betas correlate with the true trial amplitudes in responsive voxels.
-Betas are in percent signal change and the simulation scales signal by
-1% of the baseline, so the scale matches.
+Because the generating amplitudes are known, we can compare estimated
+and true betas in the responsive voxels. The score below averages their
+within-voxel correlations. It measures agreement in trial-to-trial
+variation, but does not measure amplitude bias or absolute estimation
+error.
 
 ``` r
 
@@ -120,8 +140,9 @@ round(c(B = score(coef(fit, "b")), C = score(coef(fit, "c")), D = score(coef(fit
 #> 0.334 0.601 0.660
 ```
 
-HRF selection can also be checked directly. Neighbouring library HRFs
-are very similar, so a near miss is still a good shape:
+We can also count how often the selected HRF index lies within two
+positions of the generating index. This is a rough check of library
+selection; index distance does not directly measure waveform error:
 
 ``` r
 
@@ -131,20 +152,31 @@ mean(abs(fit$typeb$HRFindex[responsive] - true_hrf[responsive]) <= 2)
 
 ## Choices that differ from the reference implementation
 
-The defaults reproduce GLMsingle (Python, commit `1ab54a6`) except where
-GLMsingle is internally inconsistent. Each difference is an argument
-whose other value reproduces GLMsingle:
+Two defaults differ from the pinned Python reference (commit `1ab54a6`):
 
-| Argument | Default | GLMsingle behaviour |
+| Argument | fmrilss default | Option that follows the Python reference |
 |----|----|----|
-| `extras_in_denoise` | `"always"`: user nuisance regressors (e.g. motion) are in every GLMdenoise and ridge fit | `"with_pcs"`: dropped when zero PCs are used, including from the cross-validation reference |
-| `zero_sd_cv` | `"zero"`: voxels whose reference betas have zero variance carry no cross-validation weight | `"python"`: treated inconsistently across candidates by an in-place division helper |
-| `singular` | `"error"`, as GLMsingle | `"pinv"` gives a minimum-norm solution |
-| `frac_alpha` | `"fracridge"`: GLMsingle’s grid interpolation of the ridge penalty | `"exact"` solves the fraction equation exactly (experimental) |
+| `extras_in_denoise` | `"always"`: retain user nuisance regressors, such as motion, in every GLMdenoise and ridge fit | `"with_pcs"`: omit them when zero PCs are used, including from the cross-validation reference |
+| `zero_sd_cv` | `"zero"`: give zero cross-validation weight to voxels whose reference betas have zero variance | `"python"`: reproduce the reference helper’s candidate-dependent treatment of zero variance |
+
+Two further options control singular designs and the ridge calculation.
+`singular = "error"` follows GLMsingle’s default; `"pinv"` instead
+returns a minimum-norm solution with a warning.
+`frac_alpha = "fracridge"` uses the reference grid interpolation to
+obtain ridge penalties; `"exact"` solves the fraction equation directly
+and is experimental.
 
 The automatic ON-OFF R^2 threshold uses a deterministic Gaussian-mixture
-fit with a small variance floor (as in GLMsingle’s MATLAB code). Pass
-`brain_r2` and `pc_r2_cutoff` to fix the thresholds yourself.
+fit with a small variance floor, following the MATLAB approach; the
+Python mixture fit is unseeded. Pass `brain_r2` and `pc_r2_cutoff` to
+set the thresholds explicitly. Empty or rank-zero noise pools use zero
+PCs; otherwise the maximum PC count is capped at the available rank
+across runs.
+
+fmrilss computes in double precision, uses 1-based HRF indices, and
+applies `want_percent_bold` to all model types. The Python reference
+uses single precision and always scales types C and D to percent signal
+change.
 
 `full_glmbadness = TRUE` fills the PC cross-validation diagnostic for
 every voxel. By default only the voxels that decide the number of PCs
@@ -157,14 +189,17 @@ The package tests compare
 with pinned Python GLMsingle on 11 simulated scenarios: default
 settings, extra regressors, two sessions with grouped folds, unequal run
 lengths, unrepeated conditions, rapid events, near-collinear regressors,
-an all-zero voxel, a single ridge fraction, and no HRF library. Every
-HRF choice, number of PCs and ridge fraction matches. Betas and R^2
-agree to about 1e-6, the precision of GLMsingle’s single-precision
-arithmetic. For rapid designs the agreement is limited by GLMsingle’s
-float32 normal equations (relative error grows with the square of the
-design’s condition number). Separate tests check every stage in double
-precision against literal re-implementations of GLMsingle’s stacked
-computations.
+an all-zero voxel, a single ridge fraction, and no HRF library. The
+tests require matching HRF choices and PC counts. Beta and
+ridge-fraction comparisons exclude cases classified as numerically
+unstable in the Python reference. Beta tolerances depend on the design’s
+condition number, accounting for the loss of precision in float32 normal
+equations; they do not impose a uniform 1e-6 bound.
+
+Separate tests compare the computational stages in double precision with
+dense implementations of GLMsingle’s stacked calculations. Together,
+these checks test implementation agreement in the specified scenarios;
+they do not establish which estimator is best for a new acquisition.
 
 ## Reference
 

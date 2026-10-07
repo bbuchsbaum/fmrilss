@@ -1,10 +1,10 @@
 # OASIS Theory: What Is Reused, Solved, and Returned
 
-OASIS is an algebraic implementation of least-squares-separate (LSS). It
-does not define a different unpenalized estimator. It identifies the
-work that all trial-wise LSS models share, computes that work once, and
-solves the small trial-specific systems in batches. With ridge
-penalties, it instead computes a penalized LSS estimator.
+OASIS computes least squares separate (LSS) estimates by reusing the
+calculations shared across trial models, then solving the small
+trial-specific systems in batches. With zero ridge penalties, it gives
+the ordinary LSS estimator. Nonzero penalties give a regularized LSS
+estimator.
 
 This article establishes the estimand, derives the one- and multi-basis
 systems, and maps each mathematical object to the current
@@ -63,9 +63,10 @@ RY = RA_j\,\boldsymbol{\beta}_j + RB_j\,\boldsymbol{\gamma}_j + R\varepsilon_j,
 where
 $`\boldsymbol{\beta}_j,\boldsymbol{\gamma}_j \in \mathbb{R}^{K \times V}`$.
 OASIS returns $`\boldsymbol{\beta}_j`$. For $`K=1`$, each trial
-contributes one scalar coefficient per voxel. For $`K>1`$, the $`K`$
-returned rows are basis coefficients; they are not automatically a
-single response-amplitude estimate.
+contributes one scalar coefficient per voxel. For $`K>1`$, each trial
+contributes $`K`$ rows of basis coefficients. Converting those
+coefficients to a single response amplitude requires a separate
+definition and normalization.
 
 ## One-basis system
 
@@ -142,13 +143,12 @@ $`N=1`$, the corresponding target-only system is $`K\times K`$.
 
 ## An executable equality check
 
-The strongest check of the algebra is not agreement between two OASIS
-helpers; it is agreement with independently assembled trial-wise GLMs.
-The following fixed example checks every trial, basis coefficient, and
-voxel for both $`K=1`$ and $`K=3`$.
+We check the implementation against independently assembled trial-wise
+GLMs. The fixed example below compares every trial, basis coefficient,
+and voxel for both $`K=1`$ and $`K=3`$.
 
-The exact public call for ordinary, unpenalized LSS is short; the zeros
-are important because the OASIS default is fractionally penalized.
+Set both penalties to zero for ordinary LSS; OASIS uses fractional ridge
+by default.
 
 ``` r
 
@@ -173,9 +173,9 @@ Maximum discrepancy from independently assembled trial-wise GLMs.
 
 These checks use a correctly specified fixed design with common
 coefficients for the summed trial signal and independent Gaussian
-errors. They establish implementation equality with the corresponding
-GLMs. They do not establish uncertainty for ridge, estimated whitening,
-or data-adaptive HRF selection.
+errors. They verify numerical agreement with the corresponding GLMs in
+these examples. Uncertainty for ridge, estimated whitening, and
+data-adaptive HRF selection requires additional methods.
 
 ## Ridge changes the estimator
 
@@ -210,17 +210,22 @@ block; `ridge_b` is then irrelevant.
 
 ## What the standard errors mean
 
-OASIS returns model-based standard errors only when all of the following
-hold:
+The model-based standard errors below apply under the following
+conditions:
 
 - `ridge_x = ridge_b = 0`;
 - for $`N>1`$, the trial-specific $`2K`$-column model is full rank; for
   $`N=1`$, the target $`K`$-column model is full rank;
 - prewhitening is not estimated in the same call;
 - the chosen HRF design is treated as fixed;
+- residual degrees of freedom are positive;
 - conditional errors have spherical covariance,
   $`\operatorname{Var}(\varepsilon_{\cdot v}\mid A_j,B_j,C)=\sigma_{jv}^2I_T`$
   for each voxel $`v`$.
+
+The API checks the rank, penalty, and fitting-mode restrictions. The
+error covariance assumption must be assessed for the data; the function
+cannot verify it from the design alone.
 
 For trial $`j`$, let $`G_j`$ be its identifiable unpenalized model Gram
 matrix: $`2K\times2K`$ when $`N>1`$ and $`K\times K`$ when $`N=1`$. The
@@ -231,14 +236,15 @@ implementation computes
 {T-p-\operatorname{rank}(G_j)}
 ```
 
-and takes the relevant diagonal of $`\widehat\sigma^2_{jv}G_j^{-1}`$.
-Thus the reported values are the same conditional, homoskedastic-model
-standard errors as in the corresponding full GLM under uncorrelated,
-constant-variance temporal errors. Gaussianity is an additional
-requirement for exact finite-sample t inference. The values are not
-ridge standard errors, not heteroskedasticity- or autocorrelation-robust
-errors, and not calibrated for uncertainty introduced by estimating a
-whitening model or selecting an HRF from the same data.
+and takes the square roots of the relevant diagonal entries of
+$`\widehat\sigma^2_{jv}G_j^{-1}`$. Thus the reported values are the same
+conditional, homoskedastic-model standard errors as in the corresponding
+full GLM under uncorrelated, constant-variance temporal errors.
+Gaussianity is an additional requirement for exact finite-sample t
+inference. The values are not ridge standard errors, not
+heteroskedasticity- or autocorrelation-robust errors, and not calibrated
+for uncertainty introduced by estimating a whitening model or selecting
+an HRF from the same data.
 [`oasis_options()`](https://bbuchsbaum.github.io/fmrilss/reference/oasis_options.md)
 rejects ridge together with `return_se = TRUE`; the backend also rejects
 estimated prewhitening and voxel-adaptive HRF modes for this request.
@@ -265,8 +271,9 @@ fit_ar1 <- lss(
 For multiple runs, supply `pooling = "run"` and the run labels. The
 legacy `oasis$whiten` field is deprecated, ignored, and emits a note; it
 must not be used to describe the current algorithm. Coefficients remain
-available after estimated whitening, but `return_se = TRUE` fails closed
-because feasible-GLS uncertainty is not calibrated here.
+available after estimated whitening, but `return_se = TRUE` is rejected
+because these SEs do not account for uncertainty in the estimated
+whitening model.
 
 ## Design construction and identity
 
@@ -288,28 +295,27 @@ A raw multi-basis `X` cannot reveal trial identity from dimensions
 alone. It therefore requires explicit `K`, `ntrials`, and a
 `trial_basis_map` identifying every uniquely named column. The output
 contains $`NK`$ rows in canonical trial-by-basis order. Supplying an
-incorrect grouping would change the estimand, so ambiguous inference is
-rejected.
+incorrect grouping would change the model being fitted, so ambiguous
+trial/basis mappings are rejected.
 
 If `design_spec$hrf_grid` is supplied, the implementation chooses a
 candidate using the observed data before fitting. That is a
 model-selection step. Treat the resulting coefficients as conditional on
 the selected design. Because ordinary post-selection standard errors are
-not established by the fixed-design formula above, `return_se = TRUE`
-fails closed on this route.
+not established by the fixed-design formula above, this route rejects
+`return_se = TRUE`.
 
-Hidden executable contracts also bind output shapes, diagnostic shapes,
-permutation-safe multi-basis identity, event-built multi-basis
-dimensions, scale equivariance, and the principal fail-closed inference
-boundaries.
+The vignette also checks output and diagnostic dimensions, preservation
+of trial/basis identity after column permutations, and the expected
+response to rescaling. It checks that unsupported standard-error
+requests produce errors.
 
-## Work and memory inventory
+## Computational cost and memory
 
-The former shorthand “one $`T\times T`$ QR instead of $`N`$ such QRs” is
-not the relevant comparison. An LSS design has $`p+2K`$ effective
-columns, not $`T`$ columns. The table below exposes every leading term
-instead. It assumes $`K_z\le T`$, a dense design, and a nuisance rank
-$`p`$.
+For multiple trials, each full LSS design has $`p+2K`$ effective
+columns: $`p`$ common columns, $`K`$ target columns, and $`K`$
+aggregate-other columns. The table below lists the leading costs for a
+dense design with $`K_z\le T`$ and nuisance rank $`p`$.
 
 | Stage                         |   K = 1    |     general K      |
 |:------------------------------|:----------:|:------------------:|
@@ -333,11 +339,10 @@ residualized trial design, and $`O(NK^2)`$ for multi-basis Gram blocks.
 A direct implementation that refits each trial model separately performs
 $`N`$ factorizations of $`T\times(p+2K)`$ designs and repeatedly forms
 trial-specific products with $`Y`$. OASIS reuses the nuisance
-projection, aggregate design, Gram terms, and batched products. That
-structural reuse is exact; a universal wall-clock speedup is not.
-Runtime depends on $`T,N,V,K,p`$, BLAS, memory bandwidth, block size,
-and the competing implementation, so this article makes no synthetic
-timing claim.
+projection, aggregate design, Gram terms, and batched products. The time
+saved depends on $`T,N,V,K,p`$, BLAS, memory bandwidth, block size, and
+the implementation used for comparison; the operation counts do not
+imply a fixed speedup.
 
 ## Implementation map
 
@@ -387,11 +392,11 @@ ridge.
 - Continue to
   [`vignette("lss_with_fmridesign")`](https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.md)
   for run-aware event-table construction and trial/basis identity.
-- For a backward reference,
+- Return to
   [`vignette("oasis_method")`](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md)
-  contains the practical fitting and diagnostics workflow, and
+  for fitting and diagnostics, or
   [`vignette("fmrilss")`](https://bbuchsbaum.github.io/fmrilss/articles/fmrilss.md)
-  contains the foundational LSS introduction.
+  for the basic LSS workflow.
 - Later articles cover explicitly normalized voxel-specific HRF shapes
   in
   [`vignette("voxel-wise-hrf")`](https://bbuchsbaum.github.io/fmrilss/articles/voxel-wise-hrf.md)

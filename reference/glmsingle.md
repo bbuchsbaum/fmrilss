@@ -59,7 +59,9 @@ glmsingle(
   Either a list of time x condition 0/1 matrices, one per run
   (GLMsingle's format; a 1 marks a trial onset), or a data frame with
   columns `run`, `onset` (seconds; must be on the TR grid) and
-  `condition`. Repeated conditions drive the cross-validation.
+  `condition`. Repeated conditions drive the cross-validation. For
+  matrix `Y`, event run IDs are matched to `runs` in data order. For
+  list `Y`, ascending event run IDs correspond to the list order.
 
 - tr:
 
@@ -99,7 +101,9 @@ glmsingle(
 
 - n_pcs:
 
-  Maximum number of noise PCs to evaluate.
+  Maximum number of noise PCs to evaluate. Capped, with a warning, at
+  the available noise-pool rank across runs. Empty or rank-zero pools
+  use zero PCs and skip PC-count cross-validation.
 
 - pcstop:
 
@@ -134,7 +138,9 @@ glmsingle(
 - brain_r2:
 
   ON-OFF R^2 (percent) below which bright voxels enter the noise pool.
-  Default: estimated tail threshold.
+  Default: estimated tail threshold. With fewer than two distinct finite
+  ON-OFF R^2 values, uses the common value (or zero if none are finite).
+  Thresholds are only estimated when denoising is used.
 
 - brain_exclude:
 
