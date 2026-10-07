@@ -22,7 +22,7 @@ substantially faster. Estimator changes are a separate, gated research track
 | Where it lives | **fmrilss.** It shares the Rcpp/Armadillo/OpenMP toolchain, the fmrihrf/fmridesign integration, and the test and bench infrastructure |
 | Parity target | **Python GLMsingle at `1ab54a6`.** It can be scripted without a licence and includes Python's latest fix (`19e6617`). MATLAB-only later commits are audited in §2.4 |
 | PC-count CV on the selection subset only | **Yes, by default.** Estimates are unchanged. The full-volume `glmbadness` diagnostic is available on request. Both a lean-output and a matched-output mode are benchmarked (task 7.3) |
-| Upstream quirks (§2.3) | **Default reproduces pinned behaviour.** Each quirk gets a documented, opt-in corrected policy. The `extras` quirk needs a maintainer decision (§9, item 1) |
+| Upstream quirks (§2.3) | **Default reproduces pinned behaviour.** Each quirk gets a documented, opt-in corrected policy. The `extras` quirk waits on an upstream answer (§9, item 1) |
 
 ## 1. Bottom line
 
@@ -112,10 +112,10 @@ a policy in §3.4.
 |---|---|---|---|
 | S1 | `make_projection_matrix` → `olsmatrix(mode=0)`: drop exactly-zero columns, unit-normalise, then `np.linalg.pinv` of the normalised Gram (numpy default `rcond`) | A conventional QR cutoff gives a different nuisance subspace. For `[q0, q1, q1+1e-9·q2]`, QR keeps rank 3 while the reference removes rank 2 (projector difference ≈ 1.0) | review1 |
 | S2 | `olsmatrix2`: drop exactly-zero columns, then `np.linalg.solve`. Raises `LinAlgError` on singular Gram | `G⁺` (v2 wording) is a behaviour change | review1 |
-| S3 | User `extra_regressors` are appended **only when the PC count > 0**, in both PC-CV and C/D | (a) If `pcnum = 0`, final C/D fits omit the user's extras. (b) The 0-PC fit is also the **held-out reference for every PC count** in `calcbadness`, so with extras supplied the entire PC-selection curve is scored against an extras-free reference. A universal `[poly, extras, PCs₁..k]` basis does not reproduce this | review1 (a); us (b) |
+| S3 | User `extra_regressors` are appended **only when the PC count > 0**, in both PC-CV and C/D. **MATLAB differs:** `GLMestimatesingletrial.m` (lines ~1167 and ~1355) *never* adds user extras in PC-CV or C/D; only the PCs are added. Both ports use extras in FIR/A/B | (a) If `pcnum = 0`, final C/D fits omit the user's extras. (b) The 0-PC fit is also the **held-out reference for every PC count** in `calcbadness`, so with extras supplied the entire PC-selection curve is scored against an extras-free reference. (c) Whenever extras are supplied, the two ports give different C/D estimates. A universal `[poly, extras, PCs₁..k]` basis matches neither port. Intent asked upstream (§9) | review1 (a); us (b, c) |
 | S4 | Autoscale uses `olsmatrix` (normalised-Gram pinv) on float32 `[β_f, 1]` | A plain 2×2 solve fails for constant candidate β. The reference returns a defined `(scale, offset)` | review1 |
 | S5 | Type C/D R² is stored from the selected-fraction fit **before** autoscale and percent-BOLD scaling | R² must not be recomputed from the final betas | review1 |
-| S6 | `zerodiv(..., wantcaution=0)` aliases `tmp = y` and sets zero divisors to 1 **in place** | In `calcbadness`, zero-SD voxels give `z = 0` for `results[0]` but `(x − μ)/1` for later candidates. "Zero all candidates" is wrong (CV scores `[0, 2]` vs `[0, 0]`) | review1 |
+| S6 | `zerodiv(..., wantcaution=0)` aliases `tmp = y` and sets zero divisors to 1 **in place**. MATLAB passes by value, so it has no such mutation; this is likely a Python port artefact | In `calcbadness`, zero-SD voxels give `z = 0` for `results[0]` but `(x − μ)/1` for later candidates. "Zero all candidates" is wrong (CV scores `[0, 2]` vs `[0, 0]`) | review1 |
 | S7 | Type A: one ON–OFF column per run, fitted **stacked**, so one coefficient is shared across runs | Needs pooled scalar statistics, not per-run fits | review1 |
 | S8 | `glmsingle.py` imports `select_noise_regressors` from `utils/`. A **different** function of the same name in `ols/make_poly_matrix.py` loops over `range(1, n)` and can never return 0 | The port must use the `utils/` version. Add a test that `pcnum = 0` is reachable | us |
 | S9 | `findtailthreshold`: unseeded sklearn GMM (`n_init = 3`, `reg_covar = 0`) | Python results vary between runs. Fixtures record the thresholds used, and tests inject them | us |
@@ -196,10 +196,10 @@ useful, a named alternative. Choosing a non-pinned policy is recorded in
 | Policy | `"pinned"` | Alternative |
 |---|---|---|
 | Nuisance rank (S1) | Drop exact-zero columns; normalise; SVD of the normalised design with cutoff equivalent to `pinv(rcond = 1e-15)` on the Gram, i.e. singular values of X below `sqrt(1e-15)·s_max` are dropped | `"qr"` (tolerance-based) |
-| Trial OLS singularity (S2) | Drop exact-zero columns; Cholesky; on failure, **error** with a diagnostic naming the colliding trials | `"pinv"` (minimum-norm, with a warning) |
-| Extras at zero PCs (S3) | Omit extras when k = 0, in both the PC-CV reference and final C/D | `"always"`: extras in every fit (decision §9, item 1) |
+| Extras in PC-CV and C/D (S3) | Python: extras only when k > 0 | `"matlab"`: never in PC-CV/C/D. `"always"`: in every fit. The default may switch after the upstream answer (§9, item 1) |
+| Trial OLS singularity (S2) | **Decided:** drop exact-zero columns, then Cholesky; on failure, error (as upstream does) with a diagnostic naming the colliding trials | `"pinv"` opt-in |
 | Autoscale (S4) | Normalised-Gram pinv on `[β_f, 1]`, `h[0] < 0 → (1, 0)` | — |
-| Divisor (S6) | Emulate in-place `zerodiv` mutation exactly | `"zero_all"` |
+| Divisor (S6) | Emulate in-place `zerodiv` mutation exactly | `"zero_all"`, which matches MATLAB |
 | Precision | float64 throughout; per-run mean-centring of `Y` before products (exact under polynomial projection, and it reduces cancellation in `XᵀY − (XᵀQ)(QᵀY)`) | — |
 | Gram construction | Form the residualised design `A_r = X_r − Q(QᵀX_r)` explicitly per run (voxel-independent, cheap), with `G = AᵀA`. This avoids the `XᵀX − (XᵀQ)(XᵀQ)ᵀ` cancellation. Use a per-block QR/SVD path when `κ(A_r)` exceeds a threshold | — |
 | Conditioning diagnostics | Record `κ(A_r)` per run/HRF, decision margins, and the policy used, in `fit$diagnostics` | — |
@@ -470,14 +470,10 @@ resampling modes, figures, hdf5.
 **Note:** the reviewer audited v1 (`40cb4cf`). Points 15 and part of 9 were
 already addressed in v2 (`1dcaabf`).
 
-## 9. Open decisions for the maintainer
+## 9. Decisions
 
-1. **S3 extras policy.** Pinned behaviour drops user extras when k = 0. This
-   applies to the final C/D fits when `pcnum = 0`, *and* to the CV reference
-   for every k. Recommendation: `"pinned"` default for parity, a documented
-   `"always"` alternative, and an upstream issue report. If upstream confirms it
-   is a bug, switch the default and re-baseline.
-2. **S2 singular trial Gram.** Recommendation: error, as upstream does, with
-   `"pinv"` opt-in.
-3. **GMM eps floor** (MATLAB `91e5b7e`) as the single intentional deviation
-   from Python. Recommendation: adopt.
+| # | Item | Status |
+|---|---|---|
+| 1 | **S3 extras policy** | **Open, waiting on upstream.** Ask cvnlab/GLMsingle which behaviour is intended; the draft issue is `.planning/glmsingle_upstream_issue.md`. Until they answer, the default is Python behaviour (the parity target), with `"matlab"` and `"always"` as opt-ins. If upstream names an intended behaviour, make it the default and regenerate the fixtures |
+| 2 | **S2 singular trial Gram** | **Decided:** error, as upstream does; `"pinv"` opt-in |
+| 3 | **GMM eps floor** (MATLAB `91e5b7e`) | **Decided:** adopt it, as the single intentional deviation from Python |
