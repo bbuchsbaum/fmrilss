@@ -81,7 +81,9 @@ lag-\(k\) autocovariance of the residuals would be
 \tfrac{\sigma^2}{n}\operatorname{tr}(M L_k),
 \]
 
-where \(L_k\) is the lag-\(k\) shift matrix. That is not zero. Fitting \(D\)
+where \(L_k\) is the lag-\(k\) shift matrix (ones on the \(k\)-th
+superdiagonal, zeros elsewhere). White noise has zero autocovariance at every
+lag \(k \ge 1\), but this expectation is not zero. Fitting \(D\)
 absorbs part of the noise into the fitted values, and because HRF-convolved
 trial regressors are smooth, the part they absorb is the slowly varying,
 positively autocorrelated part. What is left looks rougher than the noise
@@ -102,9 +104,9 @@ smooth signal is mistaken for autocorrelated noise and the estimate is biased
 
 | `residual_model` | Trial part of the fitted design | Bias of the autocorrelation estimate | Cost | Pooling |
 |---|---|---|---|---|
-| `"aggregate"` (default) | One summed regressor per `trial_groups` level (or per basis function) | Upward when trial-to-trial variability is large relative to noise | Fast | All |
-| `"full"` | Every trial regressor (LSA) | Downward, severe when trials are a sizeable fraction of scans | Fast | All |
-| `"corrected"` | Every trial regressor, then fmriAR's residual-bias correction | Approximately unbiased | About \(O(n^2 \times \text{trials})\) | `"global"`, `"run"` |
+| `"aggregate"` (default) | One summed regressor per `trial_groups` level (or per basis function) | Upward when trial-to-trial variability is large relative to noise | Fast | All (voxel and parcel: weight-matrix methods only) |
+| `"full"` | Every trial regressor (LSA) | Downward, severe when trials are a sizeable fraction of scans | Fast | All (voxel and parcel: weight-matrix methods only) |
+| `"corrected"` | Every trial regressor, then fmriAR's residual-bias correction | Approximately unbiased | Seconds; grows with the scan count, independent of voxels | `"global"`, `"run"` |
 
 In every case the confounds (`Z`, `Nuisance`, and an intercept if none is
 present) are part of the fitted design.
@@ -112,21 +114,24 @@ present) are part of the fitted design.
 * **`"aggregate"`** is the model the per-trial GLMs of Nilearn and
   NiBetaSeries effectively estimate their noise from: the condition-level
   response is removed, trial-by-trial deviations from it are not.
-* **`"full"`** was the only behaviour before fmrilss 0.2.0.9000. Use it to
+* **`"full"`** was the only behaviour in fmrilss 0.2.0 and earlier. Use it to
   reproduce earlier results.
 * **`"corrected"`** fits the full model and then inverts the linear map
-  \(\gamma \mapsto \operatorname{tr}(M L_k \Gamma)\) from true to expected
-  residual autocovariance (`fmriAR::acvf_bias_matrix()`), so neither the
-  over-fitting of the full model nor unmodelled trial variability distorts the
-  estimate. fmrilss builds the correction design for you; supplying
-  `prewhiten$design` yourself is equivalent and implies `"full"`.
+  \(\gamma \mapsto \operatorname{tr}(M L_k M \Gamma)\) from true to expected
+  residual autocovariance (`fmriAR::acvf_bias_matrix()`), where \(\gamma\) is
+  the noise autocovariance sequence and \(\Gamma\) the noise covariance matrix
+  built from it. Neither the over-fitting of the full model nor unmodelled
+  trial variability then distorts the estimate. It requires `method = "ar"`.
+  fmrilss builds the correction design for you. Supplying `prewhiten$design`
+  yourself gives the same correction; `residual_model` then defaults to
+  `"full"`, and any other value is an error.
 
 ## A simulation
 
-The simulation below draws AR(1) noise with \(\phi = 0.4\), and trial
-amplitudes with mean 1 and either modest or large trial-to-trial variability,
-in a rapid design (inter-trial interval 1.5--4 s, about one trial per three
-scans) and a slow design (8--12 s).
+The simulation below draws AR(1) noise with \(\phi = 0.4\) and unit
+variance, and trial amplitudes with mean 1 and either modest (SD 0.5) or large
+(SD 2) trial-to-trial variability, in a rapid design (inter-trial interval
+1.5--4 s, about one trial per three scans) and a slow design (8--12 s).
 
 ```{r simulate}
 canonical_hrf <- function(t) {
@@ -213,8 +218,8 @@ Reading the table:
   scan count.** In the rapid design (one trial column per three scans) it
   estimates a *negative* \(\phi\) for positively autocorrelated noise, and the
   resulting filter gives betas no better (slightly worse) than no
-  prewhitening at all. Even the slow design, with about one column per eleven
-  scans, loses a third of \(\phi\).
+  prewhitening at all (the OLS column). Even in the slow design, with about one
+  column per eleven scans, it underestimates \(\phi\) by about a third.
 * **`"aggregate"` works well when trial-to-trial variability is modest
   relative to the noise**, which is the common situation for single-trial
   fMRI: its estimate is close in the slow design and somewhat high in the
@@ -225,8 +230,10 @@ Reading the table:
   betas happen to have lower error, because LSS already mixes neighbouring
   trials' deviations into each estimate. Treat that as a coincidence of this
   design, not a reason to over-whiten.)
-* **`"corrected"` recovers \(\phi\) in every scenario** and is never far from
-  the best RMSE in each row.
+* **`"corrected"` recovers \(\phi\) in every scenario.** Its RMSE is the
+  lowest or close to it in every row except the rapid, high-variability one,
+  where the over-whitened `"aggregate"` betas described above have lower
+  error.
 
 ## Choosing a residual model
 
@@ -252,12 +259,12 @@ Reading the table:
    dataset.
 3. Avoid `"full"` except to reproduce earlier results.
 
-The correction's cost grows with the square of the scan count times the
-number of design columns, roughly a second for 400 scans and 150 trials and
-around ten seconds for 1,200 scans and 300 trials, independent of the voxel
-count. It is computed once per fit. The correction is designed for
-high-pass-filtered designs; see `correction_max_lag` in `?lss` and
-`fmriAR::fit_noise()`.
+The correction's cost does not depend on the voxel count but grows quickly
+with the number of scans: in our measurements it took about 0.8 s for 400
+scans and 150 trials, and about 8 s for 1,200 scans and 300 trials. It is computed once per fit. The correction is designed for
+high-pass-filtered designs: without high-pass filtering, the lag budget it
+needs (`correction_max_lag`) can become impractically large. See
+`correction_max_lag` in `?lss` and `fmriAR::fit_noise()`.
 
 ## How the aggregate columns are chosen
 
@@ -270,6 +277,7 @@ is removed from the residuals:
 | `lss()` without `trial_groups` | One regressor summing all trials |
 | `lss(method = "oasis")`, multi-basis | One summed regressor per basis function |
 | `lss_sbhm()`, SBHM amplitude fits | One summed regressor per shared basis function (plus other conditions) |
+| `lss_rank1()` | One summed regressor per basis function |
 
 Passing `trial_groups` therefore also improves the noise model whenever
 conditions differ in their mean response.
@@ -279,15 +287,18 @@ conditions differ in their mean response.
 `residual_model` decides which residuals are used; `pooling` decides how the
 autocorrelation is shared across voxels:
 
-* `"global"` and `"run"` estimate one model (per run) from all voxels. All
-  three residual models are available.
-* `"voxel"` (weight-matrix methods `r_optimized`, `cpp_optimized`, `cpp`)
-  groups voxels into `voxel_bins` bins of similar residual autocorrelation,
-  refits one AR model per bin, and fits each bin with its own filtered design.
-  `"parcel"` does the same for user-supplied parcels. These use `"aggregate"`
-  or `"full"` residuals; fmriAR's correction is not available for them.
+* `"global"` estimates one model from all voxels, and `"run"` one model per
+  run from all voxels. All three residual models are available.
+* `"voxel"`, available only with the weight-matrix methods `r_optimized`,
+  `cpp_optimized` and `cpp`, groups voxels into `voxel_bins` bins of similar
+  residual autocorrelation, refits one AR model per bin, and estimates each
+  bin's betas from a design filtered with that bin's model. `"parcel"` does
+  the same for user-supplied parcels. These use `"aggregate"` or `"full"`
+  residuals; fmriAR's correction is not available for them.
 
-Every prewhitened result carries the fitted plan:
+Every prewhitened result stores the fitted noise model as its `whiten_plan`
+attribute. Here the default `"aggregate"` model is fitted to the rapid design
+with trial SD 0.5, so `plan$phi` matches the first row of the table:
 
 ```{r inspect-plan}
 run <- simulate_run(c(1.5, 4), 0.5)

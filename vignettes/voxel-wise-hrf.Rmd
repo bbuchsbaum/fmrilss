@@ -56,10 +56,10 @@ cat(sprintf(
 ```
 
 `estimate_voxel_hrf()` estimates one HRF shape per voxel; `lss_with_hrf()`
-then estimates one LSS coefficient per trial and voxel. For unit-amplitude
-impulses, unit-peak HRF normalization makes that coefficient a peak-response
-amplitude. Read this after
-`vignette("fmrilss")`, `vignette("oasis_method")`, and
+then uses those shapes to estimate one LSS coefficient per trial and voxel.
+Because each shape is normalized to a peak of one, the coefficient for a
+unit-amplitude impulse event is the trial's peak-response amplitude. Read this
+after `vignette("fmrilss")`, `vignette("oasis_method")`, and
 `vignette("lss_with_fmridesign")`.
 
 ```{r packages}
@@ -69,12 +69,12 @@ suppressPackageStartupMessages({
 })
 ```
 
-## Fix the scale before interpreting a beta
+## Fix the HRF scale before interpreting a beta
 
 HRF shape and response amplitude are not jointly identified without a scale
 convention: multiplying an HRF by \(c\) and dividing its beta by \(c\) leaves
-the fitted signal unchanged. The public workflow resolves that ambiguity as
-follows.
+the fitted signal unchanged. `estimate_voxel_hrf()` and `lss_with_hrf()`
+resolve that ambiguity with the conventions in this table.
 
 ```{r contract-table, echo = FALSE}
 contract <- data.frame(
@@ -105,28 +105,31 @@ knitr::kable(
 )
 ```
 
-`amplitude_scale` is useful for reconstructing the raw pooled-fit
-coefficients, but it is not a trial beta. With unit-amplitude impulses, the
-downstream beta is interpretable as a peak response because the supplied HRF
-shape has unit positive peak.
+`amplitude_scale` lets you reconstruct the raw pooled-fit coefficients, but
+it is not a trial beta. With unit-amplitude impulses, the trial beta from
+`lss_with_hrf()` can be read as a peak response because the HRF shape it
+receives has a positive peak of one.
 
 Shapes are oriented to correlate positively with a reference HRF (`ref_hrf`,
-the canonical HRF by default). A voxel whose oriented shape has no positive
-peak, or one smaller than 5% of its largest absolute deflection, typically a
-voxel without signal, cannot be meaningfully peak-normalized: dividing by a
-noise-level peak would inflate its betas arbitrarily. It is scaled
-by its largest absolute response instead, flagged in `degenerate`, and counted
-in a warning; the rest of the fit is unaffected. `lss_with_hrf()` carries the
-flags as a `degenerate` attribute, because those voxels' betas are not in
-peak-response units. `lss_rank1()` follows the same policy.
+the canonical HRF by default). Some voxels cannot be meaningfully
+peak-normalized: those whose oriented shape has no positive peak, or a positive
+peak smaller than 5% of its largest absolute deflection. Such a voxel typically
+has no signal, and dividing by a noise-level peak would inflate its betas
+arbitrarily. `estimate_voxel_hrf()` instead scales it by its largest absolute
+response, flags it in `degenerate`, and counts it in a warning; the rest of the
+fit is unaffected. `lss_with_hrf()` carries the flags as a `degenerate`
+attribute, because those voxels' betas are not in peak-response units.
+`lss_rank1()` follows the same policy.
 
 ## Separate shape calibration from trial estimation
 
-Estimating a shape and trial betas from the same response is adaptive and can
-make an in-sample comparison optimistic. This example uses independent
-calibration and analysis responses with the same scan timing. It is a
-mechanism and contract demonstration, not a population-level performance
-study.
+If the shape and the trial betas are estimated from the same response, the
+shape adapts to that response, which can make an in-sample comparison
+optimistic. This example therefore uses two independent responses with the same
+scan timing: a calibration response for estimating shapes and an analysis
+response for estimating trial betas. The example demonstrates how the
+functions work and what their outputs mean; it is not a population-level
+performance study.
 
 ```{r experiment}
 set.seed(20260822)
@@ -149,12 +152,13 @@ analysis_events <- data.frame(
 )
 ```
 
-### Simulate genuine latency and width differences
+### Simulate HRFs that differ in latency and width
 
-Time dilation changes width; scalar multiplication does not. The helper below
-evaluates the canonical HRF at `(time - delay) / dilation`, then renormalizes
-the resulting waveform to unit peak. Dilation therefore changes duration
-without changing the amplitude estimand.
+Stretching an HRF's time axis (dilation) changes its width; multiplying it by a
+scalar does not. The helper below evaluates the canonical HRF at
+`(time - delay) / dilation`, then renormalizes the resulting waveform to unit
+peak. Dilation therefore changes the response's width without changing the
+amplitude being estimated.
 
 ```{r true-hrfs}
 make_unit_peak_hrf <- function(delay, dilation) {
@@ -233,8 +237,9 @@ local({
 
 The calibration events all have amplitude one, so the pooled-shape model is
 correctly specified. Analysis amplitudes are 2, 3, 4, and 5 across voxels and
-constant across trials; this keeps every LSS target-plus-other-trials model
-correctly specified while testing scale far away from one.
+constant across trials. Constant amplitudes keep every LSS model (the target
+trial plus one regressor for all other trials) correctly specified, and values
+well above one test whether amplitudes far from one are recovered.
 
 ```{r simulation-helpers}
 trial_design <- function(events, hrf, sframe) {
@@ -293,19 +298,19 @@ colnames(analysis_response) <- voxel_names
 
 ## Estimate normalized voxel HRFs
 
-The public estimator takes physical-time onsets and durations plus an explicit
-sampling frame. `HRF_SPMG3` supplies canonical, temporal-derivative, and
+`estimate_voxel_hrf()` takes event onsets and durations in seconds, plus a
+sampling frame (`sframe`) that defines the scan timing. `HRF_SPMG3` supplies canonical, temporal-derivative, and
 dispersion-derivative basis functions; the returned weights define a
 reconstructed curve, not three directly interpretable physiological
 measurements.
 
-The basis must also cover the whole response. fmrihrf's built-in `HRF_SPMG1`
-and `HRF_SPMG3` declare a 24-second support, and fmrilss evaluates a basis
-over its declared span, so their post-stimulus undershoot is truncated at
-24 seconds. The simulated responses here last 30 seconds, so the analysis uses
-the same bases with a 30-second span. A truncated basis cannot represent the
-late undershoot, and the missing tail biases trial amplitudes, most for the
-widest responses.
+The basis must also cover the whole response. fmrilss evaluates a basis only
+over its declared span, and fmrihrf's built-in `HRF_SPMG1` and `HRF_SPMG3`
+declare a 24-second span, so their post-stimulus undershoot is truncated at
+24 seconds. A truncated basis cannot represent the late undershoot, and the
+missing tail biases trial amplitudes, most for the widest responses. The
+simulated responses here last 30 seconds, so the analysis rebuilds the same
+bases with a 30-second span.
 
 ```{r full-span-basis}
 spmg3_30 <- gen_hrf(HRF_SPMG3, span = 30)
@@ -346,9 +351,11 @@ c(
 )
 ```
 
-The estimator pools all supplied events into one shape per voxel. Condition
-labels are retained as metadata but do not request condition-specific HRFs;
-the zero relabeling discrepancy above binds that contract in this example.
+`estimate_voxel_hrf()` pools all supplied events into one shape per voxel.
+Condition labels are retained as metadata but do not request
+condition-specific HRFs. The second fit above checks this in this example:
+relabeling the events as alternating conditions `A` and `B` leaves the
+coefficients unchanged (`condition_relabeling_error` is zero).
 
 ### Inspect reconstructed shapes
 
@@ -418,7 +425,7 @@ local({
 })
 ```
 
-## Estimate trial amplitudes with the public API
+## Estimate trial amplitudes with `lss_with_hrf()`
 
 ```{r fit-public}
 fit_r <- lss_with_hrf(
@@ -446,10 +453,11 @@ fit_cpp <- lss_with_hrf(
 dense_cpp <- as.matrix(fit_cpp)
 ```
 
-The R engine returns a dense matrix. The C++ request returns an `LSSBeta`
-object backed by `bigmemory`; `as.matrix()` is its documented dense extraction
-path. Both paths report the engine actually used, so a backend fallback is not
-silent.
+With `engine = "R"`, `lss_with_hrf()` returns a dense matrix. With
+`engine = "C++"`, it returns an `LSSBeta` object backed by `bigmemory`;
+`as.matrix()` is the documented way to extract a dense matrix from it. Both
+results record the engine actually used, so if the function falls back to a
+different backend, the output shows it.
 
 ```{r output-contract}
 engine_contract <- data.frame(
@@ -488,12 +496,14 @@ stopifnot(
 )
 ```
 
-## Compare only estimators of the same amplitude
+## Compare estimators on the same amplitude scale
 
-The reference below fits every trial and voxel with the known unit-peak HRF,
-the same fixed regressors, and the same nuisance span. A canonical comparator
-also uses a unit-peak HRF. All rows therefore target peak-response amplitude;
-no derivative-basis coefficient is relabeled as an amplitude.
+The tables below compare three estimators. The reference (oracle) fits every
+trial and voxel with the known unit-peak HRF and the same fixed and nuisance
+regressors. The second is `lss_with_hrf()` with the estimated voxel HRFs. The
+third is standard LSS with the canonical HRF, also scaled to unit peak. All
+three therefore target peak-response amplitude; no derivative-basis
+coefficient is relabeled as an amplitude.
 
 ```{r amplitude-oracles, include = FALSE}
 truth <- matrix(
@@ -575,7 +585,7 @@ knitr::kable(
   amplitude_comparison,
   row.names = FALSE,
   digits = 4,
-  caption = "A fair comparison on the common peak-response-amplitude scale."
+  caption = "Amplitude errors of the three estimators, all on the peak-response-amplitude scale."
 )
 ```
 
@@ -593,20 +603,25 @@ is closer to truth than the canonical fit. The largest remaining error is in
 `r voxel_names[worst_voxel]`, whose mean amplitude is off by
 `r sprintf("%.1f%%", 100 * worst_relative_error)` although its reconstructed
 shape correlates `r sprintf("%.3f", shape_summary$Correlation[worst_voxel])`
-with the truth: the three SPMG3 functions approximate a time-dilated HRF only
-locally, and LSS amplitudes are sensitive to small shape errors, especially
-when neighbouring trial responses overlap. The known-HRF oracle shows the
-estimator itself is exact when the shape is right. That result diagnoses this fixture;
-it is not a universal method ranking. Real performance depends on calibration
-quality, basis adequacy, event timing, noise, and nuisance modeling.
+with the truth. The likely reason is that the three SPMG3 functions
+approximate a time-dilated HRF only locally, and LSS amplitudes are sensitive
+to small shape errors, especially when neighbouring trial responses overlap.
+With the true shape, the oracle recovers the amplitudes to within the noise
+(RMSE `r sprintf("%.3f", amplitude_comparison$RMSE_to_true_amplitude[1])`), so
+the remaining error comes from the estimated shape, not from trial
+estimation.
+These results describe this simulated example; they do not rank the methods in
+general. Real performance depends on calibration quality, basis adequacy,
+event timing, noise, and nuisance modeling.
 
-## Check physical time and run boundaries
+## Check other TRs and run boundaries
 
-The same public pipeline also runs at non-unit TR. The table below repeats a
-correctly specified one-basis coefficient experiment at TR 0.8 and 2 seconds,
-including nonzero durations, with true coefficients 2 and 4. These rows are
-event-design coefficients rather than peak responses. The court also compares
-R with chunked C++ output.
+The example above uses a TR of 1.2 seconds. The table below repeats a small,
+correctly specified, noise-free experiment at TRs of 0.8 and 2 seconds, with a
+one-function basis, some nonzero event durations, and two voxels whose true
+coefficients are 2 and 4. Because of the nonzero durations, these values are
+event-design coefficients rather than peak responses. The table also compares
+the R output with chunked C++ output.
 
 ```{r tr-contract, include = FALSE}
 check_tr <- function(TR) {
@@ -670,13 +685,14 @@ knitr::kable(
   tr_contract,
   row.names = FALSE,
   digits = 12,
-  caption = "Non-unit-TR event-design coefficient and R/C++ identity court."
+  caption = "Event-design coefficient recovery and R/C++ agreement at TR 0.8 and 2 seconds."
 )
 ```
 
-For multiple runs, add an exact-integer `run` column and keep event onsets
-relative to their run. The design is built separately inside each run, so an
-HRF tail cannot leak across an acquisition boundary.
+For multiple runs, add a `run` column of exact integer run indices and give
+each event's onset relative to the start of its run. The trial design is built
+separately within each run, so an HRF tail cannot leak across a run boundary.
+The table below checks this for two runs of unequal length.
 
 ```{r run-boundary-contract, include = FALSE}
 multi_sframe <- sampling_frame(blocklens = c(50L, 70L), TR = 1.2)
@@ -702,11 +718,11 @@ knitr::kable(
   run_boundary,
   row.names = FALSE,
   digits = 12,
-  caption = "Unequal-run HRF convolution boundary court."
+  caption = "Run-boundary check: largest design value that crosses into the other run, for two runs of unequal length."
 )
 ```
 
-## Know the boundaries of the workflow
+## Assumptions and limitations
 
 - `condition` labels are metadata in this API. All supplied events estimate
   one pooled HRF shape per voxel. Fit separate calibration subsets only when
@@ -714,18 +730,20 @@ knitr::kable(
 - The calibration model assumes one pooled event amplitude per voxel. Strongly
   heterogeneous calibration amplitudes can distort the estimated shape.
 - The returned trial betas do not include uncertainty for estimated HRF
-  shapes. Use them as conditional point estimates; this article makes no
-  standard-error or \(t\)-reference claim. These helpers also do not implement
-  an estimated-prewhitening path.
-- Pass the same scientifically required fixed and nuisance spans to shape
-  estimation and trial fitting. The functions add run intercepts when they are
-  absent. If that complete common span contains the pooled HRF basis, shape is
-  not identifiable and estimation fails explicitly.
+  shapes. Use them as point estimates conditional on those shapes; this
+  vignette makes no claim about their standard errors or \(t\) reference
+  distributions. `estimate_voxel_hrf()` and `lss_with_hrf()` also do not
+  implement prewhitening with an estimated noise model.
+- Pass the same fixed and nuisance regressors, those your design requires,
+  to both shape estimation and trial fitting. The functions add run intercepts
+  when they are absent. If the column space of these common regressors,
+  including the intercepts, contains the pooled HRF basis, the shape is not
+  identifiable and estimation fails explicitly.
 - Run-aware convolution prevents an HRF tail from crossing a run boundary, but
-  a joint LSS fit still pools the other-trial aggregate across runs. Fit runs
-  separately, then restore global event identities, when the estimand must be
-  run-local.
-- Event onsets and durations are finite physical times. Empty event tables,
+  in a joint LSS fit the aggregate other-trials regressor still sums trials
+  from all runs. When the estimand must be run-local, fit runs separately, then
+  map each trial back to its original event.
+- Event onsets and durations are finite times in seconds. Empty event tables,
   out-of-run onsets, malformed run indices, non-finite coefficients, and
   incomplete or duplicated voxel names fail explicitly.
 - The main example uses unit-amplitude impulses, for which the coefficient is a
@@ -747,4 +765,5 @@ knitr::kable(
 amplitudes (the rank-1 GLM of Pedregosa et al., 2015) instead of from one
 pooled amplitude, which matters when conditions differ in their mean response.
 `vignette("sbhm")` presents a library-constrained alternative for estimating
-voxel-specific shapes, score margins, and trial event-design coefficients.
+voxel-specific shapes, score margins (how far the best library shape scores
+above the runner-up), and trial event-design coefficients.
