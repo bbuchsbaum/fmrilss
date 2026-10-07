@@ -100,6 +100,8 @@ ridge bias--variance trade-off exactly for this design.
 
 ```{r event-spec}
 set.seed(20260811)
+# Canonical HRF scaled to a unit peak, so betas are in units of peak response.
+hrf_unit <- fmrihrf::normalise_hrf(fmrihrf::HRF_SPMG1)
 
 n_time <- 180
 n_voxels <- 6
@@ -115,14 +117,14 @@ design_spec <- list(
   sframe = sframe,
   cond = list(
     onsets = onsets_a,
-    hrf = fmrihrf::HRF_SPMG1,
+    hrf = hrf_unit,
     duration = 0,
     amplitude = 1,
     span = 30
   ),
   others = list(list(
     onsets = onsets_b,
-    hrf = fmrihrf::HRF_SPMG1,
+    hrf = hrf_unit,
     duration = 0,
     amplitude = 1,
     span = 30
@@ -141,7 +143,7 @@ be the observed time-by-voxel response rather than a simulated matrix.
 trial_set <- fmrihrf::regressor_set(
   onsets = onsets_a,
   fac = factor(seq_len(n_trials)),
-  hrf = fmrihrf::HRF_SPMG1,
+  hrf = hrf_unit,
   duration = 0,
   amplitude = 1,
   span = 30,
@@ -155,7 +157,7 @@ colnames(X_trials) <- sprintf("trial_%02d", seq_len(n_trials))
 
 other_reg <- fmrihrf::regressor(
   onsets = onsets_b,
-  hrf = fmrihrf::HRF_SPMG1,
+  hrf = hrf_unit,
   duration = 0,
   amplitude = 1,
   span = 30,
@@ -341,7 +343,7 @@ knitr::kable(
 )
 ```
 
-```{r ridge-plot, echo = FALSE, fig.cap="Exact squared bias, variance, and MSE for three fractional-ridge settings in the fixed simulation; all bars use squared-beta units.", fig.alt="Grouped bars show mean MSE falling from about 0.210 at zero ridge to 0.194 at fractional ridge 0.05 as variance falls and squared bias rises."}
+```{r ridge-plot, echo = FALSE, fig.cap="Exact squared bias, variance, and MSE for three fractional-ridge settings in the fixed simulation; all bars use squared-beta units.", fig.alt=sprintf("Grouped bars show mean MSE of %.3f at zero ridge and %.3f at fractional ridge %s; variance falls and squared bias rises as the ridge grows.", ridge_metrics$Mean_MSE[1], ridge_metrics$Mean_MSE[nrow(ridge_metrics)], format(ridge_levels[length(ridge_levels)]))}
 plot_values <- t(as.matrix(ridge_metrics[, c(
   "Mean_squared_bias", "Mean_variance", "Mean_MSE"
 )]))
@@ -365,7 +367,8 @@ stopifnot(
   all(is.finite(as.matrix(ridge_metrics[, -1]))),
   all(ridge_metrics$Mean_MSE >= ridge_metrics$Mean_squared_bias),
   all(ridge_metrics$Mean_MSE >= ridge_metrics$Mean_variance),
-  max(abs(ridge_metrics$Mean_MSE - ridge_metrics$Monte_Carlo_MSE)) < 0.03
+  max(abs(ridge_metrics$Mean_MSE - ridge_metrics$Monte_Carlo_MSE) /
+        ridge_metrics$Mean_MSE) < 0.1
 )
 ```
 
