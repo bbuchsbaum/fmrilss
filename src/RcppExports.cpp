@@ -11,6 +11,114 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// glms_frac_alpha_grid
+NumericMatrix glms_frac_alpha_grid(const NumericMatrix& newlen, const NumericVector& grid, const NumericVector& fracs, int n_threads);
+RcppExport SEXP _fmrilss_glms_frac_alpha_grid(SEXP newlenSEXP, SEXP gridSEXP, SEXP fracsSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type newlen(newlenSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type grid(gridSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type fracs(fracsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(glms_frac_alpha_grid(newlen, grid, fracs, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// glms_frac_alpha_exact
+NumericMatrix glms_frac_alpha_exact(const NumericMatrix& a2, const NumericVector& s2, const NumericVector& fracs, int n_threads);
+RcppExport SEXP _fmrilss_glms_frac_alpha_exact(SEXP a2SEXP, SEXP s2SEXP, SEXP fracsSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type a2(a2SEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type s2(s2SEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type fracs(fracsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(glms_frac_alpha_exact(a2, s2, fracs, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// glms_frac_cv_loss
+arma::mat glms_frac_cv_loss(const Rcpp::List& Vu, const Rcpp::List& s2, const Rcpp::List& a, const arma::ivec& row_offset, const arma::mat& alphas, const arma::mat& mu, const arma::mat& isd, const arma::ivec& sess, const arma::vec& d, const arma::mat& M, const arma::rowvec& cst, int n_threads);
+RcppExport SEXP _fmrilss_glms_frac_cv_loss(SEXP VuSEXP, SEXP s2SEXP, SEXP aSEXP, SEXP row_offsetSEXP, SEXP alphasSEXP, SEXP muSEXP, SEXP isdSEXP, SEXP sessSEXP, SEXP dSEXP, SEXP MSEXP, SEXP cstSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type Vu(VuSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type s2(s2SEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type a(aSEXP);
+    Rcpp::traits::input_parameter< const arma::ivec& >::type row_offset(row_offsetSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type alphas(alphasSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type isd(isdSEXP);
+    Rcpp::traits::input_parameter< const arma::ivec& >::type sess(sessSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type d(dSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type M(MSEXP);
+    Rcpp::traits::input_parameter< const arma::rowvec& >::type cst(cstSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(glms_frac_cv_loss(Vu, s2, a, row_offset, alphas, mu, isd, sess, d, M, cst, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// glms_col_mean_ss
+Rcpp::List glms_col_mean_ss(const arma::mat& Y, int n_threads);
+RcppExport SEXP _fmrilss_glms_col_mean_ss(SEXP YSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(glms_col_mean_ss(Y, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// glms_scale_cols
+arma::mat glms_scale_cols(const arma::mat& B, const arma::vec& w, int n_threads);
+RcppExport SEXP _fmrilss_glms_scale_cols(SEXP BSEXP, SEXP wSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type B(BSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type w(wSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(glms_scale_cols(B, w, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// glms_cv_compile
+Rcpp::List glms_cv_compile(const arma::mat& ref, const arma::ivec& session, const arma::ivec& run, const Rcpp::List& cond_trials, const arma::umat& test_runs);
+RcppExport SEXP _fmrilss_glms_cv_compile(SEXP refSEXP, SEXP sessionSEXP, SEXP runSEXP, SEXP cond_trialsSEXP, SEXP test_runsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type ref(refSEXP);
+    Rcpp::traits::input_parameter< const arma::ivec& >::type session(sessionSEXP);
+    Rcpp::traits::input_parameter< const arma::ivec& >::type run(runSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type cond_trials(cond_trialsSEXP);
+    Rcpp::traits::input_parameter< const arma::umat& >::type test_runs(test_runsSEXP);
+    rcpp_result_gen = Rcpp::wrap(glms_cv_compile(ref, session, run, cond_trials, test_runs));
+    return rcpp_result_gen;
+END_RCPP
+}
+// glms_cv_loss_cpp
+arma::rowvec glms_cv_loss_cpp(const arma::mat& cand, const arma::mat& mu, const arma::mat& isd, const arma::ivec& sess, const arma::vec& d, const arma::mat& M, const arma::rowvec& cst, int n_threads);
+RcppExport SEXP _fmrilss_glms_cv_loss_cpp(SEXP candSEXP, SEXP muSEXP, SEXP isdSEXP, SEXP sessSEXP, SEXP dSEXP, SEXP MSEXP, SEXP cstSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type cand(candSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type isd(isdSEXP);
+    Rcpp::traits::input_parameter< const arma::ivec& >::type sess(sessSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type d(dSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type M(MSEXP);
+    Rcpp::traits::input_parameter< const arma::rowvec& >::type cst(cstSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(glms_cv_loss_cpp(cand, mu, isd, sess, d, M, cst, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // compute_residuals_cpp
 List compute_residuals_cpp(const arma::mat& X, const arma::mat& Y, const arma::mat& C);
 RcppExport SEXP _fmrilss_compute_residuals_cpp(SEXP XSEXP, SEXP YSEXP, SEXP CSEXP) {
@@ -323,6 +431,13 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_fmrilss_glms_frac_alpha_grid", (DL_FUNC) &_fmrilss_glms_frac_alpha_grid, 4},
+    {"_fmrilss_glms_frac_alpha_exact", (DL_FUNC) &_fmrilss_glms_frac_alpha_exact, 4},
+    {"_fmrilss_glms_frac_cv_loss", (DL_FUNC) &_fmrilss_glms_frac_cv_loss, 12},
+    {"_fmrilss_glms_col_mean_ss", (DL_FUNC) &_fmrilss_glms_col_mean_ss, 2},
+    {"_fmrilss_glms_scale_cols", (DL_FUNC) &_fmrilss_glms_scale_cols, 3},
+    {"_fmrilss_glms_cv_compile", (DL_FUNC) &_fmrilss_glms_cv_compile, 5},
+    {"_fmrilss_glms_cv_loss_cpp", (DL_FUNC) &_fmrilss_glms_cv_loss_cpp, 8},
     {"_fmrilss_compute_residuals_cpp", (DL_FUNC) &_fmrilss_compute_residuals_cpp, 3},
     {"_fmrilss_lss_compute_cpp", (DL_FUNC) &_fmrilss_lss_compute_cpp, 2},
     {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 4},

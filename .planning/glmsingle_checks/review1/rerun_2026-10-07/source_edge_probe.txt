@@ -1,0 +1,10 @@
+{
+  "output": "/tmp/claude-0/-home-user-fmrilss/d1f608ac-bd59-5230-9cf6-2da9a238738f/scratchpad/bundle/glmsingle_due_diligence/tmp/glmsingle/due_diligence/source_edge_results.json",
+  "checks": {
+    "nuisance_rank_policy_difference": true,
+    "collinear_task_raises": true,
+    "corrected_score_agrees": true,
+    "actual_library_has_twenty_hrfs": true,
+    "constant_autoscale_corner_case": true
+  }
+}

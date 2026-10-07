@@ -1,0 +1,358 @@
+{
+ "tr": 1.0,
+ "stimdur": 3.0,
+ "arrays": {
+  "design_run1": {
+   "file": "design_run1.bin.gz",
+   "shape": [
+    100,
+    17
+   ]
+  },
+  "data_run1": {
+   "file": "data_run1.bin.gz",
+   "shape": [
+    64,
+    100
+   ]
+  },
+  "design_run2": {
+   "file": "design_run2.bin.gz",
+   "shape": [
+    100,
+    17
+   ]
+  },
+  "data_run2": {
+   "file": "data_run2.bin.gz",
+   "shape": [
+    64,
+    100
+   ]
+  },
+  "design_run3": {
+   "file": "design_run3.bin.gz",
+   "shape": [
+    100,
+    17
+   ]
+  },
+  "data_run3": {
+   "file": "data_run3.bin.gz",
+   "shape": [
+    64,
+    100
+   ]
+  },
+  "design_run4": {
+   "file": "design_run4.bin.gz",
+   "shape": [
+    100,
+    17
+   ]
+  },
+  "data_run4": {
+   "file": "data_run4.bin.gz",
+   "shape": [
+    64,
+    100
+   ]
+  },
+  "upstream_typea_onoffR2": {
+   "file": "upstream_typea_onoffR2.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typea_meanvol": {
+   "file": "upstream_typea_meanvol.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typea_betasmd": {
+   "file": "upstream_typea_betasmd.bin.gz",
+   "shape": [
+    64,
+    1
+   ]
+  },
+  "upstream_typeb_FitHRFR2": {
+   "file": "upstream_typeb_FitHRFR2.bin.gz",
+   "shape": [
+    64,
+    20
+   ]
+  },
+  "upstream_typeb_FitHRFR2run": {
+   "file": "upstream_typeb_FitHRFR2run.bin.gz",
+   "shape": [
+    64,
+    4,
+    20
+   ]
+  },
+  "upstream_typeb_HRFindex": {
+   "file": "upstream_typeb_HRFindex.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typeb_HRFindexrun": {
+   "file": "upstream_typeb_HRFindexrun.bin.gz",
+   "shape": [
+    64,
+    4
+   ]
+  },
+  "upstream_typeb_R2": {
+   "file": "upstream_typeb_R2.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typeb_R2run": {
+   "file": "upstream_typeb_R2run.bin.gz",
+   "shape": [
+    64,
+    4
+   ]
+  },
+  "upstream_typeb_betasmd": {
+   "file": "upstream_typeb_betasmd.bin.gz",
+   "shape": [
+    64,
+    86
+   ]
+  },
+  "upstream_typeb_meanvol": {
+   "file": "upstream_typea_meanvol.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typec_HRFindex": {
+   "file": "upstream_typeb_HRFindex.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typec_HRFindexrun": {
+   "file": "upstream_typeb_HRFindexrun.bin.gz",
+   "shape": [
+    64,
+    4
+   ]
+  },
+  "upstream_typec_glmbadness": {
+   "file": "upstream_typec_glmbadness.bin.gz",
+   "shape": [
+    64,
+    11
+   ]
+  },
+  "upstream_typec_pcvoxels": {
+   "file": "upstream_typec_pcvoxels.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typec_pcnum": {
+   "file": "upstream_typec_pcnum.bin.gz",
+   "shape": [
+    1
+   ]
+  },
+  "upstream_typec_xvaltrend": {
+   "file": "upstream_typec_xvaltrend.bin.gz",
+   "shape": [
+    11
+   ]
+  },
+  "upstream_typec_noisepool": {
+   "file": "upstream_typec_noisepool.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typec_pcregressors_run1": {
+   "file": "upstream_typec_pcregressors_run1.bin.gz",
+   "shape": [
+    100,
+    11
+   ]
+  },
+  "upstream_typec_pcregressors_run2": {
+   "file": "upstream_typec_pcregressors_run2.bin.gz",
+   "shape": [
+    100,
+    11
+   ]
+  },
+  "upstream_typec_pcregressors_run3": {
+   "file": "upstream_typec_pcregressors_run3.bin.gz",
+   "shape": [
+    100,
+    11
+   ]
+  },
+  "upstream_typec_pcregressors_run4": {
+   "file": "upstream_typec_pcregressors_run4.bin.gz",
+   "shape": [
+    100,
+    11
+   ]
+  },
+  "upstream_typec_betasmd": {
+   "file": "upstream_typec_betasmd.bin.gz",
+   "shape": [
+    64,
+    86
+   ]
+  },
+  "upstream_typec_R2": {
+   "file": "upstream_typec_R2.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typec_R2run": {
+   "file": "upstream_typec_R2run.bin.gz",
+   "shape": [
+    64,
+    4
+   ]
+  },
+  "upstream_typec_meanvol": {
+   "file": "upstream_typea_meanvol.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typed_HRFindex": {
+   "file": "upstream_typeb_HRFindex.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typed_HRFindexrun": {
+   "file": "upstream_typeb_HRFindexrun.bin.gz",
+   "shape": [
+    64,
+    4
+   ]
+  },
+  "upstream_typed_glmbadness": {
+   "file": "upstream_typec_glmbadness.bin.gz",
+   "shape": [
+    64,
+    11
+   ]
+  },
+  "upstream_typed_pcvoxels": {
+   "file": "upstream_typec_pcvoxels.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typed_pcnum": {
+   "file": "upstream_typec_pcnum.bin.gz",
+   "shape": [
+    1
+   ]
+  },
+  "upstream_typed_xvaltrend": {
+   "file": "upstream_typec_xvaltrend.bin.gz",
+   "shape": [
+    11
+   ]
+  },
+  "upstream_typed_noisepool": {
+   "file": "upstream_typec_noisepool.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typed_pcregressors_run1": {
+   "file": "upstream_typec_pcregressors_run1.bin.gz",
+   "shape": [
+    100,
+    11
+   ]
+  },
+  "upstream_typed_pcregressors_run2": {
+   "file": "upstream_typec_pcregressors_run2.bin.gz",
+   "shape": [
+    100,
+    11
+   ]
+  },
+  "upstream_typed_pcregressors_run3": {
+   "file": "upstream_typec_pcregressors_run3.bin.gz",
+   "shape": [
+    100,
+    11
+   ]
+  },
+  "upstream_typed_pcregressors_run4": {
+   "file": "upstream_typec_pcregressors_run4.bin.gz",
+   "shape": [
+    100,
+    11
+   ]
+  },
+  "upstream_typed_betasmd": {
+   "file": "upstream_typed_betasmd.bin.gz",
+   "shape": [
+    64,
+    86
+   ]
+  },
+  "upstream_typed_R2": {
+   "file": "upstream_typed_R2.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typed_R2run": {
+   "file": "upstream_typed_R2run.bin.gz",
+   "shape": [
+    64,
+    4
+   ]
+  },
+  "upstream_typed_rrbadness": {
+   "file": "upstream_typed_rrbadness.bin.gz",
+   "shape": [
+    64,
+    20
+   ]
+  },
+  "upstream_typed_FRACvalue": {
+   "file": "upstream_typed_FRACvalue.bin.gz",
+   "shape": [
+    64
+   ]
+  },
+  "upstream_typed_scaleoffset": {
+   "file": "upstream_typed_scaleoffset.bin.gz",
+   "shape": [
+    64,
+    2
+   ]
+  },
+  "upstream_typed_meanvol": {
+   "file": "upstream_typea_meanvol.bin.gz",
+   "shape": [
+    64
+   ]
+  }
+ },
+ "variants": [
+  "upstream"
+ ],
+ "params": {
+  "brainR2": 5.0,
+  "pcR2cutoff": 5.0
+ }
+}

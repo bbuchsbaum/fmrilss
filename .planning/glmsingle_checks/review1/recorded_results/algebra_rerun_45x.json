@@ -1,0 +1,24 @@
+{
+  "dimensions": {
+    "runs": 6,
+    "T_per_run": 220,
+    "N_per_run": 50,
+    "voxels": 128,
+    "fractions": 20,
+    "nuisance_rank": 5
+  },
+  "pooled_fraction_lambda_relative_error": 7.930929399025487e-16,
+  "pooled_fraction_betas_max_relative_error": 2.903304025822953e-15,
+  "kernel_timing_seconds": {
+    "repeated_dense_global_gram_svd": 0.3732140680003795,
+    "cached_local_gram_svd": 0.008185692999177263,
+    "ratio": 45.59346020402804,
+    "repetitions": 3,
+    "statistic": "median"
+  },
+  "timed_outputs_max_relative_error": 3.187567400340093e-15,
+  "banded_nuisance_relative_error": 3.8697418693672964e-16,
+  "event_gram_half_bandwidth": 9,
+  "nested_nuisance_relative_error": 4.1283106648171414e-16,
+  "profile_gradient_relative_error": 6.853245199595002e-11
+}

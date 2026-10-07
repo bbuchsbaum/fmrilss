@@ -1,0 +1,246 @@
+{
+  "benchmark": "PC-prefix coefficient kernel; not GLMsingle end to end",
+  "seed": 423,
+  "rng": "numpy.random.default_rng (PCG64)",
+  "dtype": "float64",
+  "blas_threads_requested": 1,
+  "warmup_calls_per_timed_function": 1,
+  "timing_repetitions": 7,
+  "timing_clock": "time.perf_counter",
+  "software": {
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "numpy": "2.3.5",
+    "scipy": "1.17.0",
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "threadpools": [
+      {
+        "user_api": "blas",
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libscipy_openblas",
+        "filepath": "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-fdde5778.so",
+        "version": "0.3.30",
+        "threading_layer": "pthreads",
+        "architecture": "SkylakeX"
+      },
+      {
+        "user_api": "blas",
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libscipy_openblas",
+        "filepath": "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-6cdc3b4a.so",
+        "version": "0.3.30",
+        "threading_layer": "pthreads",
+        "architecture": "SkylakeX"
+      }
+    ]
+  },
+  "geometry": {
+    "T": 226,
+    "n_trials": 63,
+    "n_candidate_PCs": 10,
+    "n_prefixes_including_zero": 11,
+    "event_spacing_TRs": 3,
+    "polynomial_degrees": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "hrf_support_samples": 40,
+    "hrf_exact_nonzeros": 39,
+    "hrf_library_candidate_zero_based": 10,
+    "tr_seconds": 1.3333333333333333,
+    "stimulus_duration_seconds": 3,
+    "hrf_float64_little_endian_sha256": "5e7b26368e703e6ecd755bf467b669cb7e2681722f74b770db572d6a22c0ed8f",
+    "pc_construction": "iid N(0,1) columns, polynomial-residualized, QR-orthonormalized",
+    "condition_number_G": 992.1818840249413,
+    "min_schur_denominator": 0.6836054420269411
+  },
+  "timed_operations": {
+    "shared_projection": "Compute D.T@Y and PC.T@Y; reported separately.",
+    "fresh_cached_cholesky": "Increment RHS by rank one, then cached Cholesky solve at each prefix; materialize all prefix betas.",
+    "incremental_beta": "Initial cached solve; then exact rank-one beta updates; materialize all prefix betas.",
+    "batched_prefix_maps": "Stack b and u; one precompiled-map GEMM; materialize all prefix betas."
+  },
+  "excluded_operations": [
+    "HRF/design construction",
+    "polynomial/PC basis construction",
+    "all Cholesky factorizations",
+    "all prefix-map construction",
+    "noise-pool selection and PCA",
+    "repeat-CV loss evaluation",
+    "HRF selection",
+    "fractional-ridge selection",
+    "disk input/output",
+    "initial shared projection from prefix timings (timed separately)"
+  ],
+  "comparison_reference": "Fresh cached-Cholesky prefix solutions for identical G, b, PCs; not Python GLMsingle.",
+  "cases": [
+    {
+      "Y_shape": [
+        226,
+        1024
+      ],
+      "Y_layout": "Fortran contiguous",
+      "output_shape": [
+        11,
+        63,
+        1024
+      ],
+      "output_bytes_per_method": 5677056,
+      "shared_projection": {
+        "median_seconds": 0.0010407780000605271,
+        "samples_seconds": [
+          0.001158555000074557,
+          0.0010147689999939757,
+          0.0010407780000605271,
+          0.0010059459991680342,
+          0.0008901109995349543,
+          0.0017816440004025935,
+          0.0011843140000564745
+        ]
+      },
+      "prefix_timings": {
+        "fresh_cached_cholesky": {
+          "median_seconds": 0.012729067999316612,
+          "samples_seconds": [
+            0.012862007999501657,
+            0.01062876400010282,
+            0.010869465999348904,
+            0.017964525999559555,
+            0.018038066000372055,
+            0.01206754099985119,
+            0.012729067999316612
+          ]
+        },
+        "incremental_beta": {
+          "median_seconds": 0.003098037000199838,
+          "samples_seconds": [
+            0.0023748180001348373,
+            0.003449847999945632,
+            0.0022367199999280274,
+            0.0028130179998697713,
+            0.003098037000199838,
+            0.003812493999248545,
+            0.004169322000052489
+          ]
+        },
+        "batched_prefix_maps": {
+          "median_seconds": 0.0029012210006840178,
+          "samples_seconds": [
+            0.0076584080006796285,
+            0.002451242999995884,
+            0.0022899200002939324,
+            0.00459221900018747,
+            0.0029012210006840178,
+            0.004500240000197664,
+            0.0026292910006304737
+          ]
+        }
+      },
+      "errors": {
+        "fresh_cached_cholesky": {
+          "relative_frobenius_error": 0.0,
+          "maximum_absolute_error": 0.0
+        },
+        "incremental_beta": {
+          "relative_frobenius_error": 1.17201854450626e-14,
+          "maximum_absolute_error": 2.4513724383723456e-13
+        },
+        "batched_prefix_maps": {
+          "relative_frobenius_error": 7.1238135580871e-15,
+          "maximum_absolute_error": 1.1862733018119798e-13
+        }
+      },
+      "kernel_speedups_vs_fresh_cached_cholesky": {
+        "fresh_cached_cholesky": 1.0,
+        "incremental_beta": 4.108752735521082,
+        "batched_prefix_maps": 4.387486508720119
+      }
+    },
+    {
+      "Y_shape": [
+        226,
+        8192
+      ],
+      "Y_layout": "Fortran contiguous",
+      "output_shape": [
+        11,
+        63,
+        8192
+      ],
+      "output_bytes_per_method": 45416448,
+      "shared_projection": {
+        "median_seconds": 0.010253548000036972,
+        "samples_seconds": [
+          0.009502136999799404,
+          0.008809042000393674,
+          0.011691374000292853,
+          0.008915883000554459,
+          0.013050642000052903,
+          0.010383773999819823,
+          0.010253548000036972
+        ]
+      },
+      "prefix_timings": {
+        "fresh_cached_cholesky": {
+          "median_seconds": 0.09716532099992037,
+          "samples_seconds": [
+            0.11390653400030715,
+            0.1094415769994157,
+            0.09716532099992037,
+            0.09652004999952624,
+            0.09157986599984724,
+            0.09239189900017664,
+            0.11211069799992401
+          ]
+        },
+        "incremental_beta": {
+          "median_seconds": 0.0290563270000348,
+          "samples_seconds": [
+            0.02701332899960107,
+            0.02931166199959989,
+            0.0290563270000348,
+            0.028879018999759865,
+            0.028761111999301647,
+            0.029784874000142736,
+            0.030455245000666764
+          ]
+        },
+        "batched_prefix_maps": {
+          "median_seconds": 0.03219390399954136,
+          "samples_seconds": [
+            0.031968235000022105,
+            0.03231725900059246,
+            0.03366208599982201,
+            0.029461728000569565,
+            0.03098335100003169,
+            0.03434671699960745,
+            0.03219390399954136
+          ]
+        }
+      },
+      "errors": {
+        "fresh_cached_cholesky": {
+          "relative_frobenius_error": 0.0,
+          "maximum_absolute_error": 0.0
+        },
+        "incremental_beta": {
+          "relative_frobenius_error": 1.1823439229656883e-14,
+          "maximum_absolute_error": 3.0375701953744283e-13
+        },
+        "batched_prefix_maps": {
+          "relative_frobenius_error": 7.298624234671066e-15,
+          "maximum_absolute_error": 1.4344081478157023e-13
+        }
+      },
+      "kernel_speedups_vs_fresh_cached_cholesky": {
+        "fresh_cached_cholesky": 1.0,
+        "incremental_beta": 3.344033160137687,
+        "batched_prefix_maps": 3.0181279350682226
+      }
+    }
+  ]
+}

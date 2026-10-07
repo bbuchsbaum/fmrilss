@@ -1,0 +1,42 @@
+{
+ "pinned_commit": "1ab54a65edd3ea41a6133d4b4ecb78a9c7296684",
+ "scenarios": {
+  "defaults": [
+   "upstream"
+  ],
+  "extras": [
+   "fmrilss",
+   "upstream"
+  ],
+  "extras_pc0": [
+   "fmrilss",
+   "upstream"
+  ],
+  "sessions": [
+   "upstream"
+  ],
+  "unequal": [
+   "upstream"
+  ],
+  "unrepeated": [
+   "upstream"
+  ],
+  "fast_events": [
+   "upstream"
+  ],
+  "collinear_extras": [
+   "fmrilss",
+   "upstream"
+  ],
+  "zero_voxel": [
+   "fmrilss",
+   "upstream"
+  ],
+  "single_frac": [
+   "upstream"
+  ],
+  "no_library": [
+   "upstream"
+  ]
+ }
+}

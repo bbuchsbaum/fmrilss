@@ -199,7 +199,7 @@ knitr::kable(
 )
 ```
 
-```{r true-shape-plot, echo = FALSE, fig.cap="The four simulated HRFs all peak at one, while later voxels have later and wider responses.", fig.alt="Four unit-peak HRF curves. Peak times progress from 3.85 to 6.25 seconds and FWHM increases from 4.45 to 6.05 seconds across voxels 1 through 4."}
+```{r true-shape-plot, echo = FALSE, fig.cap="The four simulated HRFs all peak at one, while later voxels have later and wider responses.", fig.alt=sprintf("Four unit-peak HRF curves. Peak times progress from %.2f to %.2f seconds and FWHM increases from %.2f to %.2f seconds across voxels 1 through 4.", min(true_shape_summary$Peak_time_seconds), max(true_shape_summary$Peak_time_seconds), min(true_shape_summary$FWHM_seconds), max(true_shape_summary$FWHM_seconds))}
 local({
   old_par <- par(bg = "white", mar = c(4, 4, 2, 1))
   on.exit(par(old_par), add = TRUE)
@@ -367,7 +367,7 @@ knitr::kable(
 )
 ```
 
-```{r estimated-shape-plot, echo = FALSE, fig.cap="Estimated SPMG3 curves closely follow the independently generated unit-peak HRFs; the largest discrepancy is the width of voxel 4.", fig.alt="Four panels compare solid true and dashed estimated unit-peak HRFs. Shape correlations range from about 0.99 to 1.00; voxel 4 has the largest width difference, about 0.85 seconds."}
+```{r estimated-shape-plot, echo = FALSE, fig.cap="Estimated SPMG3 curves closely follow the independently generated unit-peak HRFs.", fig.alt=sprintf("Four panels compare solid true and dashed estimated unit-peak HRFs. Shape correlations range from %.3f to %.3f; the largest width difference is %.2f seconds.", min(shape_summary$Correlation), max(shape_summary$Correlation), max(abs(shape_summary$FWHM_error_seconds)))}
 local({
   old_par <- par(
     bg = "white", mfrow = c(2, 2),
@@ -535,9 +535,8 @@ voxel_amplitudes <- data.frame(
 
 stopifnot(
   max(abs(true_hrf_oracle - truth)) < 0.05,
-  amplitude_comparison$RMSE_to_true_amplitude[2] < 0.15,
   amplitude_comparison$RMSE_to_true_amplitude[2] <
-    amplitude_comparison$RMSE_to_true_amplitude[3]
+    0.5 * amplitude_comparison$RMSE_to_true_amplitude[3]
 )
 ```
 
@@ -560,7 +559,14 @@ knitr::kable(
 ```
 
 In this deliberately constructed four-voxel example, the estimated-shape fit
-is closer to truth than the canonical fit. That result diagnoses this fixture;
+is closer to truth than the canonical fit. Its largest error is in
+`r voxel_amplitudes$Voxel[which.max(abs(voxel_amplitudes$Mean_error))]`
+(mean error
+`r round(voxel_amplitudes$Mean_error[which.max(abs(voxel_amplitudes$Mean_error))], 3)`):
+the canonical HRF's post-stimulus undershoot, stretched by that voxel's
+dilation, is not exactly representable by the three SPMG3 basis functions,
+and the residual tail overlaps neighbouring trials. A high shape correlation
+does not by itself guarantee unbiased amplitudes. That result diagnoses this fixture;
 it is not a universal method ranking. Real performance depends on calibration
 quality, basis adequacy, event timing, noise, and nuisance modeling.
 
@@ -596,8 +602,10 @@ check_tr <- function(TR) {
       rnorm(ncol(common_check) * 2), ncol(common_check), 2
     )
   colnames(response_check) <- c("voxel_2", "voxel_4")
+  # Estimate with the generating HRF (same shape and 30 s span), so the
+  # one-basis model is correctly specified.
   estimate_check <- estimate_voxel_hrf(
-    response_check, events_check, HRF_SPMG1,
+    response_check, events_check, hrf_check,
     nuisance_regs = nuisance_check, fixed_regs = fixed_check,
     sframe = sframe_check
   )

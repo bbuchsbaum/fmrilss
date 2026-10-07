@@ -17,3 +17,4 @@ vignettes/*.html
 !vignettes/albers-header.html
 vignettes/*.R
 vignettes/.build.timestamp
+__pycache__/

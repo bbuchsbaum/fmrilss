@@ -1,0 +1,59 @@
+{
+  "results": "/tmp/claude-0/-home-user-fmrilss/d1f608ac-bd59-5230-9cf6-2da9a238738f/scratchpad/bundle/glmsingle_due_diligence/tmp/glmsingle/due_diligence/pc_prefix_results.json",
+  "summary": [
+    {
+      "V": 1024,
+      "prefix_median_seconds": {
+        "fresh_cached_cholesky": 0.02211228199999482,
+        "incremental_beta": 0.0037115869999979623,
+        "batched_prefix_maps": 0.0025693310000178826
+      },
+      "speedups": {
+        "fresh_cached_cholesky": 1.0,
+        "incremental_beta": 5.957635372687468,
+        "batched_prefix_maps": 8.606241079814518
+      },
+      "errors": {
+        "fresh_cached_cholesky": {
+          "relative_frobenius_error": 0.0,
+          "maximum_absolute_error": 0.0
+        },
+        "incremental_beta": {
+          "relative_frobenius_error": 1.6676512520745964e-14,
+          "maximum_absolute_error": 2.6645352591003757e-13
+        },
+        "batched_prefix_maps": {
+          "relative_frobenius_error": 7.149011854056983e-15,
+          "maximum_absolute_error": 1.389999226830696e-13
+        }
+      }
+    },
+    {
+      "V": 8192,
+      "prefix_median_seconds": {
+        "fresh_cached_cholesky": 0.25014924399999927,
+        "incremental_beta": 0.06321776900000486,
+        "batched_prefix_maps": 0.05158652800000141
+      },
+      "speedups": {
+        "fresh_cached_cholesky": 1.0,
+        "incremental_beta": 3.956945143065394,
+        "batched_prefix_maps": 4.84911959959764
+      },
+      "errors": {
+        "fresh_cached_cholesky": {
+          "relative_frobenius_error": 0.0,
+          "maximum_absolute_error": 0.0
+        },
+        "incremental_beta": {
+          "relative_frobenius_error": 1.6416061115562755e-14,
+          "maximum_absolute_error": 3.1441516057384433e-13
+        },
+        "batched_prefix_maps": {
+          "relative_frobenius_error": 7.332234730449205e-15,
+          "maximum_absolute_error": 1.5709655798445965e-13
+        }
+      }
+    }
+  ]
+}

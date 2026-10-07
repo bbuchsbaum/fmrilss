@@ -1,0 +1,7 @@
+block vs global fracridge coef rel err: 8.401110450480539e-13
+block vs global alpha rel err: 5.796846214193205e-13
+fracridge grid-interp alpha vs exact root: median |log ratio| = 0.0115, max = 0.0397
+fracridge achieved-vs-requested frac max abs err: 0.00599
+compiled calcbadness rel err: 2.694039415675863e-16  trials used: 70 / 72
+compiled calcbadness rel err: 2.780526069794868e-16  trials used: 70 / 72
+{"zero_sd_case": {"upstream_cv_scores": [[0.0, 2.0]], "naive_zero_all_candidates_cv_scores": [[0.0, 0.0]], "sd_after_actual_zerodiv": [1.0], "explanation": "zerodiv aliases tmp=y and replaces zero divisors by1 in-place. The baseline residual is0, but later candidates use divisor1, so they are not all set to0."}}
