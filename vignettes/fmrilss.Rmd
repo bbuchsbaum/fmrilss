@@ -233,16 +233,18 @@ Repeating the three-part model for every trial reduces this competition among
 individual trial columns, but it does not make a poor or rank-deficient design
 informative.
 
-```{r beta-heatmap, echo=FALSE, fig.cap="Estimated single-trial responses for the eight simulated voxels. Red is negative and blue is positive; deeper colour indicates larger magnitude, not statistical significance.", fig.alt="Heatmap with 24 trial rows and 8 voxel columns. Dark red cells are strongly negative and dark blue cells are strongly positive."}
+```{r beta-heatmap, echo=FALSE, fig.cap="Estimated single-trial responses for the eight simulated voxels. Red is positive, blue is negative, and white is zero; deeper colour indicates larger magnitude, not statistical significance.", fig.alt="Heatmap with 24 trial rows and 8 voxel columns on a colour scale centred at zero. Dark red cells are strongly positive and dark blue cells are strongly negative."}
 op <- par(mar = c(4, 4, 1, 1), bg = "white")
+beta_limit <- max(abs(beta_lss))
 image(
   x = seq_len(ncol(beta_lss)),
   y = seq_len(nrow(beta_lss)),
   z = t(beta_lss),
+  zlim = c(-beta_limit, beta_limit),
   axes = FALSE,
   xlab = "Voxel",
   ylab = "Trial",
-  col = hcl.colors(31, "Blue-Red 3", rev = TRUE)
+  col = hcl.colors(31, "Blue-Red 3")
 )
 axis(1, at = seq_len(ncol(beta_lss)), labels = colnames(beta_lss), las = 2, cex.axis = 0.7)
 axis(2, at = c(1, 6, 12, 18, 24), labels = c(1, 6, 12, 18, 24), las = 1)

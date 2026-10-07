@@ -92,9 +92,9 @@ knitr::kable(
 ```
 
 Calling `oasis_options()` with no arguments gives a penalized fit, so it does
-not reproduce an unpenalized LSS backend exactly. Likewise, `return_se = TRUE`
-is intentionally unavailable when the fit uses ridge, estimated prewhitening,
-HRF-grid selection, or voxel-adaptive HRFs.
+not reproduce an unpenalized LSS backend exactly. When standard errors are
+available is covered in
+[Standard errors](#standard-errors-require-the-unpenalized-fixed-design-model).
 
 ## Build a two-condition example
 
@@ -556,6 +556,12 @@ stopifnot(
 
 ## Standard errors require the unpenalized fixed-design model
 
+`return_se = TRUE` is available only for an unpenalized fit
+(`ridge_x = ridge_b = 0`) with a full-rank trial model and a fixed design. It
+raises an error instead of returning SEs when the fit uses ridge, estimated
+prewhitening, HRF-grid selection, or voxel-adaptive HRFs, because none of these
+has calibrated model-based uncertainty in OASIS.
+
 To check the SEs against a known answer, the example generates data that
 exactly satisfy each trial's LSS model: all target trials share a common
 coefficient vector, condition B and `Z` are in the fitted common span, and the
@@ -631,7 +637,7 @@ These SEs are model-based, conditional on the design, and on the coefficient
 scale. They assume spherical temporal errors (uncorrelated, with equal
 variance) and are not robust to autocorrelation or heteroskedasticity. The
 result does not come with a multiple-testing or population-inference
-procedure, and estimated whitening cannot be combined with `return_se = TRUE`.
+procedure.
 
 ## FIR coefficients and their uncertainty
 
@@ -1031,8 +1037,9 @@ length(run_id)
 Always provide run labels when data span multiple runs so filtering does not
 cross run boundaries. `pooling = "global"` with `runs` uses one shared set of
 noise coefficients while still respecting those boundaries; `pooling = "run"`
-estimates a separate set for each run. Estimated-prewhitening uncertainty is
-not calibrated, so a whitened OASIS fit cannot also request model SEs.
+estimates a separate set for each run. A whitened fit returns coefficients
+only; see
+[Standard errors](#standard-errors-require-the-unpenalized-fixed-design-model).
 
 ## When to use OASIS
 

@@ -385,27 +385,16 @@ trials) includes trials from both runs. A run-1 trial's estimate can therefore c
 response changes. This reflects a pooled multi-run estimand (the quantity the
 model is defined to estimate), not leakage in the event convolution.
 
-The next check adds signal to run 2 only. The run-1 coefficients change in the
-single joint fit but stay the same when each run is fitted separately.
+For run-local coefficients, fit each run with its own event and baseline
+models. Each run's fit numbers its trials from 1, so before combining rows,
+restore the global event identifiers in both the row names and the trial/basis
+map. The two helpers below do exactly that: `fit_one_run()` fits one run and
+relabels its rows, and `combine_run_fits()` stacks the runs. The optional
+`global_source_columns` records each event's column in the full multi-run
+design; here it comes from the joint fit above.
 
-```{r run-pooling-contract, include = FALSE}
-Y_shifted <- Y
-Y_shifted[run_rows[[2]], ] <- Y_shifted[run_rows[[2]], ] +
-  matrix(rowSums(X_trial[run_rows[[2]], 6:10, drop = FALSE]), run_lengths[2], 1L) %*%
-  matrix(rep(20, n_voxels), 1L, n_voxels)
-
-fit_shifted <- lss_design(
-  Y_shifted,
-  emod,
-  bmodel,
-  method = "oasis",
-  oasis = oasis_options(
-    ridge_mode = "absolute", ridge_x = 0, ridge_b = 0
-  ),
-  validate = FALSE
-)
-
-fit_one_run <- function(response, run) {
+```{r run-local-fits}
+fit_one_run <- function(response, run, global_source_columns = NULL) {
   scan_start <- sum(run_lengths[seq_len(run - 1L)]) + 1L
   scan_rows <- scan_start:(scan_start + run_lengths[run] - 1L)
   events_run <- events[events$run == run, , drop = FALSE]
@@ -434,6 +423,9 @@ fit_one_run <- function(response, run) {
     ),
     validate = FALSE
   )
+
+  # Keep the run-local labels, then switch the map and row names to the
+  # global event identifiers.
   map_run <- attr(beta_run, "trial_basis_map")
   map_run$local_trial <- map_run$trial
   map_run$local_trial_name <- map_run$trial_name
@@ -445,7 +437,11 @@ fit_one_run <- function(response, run) {
   )
   map_run$trial <- map_run$global_event_id
   map_run$trial_name <- sprintf("event_%02d", map_run$global_event_id)
-  map_run$source_column <- public_design$target_columns[map_run$global_event_id]
+  map_run$source_column <- if (is.null(global_source_columns)) {
+    NA_integer_
+  } else {
+    global_source_columns[map_run$global_event_id]
+  }
   map_run$column <- global_name
   map_run$name <- global_name
   map_run$output_name <- global_name
@@ -463,11 +459,37 @@ combine_run_fits <- function(parts) {
   beta
 }
 
+joint_source_columns <- attr(fit, "trial_basis_map")$source_column
 local_fit <- combine_run_fits(lapply(seq_along(run_lengths), function(run) {
-  fit_one_run(Y, run)
+  fit_one_run(Y, run, joint_source_columns)
 }))
+attr(local_fit, "trial_basis_map")[
+  , c("output_row", "run", "local_trial", "trial", "trial_name")
+]
+```
+
+The next check adds signal to run 2 only. The run-1 coefficients change in the
+single joint fit but stay the same in the run-local fits.
+
+```{r run-pooling-contract, include = FALSE}
+Y_shifted <- Y
+Y_shifted[run_rows[[2]], ] <- Y_shifted[run_rows[[2]], ] +
+  matrix(rowSums(X_trial[run_rows[[2]], 6:10, drop = FALSE]), run_lengths[2], 1L) %*%
+  matrix(rep(20, n_voxels), 1L, n_voxels)
+
+fit_shifted <- lss_design(
+  Y_shifted,
+  emod,
+  bmodel,
+  method = "oasis",
+  oasis = oasis_options(
+    ridge_mode = "absolute", ridge_x = 0, ridge_b = 0
+  ),
+  validate = FALSE
+)
+
 local_shifted <- combine_run_fits(lapply(seq_along(run_lengths), function(run) {
-  fit_one_run(Y_shifted, run)
+  fit_one_run(Y_shifted, run, joint_source_columns)
 }))
 
 local_map <- attr(local_fit, "trial_basis_map")
@@ -503,10 +525,8 @@ knitr::kable(
 ```
 
 Use one joint call only when cross-run pooling is the LSS model you intend.
-For run-local coefficients, fit each run with its own event and baseline models,
-then restore global event identifiers in both the row names and the trial/basis
-map before combining rows, as the helper used for this check does. Run-specific
-prewhitening does not by itself change the pooled other-trial estimand.
+Run-specific prewhitening does not by itself change the pooled other-trial
+estimand.
 
 ## Identify output rows with the trial/basis map
 
