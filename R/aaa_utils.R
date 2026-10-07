@@ -15,6 +15,18 @@
   x
 }
 
+#' Are all entries of a numeric array finite?
+#'
+#' Non-allocating check; `any(!is.finite(x))` would materialize a logical
+#' array as large as the data.
+#'
+#' @keywords internal
+#' @noRd
+.all_finite <- function(x) {
+  if (is.double(x) || is.integer(x) || is.logical(x)) return(all_finite_cpp(x))
+  !any(!is.finite(x))
+}
+
 #' Validate and coerce a positive scalar integer
 #'
 #' @keywords internal

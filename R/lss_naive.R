@@ -15,6 +15,9 @@
 #'   }
 #' @param dset Optional dataset object. If provided and Y is NULL, data will be
 #'   extracted using \code{get_data_matrix}.
+#' @param trial_groups Optional vector with one condition label per trial. When
+#'   supplied, each trial model uses one summed "other trials" regressor per
+#'   group (LSS-N) instead of a single pooled regressor. See \code{\link{lss}}.
 #'
 #' @return A numeric matrix with dimensions (n_events x n_voxels) containing
 #'   the LSS beta estimates for each trial and voxel.
@@ -68,7 +71,7 @@
 #'
 #' @seealso \code{\link{lss}} for the optimized implementation
 #' @export
-lss_naive <- function(Y = NULL, bdes, dset = NULL) {
+lss_naive <- function(Y = NULL, bdes, dset = NULL, trial_groups = NULL) {
   # Data preparation
   if (is.null(Y)) {
     data_matrix <- get_data_matrix(dset)
@@ -94,6 +97,7 @@ lss_naive <- function(Y = NULL, bdes, dset = NULL) {
   dmat_ran <- as.matrix(bdes$dmat_ran)
   
   n_events <- ncol(dmat_ran)
+  groups <- .lss_group_codes(trial_groups, n_events)
   
   # Prepare baseline and fixed design matrix
   if (!is.null(dmat_fixed)) {
@@ -116,7 +120,15 @@ lss_naive <- function(Y = NULL, bdes, dset = NULL) {
   for (i in seq_len(n_events)) {
     trial_regressor <- dmat_ran_projected[, i, drop = FALSE]
 
-    if (n_events > 1) {
+    if (n_events > 1 && !is.null(groups)) {
+      # LSS-N: one summed "other trials" regressor per trial group
+      others <- vapply(seq_len(max(groups)), function(g) {
+        idx <- setdiff(which(groups == g), i)
+        rowSums(dmat_ran_projected[, idx, drop = FALSE])
+      }, numeric(n_timepoints))
+      others <- others[, colSums(others^2) > 0, drop = FALSE]
+      X_trial <- cbind(trial_regressor, others)
+    } else if (n_events > 1) {
       other_trials_indices <- setdiff(seq_len(n_events), i)
       other_trials_regressor <- rowSums(dmat_ran_projected[, other_trials_indices, drop = FALSE])
       X_trial <- cbind(trial_regressor, other_trials_regressor)

@@ -42,7 +42,7 @@
   if (nrow(Y) < 1L || ncol(Y) < 1L) {
     stop("Y must have at least one timepoint and one voxel")
   }
-  if (any(!is.finite(Y))) stop("Y contains non-finite values")
+  if (!.all_finite(Y)) stop("Y contains non-finite values")
 
   voxel_names <- .validate_or_default_names(
     colnames(Y), ncol(Y), "Voxel_", "Y column names"

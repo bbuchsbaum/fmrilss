@@ -45,6 +45,15 @@
 #' @param prewhiten A list of prewhitening options using the \pkg{fmriAR}
 #'   package, or \code{NULL} (no whitening, the default).
 #'   See Details and \code{\link{prewhiten_options}} for the full list.
+#' @param trial_groups Optional vector (character, factor, or integer) with one
+#'   condition label per trial, i.e. per column of `X`. When supplied, each
+#'   trial-wise model uses one summed "other trials" regressor per condition
+#'   (the LSS-N variant of Turner et al., 2012), with the trial of interest
+#'   removed from its own condition's regressor, instead of a single regressor
+#'   pooling every other trial. This is the model used by Nilearn's and
+#'   NiBetaSeries' LSS beta series and is more accurate when conditions evoke
+#'   different responses. Supported by methods `"r_optimized"`,
+#'   `"cpp_optimized"`, `"cpp"`, and `"naive"`. Defaults to `NULL` (classic LSS).
 #'
 #' @return Normally, a numeric matrix of trial-wise beta estimates: T × V for
 #'   a one-basis design or (T K) × V for OASIS with K basis functions. With
@@ -67,6 +76,14 @@
 #'   \item Common fixed regressors (Z matrix), whose coefficients are not returned
 #' }
 #' 
+#' \strong{Computation.} Each LSS estimate is a linear functional of the data,
+#' \eqn{\hat\beta_i = w_i^\top y}. The optimized methods build the
+#' \eqn{n \times T} weight matrix \eqn{W} from the (small) trial design and
+#' compute all trial betas with one matrix product \eqn{W^\top Y}. Because the
+#' weights lie in the residual space of the confounds, the data matrix is never
+#' residualized or copied, so the cost is a single
+#' \eqn{O(nTV)} BLAS call regardless of the number of confounds.
+#'
 #' If Nuisance regressors are provided, the rank-revealed combined span
 #' `cbind(Z, Nuisance)` is projected from both Y and X before fitting. Without a
 #' separate Nuisance matrix, Z remains explicitly in every trial-wise model.
@@ -216,6 +233,10 @@
 #' Deconvolving BOLD activation in event-related designs for multivoxel pattern
 #' classification analyses. NeuroImage, 59(3), 2636-2643.
 #'
+#' Turner, B. O., Mumford, J. A., Poldrack, R. A., & Ashby, F. G. (2012).
+#' Spatiotemporal activity estimation for multivoxel pattern analysis with
+#' rapid event-related designs. NeuroImage, 62(3), 1429-1438.
+#'
 #' @examples
 #' n_timepoints <- 100
 #' n_trials <- 10
@@ -289,9 +310,18 @@
 #' @export
 lss <- function(Y, X, Z = NULL, Nuisance = NULL,
                 method = c("r_optimized", "cpp_optimized", "r_vectorized", "cpp", "naive", "oasis", "stglmnet"),
-                block_size = 96, oasis = list(), stglmnet = list(), prewhiten = NULL) {
+                block_size = 96, oasis = list(), stglmnet = list(), prewhiten = NULL,
+                trial_groups = NULL) {
   
   method <- match.arg(method)
+
+  if (!is.null(trial_groups) && method %in% c("r_vectorized", "oasis", "stglmnet")) {
+    stop(
+      "trial_groups (LSS-N) is supported by methods 'r_optimized', ",
+      "'cpp_optimized', 'cpp', and 'naive'",
+      call. = FALSE
+    )
+  }
 
   if (!is.null(prewhiten)) {
     trusted_plan <- inherits(prewhiten, "fmrilss_internal_prewhiten")
@@ -341,7 +371,7 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   if (nrow(Y) < 1L || ncol(Y) < 1L) {
     stop("Y must have at least one timepoint and one voxel")
   }
-  if (any(!is.finite(Y))) stop("Y contains non-finite values")
+  if (!.all_finite(Y)) stop("Y contains non-finite values")
   if (!is.null(Z) && (!is.matrix(Z) || !is.numeric(Z) || nrow(Z) != nrow(Y))) {
     stop("Z must be a numeric matrix with the same number of rows as Y")
   }
@@ -367,7 +397,7 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   trial_names <- .validate_or_default_names(colnames(X), ncol(X), "Trial_", "X column names")
   voxel_names <- .validate_or_default_names(colnames(Y), ncol(Y), "Voxel_", "Y column names")
   colnames(X) <- trial_names
-  colnames(Y) <- voxel_names
+  groups <- .lss_group_codes(trial_groups, ncol(X))
   
   # Set up default experimental regressors (intercept) if not provided
   if (is.null(Z)) {
@@ -394,10 +424,18 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
     # Create full nuisance design matrix
     X_nuisance <- cbind(Z, Nuisance)
 
-    # Project out nuisance from Y and X
-    proj_result <- .project_out_nuisance(Y, X, X_nuisance)
-    Y_clean <- proj_result$Y_residual
-    X_clean <- proj_result$X_residual
+    if (method %in% c("naive", "r_vectorized")) {
+      # Reference paths operate on explicitly residualized data.
+      proj_result <- .project_out_nuisance(Y, X, X_nuisance)
+      Y_clean <- proj_result$Y_residual
+      X_clean <- proj_result$X_residual
+    } else {
+      # Weight-matrix paths: the LSS weights of residualized trial regressors
+      # lie in the nuisance residual space, so W'Y == W'(QY) and Y never
+      # needs to be projected.
+      Y_clean <- Y
+      X_clean <- .lss_residualize_trials(X, X_nuisance)
+    }
   } else {
     Y_clean <- Y
     X_clean <- X
@@ -405,11 +443,12 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
 
   # Step 3: Run LSS analysis with the chosen method
   result <- switch(method,
-    "r_optimized" = .lss_r_optimized(Y_clean, X_clean, Z),
-    "cpp_optimized" = .lss_cpp_optimized(Y_clean, X_clean, Z, block_size = block_size),
+    "r_optimized" = .lss_r_optimized(Y_clean, X_clean, Z, groups = groups),
+    "cpp_optimized" = .lss_cpp_optimized(Y_clean, X_clean, Z, block_size = block_size,
+                                         groups = groups),
     "r_vectorized" = .lss_r_vectorized(Y_clean, X_clean, Z),
-    "cpp" = .lss_cpp(Y_clean, X_clean, Z),
-    "naive" = .lss_naive(Y_clean, X_clean, Z),
+    "cpp" = .lss_cpp(Y_clean, X_clean, Z, groups = groups),
+    "naive" = .lss_naive(Y_clean, X_clean, Z, groups = groups),
     stop("Unknown method: ", method)
   )
   
@@ -444,51 +483,66 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
 
 # Helper function to check for zero or near-zero regressors
 .check_zero_regressors <- function(X, eps = 1e-12) {
-  trial_names <- if (!is.null(colnames(X))) colnames(X) else paste0("Trial_", 1:ncol(X))
-  
-  # Check each trial regressor
-  for (i in 1:ncol(X)) {
-    regressor_norm <- sqrt(sum(X[, i]^2))
-    regressor_var <- stats::var(X[, i])
-    
-    # Check for exactly zero regressor first
-    if (regressor_norm < eps) {
+  trial_names <- if (!is.null(colnames(X))) colnames(X) else paste0("Trial_", seq_len(ncol(X)))
+  n <- nrow(X)
+  regressor_norm <- sqrt(colSums(X^2))
+  regressor_var <- if (n > 1L) {
+    colSums(sweep(X, 2L, colMeans(X))^2) / (n - 1)
+  } else {
+    rep(NA_real_, ncol(X))
+  }
+
+  flagged <- which(regressor_norm < eps | (!is.na(regressor_var) & regressor_var < eps))
+  for (i in flagged) {
+    if (regressor_norm[i] < eps) {
       warning(sprintf("Trial regressor '%s' appears to be zero (norm = %g). This may cause numerical issues or NaN results.",
-                     trial_names[i], regressor_norm))
-    } else if (regressor_var < eps && regressor_norm >= eps) {
+                     trial_names[i], regressor_norm[i]))
+    } else {
       # Non-zero but constant (or nearly constant) regressor
       warning(sprintf("Trial regressor '%s' has very low variance (%g) and may cause numerical instability.",
-                     trial_names[i], regressor_var))
+                     trial_names[i], regressor_var[i]))
     }
   }
 }
 
 # Implementation functions (these will call the existing optimized functions)
-.lss_r_optimized <- function(Y, X, Z) {
-  # Create design list for compatibility with existing function
-  bdes <- list(
-    dmat_base = Z,
-    dmat_ran = X,
-    dmat_fixed = NULL,
-    fixed_ind = NULL
-  )
-  return(lss_optimized(Y, bdes, use_cpp = FALSE))
+.lss_r_optimized <- function(Y, X, Z, groups = NULL) {
+  .lss_kernel_r(Y, X, Z, groups = groups)
 }
 
-.lss_cpp_optimized <- function(Y, X, Z, block_size = 96) {
-  # This now calls the new single-pass C++ function
+.lss_cpp_optimized <- function(Y, X, Z, block_size = 96, groups = NULL) {
   block_size <- .as_positive_integer(block_size, "block_size")
-  
-  # Ensure Z (confounds) is a matrix, even if NULL or a vector
+
+  # Pass an orthonormal, rank-revealed confound basis so the C++ projection
+  # is exact even for collinear confounds.
   if (is.null(Z)) {
-    Z <- matrix(0, nrow = nrow(Y), ncol = 0)
-  } else if (!is.matrix(Z)) {
-    Z <- as.matrix(Z)
+    Zb <- matrix(0, nrow = nrow(Y), ncol = 0)
+  } else {
+    qrZ <- qr(as.matrix(Z))
+    Zb <- qr.Q(qrZ)[, seq_len(qrZ$rank), drop = FALSE]
   }
-  
+
   # X = trial regressors, Z = confounds, Y = data
   # The C++ function expects: X=confounds, Y=data, C=trials
-  lss_fused_optim_cpp(X = Z, Y = Y, C = X, block_size = block_size)
+  lss_fused_optim_cpp(X = Zb, Y = Y, C = X, block_size = block_size,
+                      groups = groups, use_omp = !.blas_is_threaded())
+}
+
+#' Does the linked BLAS run multithreaded?
+#'
+#' A single large matrix product is fastest with a multithreaded BLAS, while
+#' distributing voxel blocks across OpenMP threads is faster with the
+#' reference BLAS. Override with `options(fmrilss.blas_threaded = TRUE/FALSE)`.
+#' @keywords internal
+#' @noRd
+.blas_is_threaded <- function() {
+  opt <- getOption("fmrilss.blas_threaded")
+  if (!is.null(opt)) return(isTRUE(opt))
+  blas <- tryCatch(
+    paste(extSoftVersion()[["BLAS"]], La_library()),
+    error = function(e) ""
+  )
+  grepl("openblas|mkl|accelerate|veclib|blis|armpl", blas, ignore.case = TRUE)
 }
 
 .lss_r_vectorized <- function(Y, X, Z) {
@@ -502,8 +556,11 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   return(lss_fast(dset = NULL, bdes = bdes, Y = Y, use_cpp = FALSE))
 }
 
-.lss_cpp <- function(Y, X, Z) {
-  # Use existing lss_fast function with use_cpp = TRUE  
+.lss_cpp <- function(Y, X, Z, groups = NULL) {
+  if (!is.null(groups)) {
+    C_res <- .lss_residualize_trials(X, Z)
+    return(crossprod(lss_weight_matrix_cpp(C_res, groups), Y))
+  }
   bdes <- list(
     dmat_base = Z,
     dmat_ran = X,
@@ -513,14 +570,14 @@ lss <- function(Y, X, Z = NULL, Nuisance = NULL,
   return(lss_fast(dset = NULL, bdes = bdes, Y = Y, use_cpp = TRUE))
 }
 
-.lss_naive <- function(Y, X, Z) {
+.lss_naive <- function(Y, X, Z, groups = NULL) {
   bdes <- list(
     dmat_base = Z,
     dmat_ran = X,
     dmat_fixed = NULL,
     fixed_ind = NULL
   )
-  return(lss_naive(Y, bdes))
+  return(lss_naive(Y, bdes, trial_groups = groups))
 }
 
 #' Orthogonal Projection Matrix
@@ -638,8 +695,7 @@ lss_fast <- function(dset, bdes, Y = NULL, use_cpp = TRUE) {
   # Hot-path early exit for single event
   if (n_events == 1) {
     if (use_cpp) {
-      res <- compute_residuals_cpp(X_base_fixed, Y, dmat_ran)
-      return(lss_compute_cpp(res$Q_dmat_ran, res$residual_data))
+      return(lss_compute_cpp(.lss_residualize_trials(dmat_ran, X_base_fixed), Y))
     } else {
       # Simple regression for single event
       Q <- .Q_project(X_base_fixed)
@@ -651,8 +707,9 @@ lss_fast <- function(dset, bdes, Y = NULL, use_cpp = TRUE) {
   }
 
   if (use_cpp) {
-    res <- compute_residuals_cpp(X_base_fixed, Y, dmat_ran)
-    return(lss_compute_cpp(res$Q_dmat_ran, res$residual_data))
+    # Projected trial regressors suffice: the LSS weights lie in the confound
+    # residual space, so the data need not be residualized.
+    return(lss_compute_cpp(.lss_residualize_trials(dmat_ran, X_base_fixed), Y))
   }
 
   # --- pure R fall-back ---

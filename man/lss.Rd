@@ -14,7 +14,8 @@ lss(
   block_size = 96,
   oasis = list(),
   stglmnet = list(),
-  prewhiten = NULL
+  prewhiten = NULL,
+  trial_groups = NULL
 )
 }
 \arguments{
@@ -65,6 +66,16 @@ See Details and \code{\link{stglmnet_options}} for the common fields.}
 \item{prewhiten}{A list of prewhitening options using the \pkg{fmriAR}
 package, or \code{NULL} (no whitening, the default).
 See Details and \code{\link{prewhiten_options}} for the full list.}
+
+\item{trial_groups}{Optional vector (character, factor, or integer) with one
+condition label per trial, i.e. per column of \code{X}. When supplied, each
+trial-wise model uses one summed "other trials" regressor per condition
+(the LSS-N variant of Turner et al., 2012), with the trial of interest
+removed from its own condition's regressor, instead of a single regressor
+pooling every other trial. This is the model used by Nilearn's and
+NiBetaSeries' LSS beta series and is more accurate when conditions evoke
+different responses. Supported by methods \code{"r_optimized"},
+\code{"cpp_optimized"}, \code{"cpp"}, and \code{"naive"}. Defaults to \code{NULL} (classic LSS).}
 }
 \value{
 Normally, a numeric matrix of trial-wise beta estimates: T × V for
@@ -94,6 +105,14 @@ The LSS approach fits a separate GLM for each trial, where each model includes:
 regressor. A K-basis OASIS model uses a K-column summed block.
 \item Common fixed regressors (Z matrix), whose coefficients are not returned
 }
+
+\strong{Computation.} Each LSS estimate is a linear functional of the data,
+\eqn{\hat\beta_i = w_i^\top y}. The optimized methods build the
+\eqn{n \times T} weight matrix \eqn{W} from the (small) trial design and
+compute all trial betas with one matrix product \eqn{W^\top Y}. Because the
+weights lie in the residual space of the confounds, the data matrix is never
+residualized or copied, so the cost is a single
+\eqn{O(nTV)} BLAS call regardless of the number of confounds.
 
 If Nuisance regressors are provided, the rank-revealed combined span
 \code{cbind(Z, Nuisance)} is projected from both Y and X before fitting. Without a
@@ -314,4 +333,8 @@ standard_errors <- result_with_se$se
 Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
 Deconvolving BOLD activation in event-related designs for multivoxel pattern
 classification analyses. NeuroImage, 59(3), 2636-2643.
+
+Turner, B. O., Mumford, J. A., Poldrack, R. A., & Ashby, F. G. (2012).
+Spatiotemporal activity estimation for multivoxel pattern analysis with
+rapid event-related designs. NeuroImage, 62(3), 1429-1438.
 }

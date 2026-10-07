@@ -9,21 +9,36 @@ lss_compute_cpp <- function(C, Y) {
     .Call(`_fmrilss_lss_compute_cpp`, C, Y)
 }
 
+all_finite_cpp <- function(x) {
+    .Call(`_fmrilss_all_finite_cpp`, x)
+}
+
+lss_weight_matrix_cpp <- function(C, groups, eps = 1e-12) {
+    .Call(`_fmrilss_lss_weight_matrix_cpp`, C, groups, eps)
+}
+
 #' Fused Single-Pass LSS Solver (C++)
 #'
-#' This function computes Least Squares-Separate (LSS) beta estimates using
-#' a memory-efficient, single-pass algorithm. It fuses the projection and
-#' estimation steps, processing voxels in parallel blocks to maximize cache
-#' efficiency.
+#' Computes Least Squares-Separate (LSS) beta estimates by residualizing the
+#' trial design against the confounds, forming the n x T LSS weight matrix
+#' once, and applying it to the data with a single matrix product. The data
+#' matrix is never residualized: each weight vector already lies in the
+#' confound residual space.
 #'
-#' @param X The nuisance regressor matrix (confounds).
-#' @param Y The data matrix (e.g., fMRI data).
-#' @param C The trial-wise design matrix.
-#' @param block_size The number of voxels to process in each parallel block.
-#' @return A matrix of LSS beta estimates.
+#' @param X The confound regressor matrix (n x k).
+#' @param Y The data matrix (n x V).
+#' @param C The trial-wise design matrix (n x T).
+#' @param block_size The number of voxels per OpenMP block when
+#'   `use_omp = TRUE`.
+#' @param groups Optional 1-based integer trial group codes (LSS-N); NULL for
+#'   a single pooled "other trials" regressor.
+#' @param use_omp Logical; distribute voxel blocks across OpenMP threads.
+#'   Useful with a single-threaded BLAS. With a multithreaded BLAS a single
+#'   matrix product is faster.
+#' @return A T x V matrix of LSS beta estimates.
 #' @keywords internal
-lss_fused_optim_cpp <- function(X, Y, C, block_size = 96L) {
-    .Call(`_fmrilss_lss_fused_optim_cpp`, X, Y, C, block_size)
+lss_fused_optim_cpp <- function(X, Y, C, block_size = 96L, groups = NULL, use_omp = TRUE) {
+    .Call(`_fmrilss_lss_fused_optim_cpp`, X, Y, C, block_size, groups, use_omp)
 }
 
 lss_engine_vox_hrf_cpp <- function(Y, coeffs, basis_convolved, Z) {
