@@ -31,10 +31,10 @@ lss_design(
 
   An event_model object from
   [`fmridesign::event_model()`](https://bbuchsbaum.github.io/fmridesign/reference/event_model.html).
-  This defines the trial-wise or condition-wise task design. For LSS,
-  typically created with
+  It must contain exactly one
   [`trialwise()`](https://bbuchsbaum.github.io/fmridesign/reference/trialwise.html)
-  to generate one regressor per trial.
+  target term. Any additional condition-level event terms are included
+  as common fixed regressors.
 
 - baseline_model:
 
@@ -47,8 +47,10 @@ lss_design(
 
 - method:
 
-  LSS method to use. Currently only "oasis" is supported for event_model
-  integration.
+  LSS method to use. All methods accepted by
+  [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md) are
+  supported for a one-basis trialwise event model. Multi-basis event
+  models require `method = "oasis"`.
 
 - oasis:
 
@@ -57,8 +59,9 @@ lss_design(
   [`oasis_options`](https://bbuchsbaum.github.io/fmrilss/reference/oasis_options.md)
   and the Details section of
   [`lss`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md) for the
-  full list. Note: `design_spec` is not used when providing event_model,
-  and `oasis$whiten` is deprecated — use `prewhiten` instead.
+  full list. Note: `design_spec` must not be supplied when providing
+  event_model and is rejected at the adapter boundary; `oasis$whiten` is
+  deprecated — use `prewhiten` instead.
 
 - prewhiten:
 
@@ -73,8 +76,8 @@ lss_design(
 
 - blockids:
 
-  Optional block/run identifiers for event_model. If NULL, extracted
-  from event_model\$blockids.
+  Optional complete exact-integer block/run identifiers, one per scan.
+  If NULL, run intercepts are derived from the sampling frame.
 
 - validate:
 
@@ -87,8 +90,16 @@ lss_design(
 
 ## Value
 
-Matrix of trial-wise beta estimates (trials × voxels), or (trials ×
-basis_functions) × voxels for multi-basis HRFs.
+Normally a trial-by-voxel beta matrix, or a (trial × basis)-by-voxel
+matrix for multi-basis HRFs. When OASIS `return_diag = TRUE` or
+`return_se = TRUE`, returns `list(beta, diag?, se?)` with the
+matrix/list shapes documented in
+[`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md).
+Multi-basis rows are always trial-major with basis varying within trial.
+Adapter metadata are attached to the returned object; multi-basis beta
+and SE matrices retain the canonical `trial_basis_map`. With active
+estimated prewhitening, `attr(result, "whiten_plan")` records the fitted
+`fmriAR_plan`.
 
 ## Details
 
@@ -104,11 +115,12 @@ for LSS:
                           block = ~run,
                           sampling_frame = sframe)
 
-For factorial designs (e.g., estimating condition-level betas
-separately):
+Non-trial event terms are supported as common fixed regressors, for
+example a parametric modulator alongside the unique trialwise target
+term:
 
 
-      emod <- event_model(onset ~ hrf(condition),
+      emod <- event_model(onset ~ trialwise(basis = "spmg1") + hrf(RT),
                           data = events,
                           block = ~run,
                           sampling_frame = sframe)
@@ -124,16 +136,27 @@ If provided, baseline_model components are mapped as follows:
 **Multi-Run Handling:**
 
 Both event_model and baseline_model must use the same `sampling_frame`.
-Run structure is automatically respected. Event onsets should be
-run-relative (resetting to 0 each run) as per fmridesign convention -
-conversion to global time is handled automatically.
+Event onsets should be run-relative (resetting to 0 each run) as per
+fmridesign convention; conversion to global time and run boundaries in
+the design are handled automatically. A joint call still uses one OASIS
+other-trial aggregate across all runs, so its coefficients are cross-run
+pooled. Fit each run separately when run-local LSS coefficients are
+required.
 
 **Prewhitening:**
 
 Use the `prewhiten` parameter (not the `oasis` list) for temporal
-autocorrelation correction. For multi-run data, pass
-`prewhiten = list(method = "ar", p = 1, pooling = "run", runs = blockids)`
-so that whitening respects run boundaries. See
+autocorrelation correction. For active multi-run whitening, this adapter
+infers the scan-level run segmentation from the sampling frame. An
+explicit `prewhiten$runs` vector is allowed only when it encodes those
+same boundaries. The event model's `blockids` usually has one value per
+event and is not the required scan-level vector. Residual-autocovariance
+bias correction remains an explicit opt-in: `lss_design()` does not
+silently populate `prewhiten$design`. If supplied, it must be the
+assembled residual-forming design, including trialwise, fixed event,
+baseline, nuisance, and intercept columns as applicable. This preserves
+fmriAR's requirement that the correction design be the one that actually
+produced the residuals. See
 [`lss`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md) and
 [`prewhiten_options`](https://bbuchsbaum.github.io/fmrilss/reference/prewhiten_options.md)
 for full details.
@@ -144,8 +167,9 @@ When `validate = TRUE`, the function checks:
 
 - Temporal alignment: nrow(Y) matches total scans in sampling_frame
 
-- Collinearity: Design matrix condition number \< 30 (suppressed when
-  ridge is already configured via `oasis$ridge_x` or `oasis$ridge_b`)
+- Collinearity: emits a warning when the full assembled design has a
+  condition number above 30 and all effective ridge penalties are zero.
+  The condition number is scale-dependent and is not returned.
 
 - Compatibility: event_model and baseline_model use same sampling_frame
 
@@ -171,9 +195,6 @@ library(fmridesign)
 library(fmrihrf)
 #> 
 #> Attaching package: ‘fmrihrf’
-#> The following objects are masked from ‘package:fmridesign’:
-#> 
-#>     blockids, durations, nbasis, onsets
 #> The following object is masked from ‘package:stats’:
 #> 
 #>     deriv
@@ -206,7 +227,6 @@ bmodel <- baseline_model(
 
 Y <- matrix(rnorm(300 * 1000), 300, 1000)
 beta <- lss_design(Y, emod, bmodel, method = "oasis")
-#> Warning: High collinearity detected (condition number = 126.3). Consider ridge via oasis$ridge_*
 
 dim(beta)
 #> [1]   12 1000

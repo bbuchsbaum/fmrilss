@@ -1,11 +1,21 @@
 # Estimate Voxel-wise HRF Basis Coefficients
 
-Fits a GLM to estimate HRF basis coefficients for every voxel.
+Fits a common-amplitude GLM to estimate one pooled HRF shape for every
+voxel. The HRF basis and response are residualized against the complete
+fixed and nuisance span before fitting. Estimation fails when that span
+makes the HRF basis unidentifiable or rank deficient.
 
 ## Usage
 
 ``` r
-estimate_voxel_hrf(Y, events, basis, nuisance_regs = NULL)
+estimate_voxel_hrf(
+  Y,
+  events,
+  basis,
+  nuisance_regs = NULL,
+  sframe = NULL,
+  fixed_regs = NULL
+)
 ```
 
 ## Arguments
@@ -16,7 +26,9 @@ estimate_voxel_hrf(Y, events, basis, nuisance_regs = NULL)
 
 - events:
 
-  Data frame with `onset`, `duration` and `condition` columns.
+  Data frame with `onset`, `duration` and `condition` columns. For a
+  multi-run sampling frame, a `run` column is required and onsets are
+  physical times relative to that run.
 
 - basis:
 
@@ -24,7 +36,17 @@ estimate_voxel_hrf(Y, events, basis, nuisance_regs = NULL)
 
 - nuisance_regs:
 
-  Optional numeric matrix of nuisance regressors.
+  Optional finite numeric matrix of nuisance regressors.
+
+- sframe:
+
+  Explicit `fmrihrf` sampling frame defining scan times and TR.
+  Required; onset and duration values use its physical-time units.
+
+- fixed_regs:
+
+  Optional finite numeric matrix of fixed/common regressors. An
+  intercept is added when it is not already in their span.
 
 ## Value
 
@@ -33,8 +55,12 @@ object containing at least:
 
 - coefficients:
 
-  Matrix of HRF basis coefficients with one row per basis function and
-  one column per voxel.
+  Matrix of positive-peak-normalized HRF shape weights with one row per
+  basis function and one column per voxel.
+
+- amplitude_scale:
+
+  The signed scale removed from each raw pooled-fit coefficient column.
 
 - basis:
 
@@ -42,7 +68,12 @@ object containing at least:
 
 - conditions:
 
-  Character vector of modeled conditions.
+  Observed event labels. Labels are metadata: all events are pooled into
+  one shape per voxel.
+
+- condition_pooling:
+
+  The literal string "all-events".
 
 ## Examples
 
@@ -62,11 +93,12 @@ rset <- fmrihrf::regressor_set(onsets = events$onset,
 X <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")
 coef <- matrix(rnorm(ncol(X) * ncol(Y)), ncol(X), ncol(Y))
 Y <- X %*% coef + Y * 0.1
-est <- estimate_voxel_hrf(Y, events, basis)
+est <- estimate_voxel_hrf(Y, events, basis, sframe = sframe)
 str(est)
-#> List of 3
-#>  $ coefficients: num [1, 1:2] -0.6193 0.0433
-#>  $ basis       :function (t)  
+#> List of 8
+#>  $ coefficients     : num [1, 1:2] 5.7 5.7
+#>  $ amplitude_scale  : num [1:2] -0.1018 0.0121
+#>  $ basis            :function (t)  
 #>   ..- attr(*, "class")= chr [1:2] "HRF" "function"
 #>   ..- attr(*, "name")= chr "SPMG1"
 #>   ..- attr(*, "nbasis")= int 1
@@ -75,8 +107,17 @@ str(est)
 #>   ..- attr(*, "params")=List of 3
 #>   .. ..$ P1: num 5
 #>   .. ..$ P2: num 15
-#>   .. ..$ A1: num 0.0833
-#>  $ conditions  : chr "A"
+#>   .. ..$ A1: num 0.00833
+#>  $ conditions       : chr "A"
+#>  $ sframe           :List of 4
+#>   ..$ blocklens : int 50
+#>   ..$ TR        : num 1
+#>   ..$ start_time: num 0.5
+#>   ..$ precision : num 0.1
+#>   ..- attr(*, "class")= chr "sampling_frame"
+#>  $ condition_pooling: chr "all-events"
+#>  $ normalization    : chr "positive-peak"
+#>  $ coefficient_units: chr "unit-peak HRF shape weights"
 #>  - attr(*, "class")= chr "VoxelHRF"
 # }
 ```

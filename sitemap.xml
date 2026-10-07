@@ -3,6 +3,7 @@
 <url><loc>https://bbuchsbaum.github.io/fmrilss/CLAUDE.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/CONTRIBUTING.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/articles/fmrilss.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/fmrilss/articles/glmsingle.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/articles/index.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.html</loc></url>
@@ -16,12 +17,12 @@
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/VoxelHRF.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/benchmark_mixed_solve.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/calculate_recovery_metrics.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/fmrilss/reference/coef.glmsingle_fit.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/compare_hrf_recovery.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/create_lwu_grid.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/dot-convert_legacy_whiten.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/dot-mixed_solve_cpp.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/dot-needs_advanced_prewhitening.html</loc></url>
-<url><loc>https://bbuchsbaum.github.io/fmrilss/reference/dot-prewhiten_data.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/dot-sbhm_adaptive_ridge_gls.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/dot-sbhm_auto_gate_threshold.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/dot-sbhm_build_trial_regs.html</loc></url>
@@ -35,6 +36,9 @@
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/fmrilss_options.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/generate_lwu_data.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/generate_rapid_design.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/fmrilss/reference/glmsingle.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_design.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_hrf_library.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/index.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/item_build_design.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/item_compute_u.html</loc></url>

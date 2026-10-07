@@ -36,8 +36,8 @@ res <- compare_hrf_recovery(sim, hrf_grid = grid)
 #> Fitting FIR...
 calculate_recovery_metrics(res, sim$true_hrf)
 #>   method        mse correlation peak_time_error width_error beta_correlation
-#> 1  OASIS 0.09837911   0.5481435               2           1       -0.1939123
-#> 2  SPMG1 0.10810231   0.9199958               1          NA        0.2827130
-#> 3  SPMG3 0.10810231   0.9199958               1          NA       -0.1939123
+#> 1  OASIS 0.07241648   0.6806805               2           1        0.5644033
+#> 2  SPMG1 0.10447257   0.9411653               1          NA        0.4846424
+#> 3  SPMG3 0.10447257   0.9411653               1          NA        0.5644033
 # }
 ```

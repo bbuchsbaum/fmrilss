@@ -34,7 +34,9 @@ sbhm_build(
     `fmrihrf::hrf_library(fun, pgrid, ...)` that returns an `fmrihrf`
     HRF object when called with parameters.
 
-  - `pgrid`: a data.frame of parameter combinations (see examples).
+  - `pgrid`: a data.frame of parameter combinations (see examples), or
+    the object returned by
+    [`create_lwu_grid()`](https://bbuchsbaum.github.io/fmrilss/reference/create_lwu_grid.md).
 
   - `span`: numeric, HRF span in seconds (default `span`).
 
@@ -55,7 +57,8 @@ sbhm_build(
 
 - r:
 
-  Target rank for the shared basis (default 6). Clipped to `min(T, K)`.
+  Positive integer target rank for the shared basis (default 6).
+  Requests above the numerical library rank are clipped with a warning.
 
 - sframe:
 
@@ -110,7 +113,8 @@ A list with components:
 
 - `ref`: list with `alpha_ref` (length r) and `name`
 
-- `meta`: list with `r`, `K`, `normalize`, `baseline`
+- `meta`: rank, normalization, candidate identity, full singular values,
+  numerical rank, and retained total-energy fraction
 
 ## Examples
 

@@ -39,18 +39,21 @@ lsa(Y, X, Z = NULL, Nuisance = NULL, method = c("r", "cpp"))
 
   - "r" - Pure R implementation using lm.fit
 
-  - "cpp" - C++ implementation for better performance
+  - "cpp" - Compatibility alias for the numerically identical R
+    implementation; no compiled LSA kernel is currently provided
 
 ## Value
 
 A numeric matrix of size T × V containing the beta estimates for each
-trial regressor (rows) and each voxel (columns).
+trial regressor (rows) and each voxel (columns). Supplied trial and
+voxel names must be complete and unique; unnamed inputs receive
+canonical `Trial_i` and `Voxel_i` names.
 
 ## Details
 
-LSA fits the model: Y = X*beta + Z*gamma + error, where all trial
-regressors in X are estimated simultaneously. This is in contrast to
-LSS, which fits each trial separately while treating other trials as
+LSA fits the model \\Y = X \beta + Z \gamma + \epsilon\\, where all
+trial regressors in X are estimated simultaneously. This is in contrast
+to LSS, which fits each trial separately while treating other trials as
 nuisance regressors.
 
 ## Examples

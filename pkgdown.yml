@@ -3,12 +3,13 @@ pkgdown: 2.2.1
 pkgdown_sha: ~
 articles:
   fmrilss: fmrilss.html
+  glmsingle: glmsingle.html
   lss_with_fmridesign: lss_with_fmridesign.html
   oasis_method: oasis_method.html
   oasis_theory: oasis_theory.html
   sbhm: sbhm.html
   voxel-wise-hrf: voxel-wise-hrf.html
-last_built: 2026-08-10T21:38Z
+last_built: 2026-10-07T17:10Z
 urls:
   reference: https://bbuchsbaum.github.io/fmrilss/reference
   article: https://bbuchsbaum.github.io/fmrilss/articles

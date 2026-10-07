@@ -11,6 +11,8 @@
 <script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Getting started with fmrilss">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -34,11 +36,14 @@
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Using fmridesign with fmrilss</a></li>
-    <li><a class="dropdown-item" href="../articles/oasis_method.html">The OASIS Method: Optimized Analytic Single-pass Inverse Solution</a></li>
-    <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: Algebra and Implementation Details</a></li>
-    <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation</a></li>
-    <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF Modeling with fmrilss</a></li>
+<li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Articles</h6></li>
+    <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
+    <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
+    <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -70,206 +75,405 @@
 
     
     
-<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><div class="section level2">
-<h2 id="why-fmrilss">Why fmrilss?<a class="anchor" aria-label="anchor" href="#why-fmrilss"></a>
-</h2>
-<p>In rapid event-related fMRI, hemodynamic responses from consecutive
-trials overlap, making trial-by-trial beta estimates unstable. This is a
-problem for MVPA, RSA, and connectivity analyses that need reliable
-single-trial activation patterns.</p>
-<p>Least Squares Separate (LSS; Mumford et al., 2012) solves this by
-fitting a separate GLM for each trial: one regressor for the trial of
-interest, one aggregating all other trials, plus nuisance regressors.
-This reduces collinearity and stabilizes estimates.</p>
-<p><code>fmrilss</code> provides optimized LSS implementations (R and
-C++ with OpenMP), plus extensions for automatic HRF estimation, ridge
-regularization, and the OASIS single-pass solver.</p>
-</div>
+<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><p>You have a preprocessed fMRI run and an event design with one
+regressor per trial. Your goal is a beta estimate for every trial and
+voxel, even though nearby haemodynamic responses overlap.
+<code>fmrilss</code> fits each trial in a separate model and returns the
+estimates as a trial-by-voxel matrix that can feed an MVPA, RSA,
+connectivity, or reliability analysis.</p>
+<p>This article follows one complete workflow: build a trial design, fit
+LSS, check the result, handle nuisance regressors correctly, and compare
+LSS with a simultaneous trial-wise GLM. The example is synthetic so that
+the truth is known; in a real analysis, <code>Y</code> and the design
+matrices come from your preprocessing and design pipeline.</p>
 <div class="section level2">
-<h2 id="quick-example">Quick example<a class="anchor" aria-label="anchor" href="#quick-example"></a>
+<h2 id="what-are-the-inputs">What are the inputs?<a class="anchor" aria-label="anchor" href="#what-are-the-inputs"></a>
 </h2>
+<p><code><a href="../reference/lss.html">lss()</a></code> uses matrices with time along the rows:</p>
+<ul>
+<li>
+<code>Y</code> contains the observed data: time points by
+voxels.</li>
+<li>
+<code>X</code> contains one HRF-convolved column per trial: time
+points by trials.</li>
+<li>
+<code>Z</code> contains regressors retained in every trial-wise
+model, such as run intercepts or trends.</li>
+<li>
+<code>Nuisance</code> contains regressors to project out, such as
+motion or physiological traces.</li>
+</ul>
+<p>The function returns one row per trial and one column per voxel.
+Trial and voxel names are preserved when <code>X</code> and
+<code>Y</code> have column names.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/" class="external-link">fmrihrf</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrilss/">fmrilss</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">42</span><span class="op">)</span></span></code></pre></div>
-<div class="section level3">
-<h3 id="create-a-rapid-event-design">Create a rapid event design<a class="anchor" aria-label="anchor" href="#create-a-rapid-event-design"></a>
-</h3>
-<p>We’ll simulate 12 trials in a 150-TR run with jittered onsets, then
-convolve with a canonical HRF to build one design-matrix column per
-trial.</p>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">suppressPackageStartupMessages</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>  <span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrilss/">fmrilss</a></span><span class="op">)</span></span>
+<span>  <span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/" class="external-link">fmrihrf</a></span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
+<p>The following code constructs the trial design used throughout the
+article. Each event is an impulse convolved with the same canonical HRF,
+scaled to a unit peak so that trial betas are in units of peak
+response.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">n_time</span> <span class="op">&lt;-</span> <span class="fl">150</span></span>
-<span><span class="va">n_trials</span> <span class="op">&lt;-</span> <span class="fl">12</span></span>
-<span><span class="va">n_vox</span> <span class="op">&lt;-</span> <span class="fl">25</span></span>
+<code class="sourceCode R"><span><span class="va">n_time</span> <span class="op">&lt;-</span> <span class="fl">160</span></span>
+<span><span class="va">n_trials</span> <span class="op">&lt;-</span> <span class="fl">24</span></span>
+<span><span class="va">n_voxels</span> <span class="op">&lt;-</span> <span class="fl">8</span></span>
 <span><span class="va">sframe</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="va">n_time</span>, TR <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">base</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">10</span>, <span class="va">n_time</span> <span class="op">-</span> <span class="fl">24</span>, length.out <span class="op">=</span> <span class="va">n_trials</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sort.html" class="external-link">sort</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">pmax</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">pmin</a></span><span class="op">(</span><span class="va">base</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/sample.html" class="external-link">sample</a></span><span class="op">(</span><span class="op">-</span><span class="fl">3</span><span class="op">:</span><span class="fl">3</span>, <span class="va">n_trials</span>, <span class="cn">TRUE</span><span class="op">)</span>, <span class="va">n_time</span> <span class="op">-</span> <span class="fl">24</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span><span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">8</span>, <span class="fl">112</span>, length.out <span class="op">=</span> <span class="va">n_trials</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">rset</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/regressor_set.html" class="external-link">regressor_set</a></span><span class="op">(</span></span>
+<span>  <span class="va">onsets</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_trials</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  hrf <span class="op">=</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/normalise_hrf.html" class="external-link">normalise_hrf</a></span><span class="op">(</span><span class="va">HRF_SPMG1</span><span class="op">)</span>,</span>
+<span>  duration <span class="op">=</span> <span class="fl">0</span>,</span>
+<span>  span <span class="op">=</span> <span class="fl">30</span>,</span>
+<span>  summate <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/evaluate.html" class="external-link">evaluate</a></span><span class="op">(</span></span>
+<span>  <span class="va">rset</span>,</span>
+<span>  grid <span class="op">=</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/samples.html" class="external-link">samples</a></span><span class="op">(</span><span class="va">sframe</span>, global <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
+<span>  precision <span class="op">=</span> <span class="fl">0.1</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"conv"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">X</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">X</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"trial_%02d"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_trials</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p>We add an intercept, a trend, and two centred nuisance traces. The
+final lines create one synthetic <code>Y</code> with known trial
+effects. Replace this simulation with your own preprocessed
+time-by-voxel matrix.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">rset</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/regressor_set.html" class="external-link">regressor_set</a></span><span class="op">(</span><span class="va">onsets</span>, <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along</a></span><span class="op">(</span><span class="va">onsets</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>                      hrf <span class="op">=</span> <span class="va">HRF_SPMG1</span>, duration <span class="op">=</span> <span class="fl">0</span>, span <span class="op">=</span> <span class="fl">24</span>, summate <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/evaluate.html" class="external-link">evaluate</a></span><span class="op">(</span><span class="va">rset</span>, grid <span class="op">=</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/samples.html" class="external-link">samples</a></span><span class="op">(</span><span class="va">sframe</span>, global <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
-<span>              precision <span class="op">=</span> <span class="fl">0.1</span>, method <span class="op">=</span> <span class="st">"conv"</span><span class="op">)</span></span></code></pre></div>
-<p><code>X</code> is a 150 x 12 matrix — one column per trial, each
-containing the HRF-convolved impulse.</p>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">2401</span><span class="op">)</span></span>
+<span><span class="va">noise_sd</span> <span class="op">&lt;-</span> <span class="fl">2.5</span></span>
+<span><span class="va">Z</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span></span>
+<span>  Intercept <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  Linear_trend <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_time</span><span class="op">)</span>, scale <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">Nuisance</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span></span>
+<span>  Motion_x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Trig.html" class="external-link">sin</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_time</span><span class="op">)</span> <span class="op">/</span> <span class="fl">9</span><span class="op">)</span>,</span>
+<span>  Motion_y <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Trig.html" class="external-link">cos</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_time</span><span class="op">)</span> <span class="op">/</span> <span class="fl">13</span><span class="op">)</span></span>
+<span><span class="op">)</span>, center <span class="op">=</span> <span class="cn">TRUE</span>, scale <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">true_betas</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_trials</span> <span class="op">*</span> <span class="va">n_voxels</span><span class="op">)</span>,</span>
+<span>  <span class="va">n_trials</span>,</span>
+<span>  <span class="va">n_voxels</span>,</span>
+<span>  dimnames <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">X</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"voxel_%02d"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_voxels</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">fixed_coef</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">Z</span><span class="op">)</span> <span class="op">*</span> <span class="va">n_voxels</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">Z</span><span class="op">)</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
+<span><span class="va">nuisance_coef</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">Nuisance</span><span class="op">)</span> <span class="op">*</span> <span class="va">n_voxels</span>, sd <span class="op">=</span> <span class="fl">1.2</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">Nuisance</span><span class="op">)</span>,</span>
+<span>  <span class="va">n_voxels</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">mean_signal</span> <span class="op">&lt;-</span> <span class="va">X</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">true_betas</span> <span class="op">+</span></span>
+<span>  <span class="va">Z</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">fixed_coef</span> <span class="op">+</span></span>
+<span>  <span class="va">Nuisance</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">nuisance_coef</span></span>
+<span><span class="va">Y</span> <span class="op">&lt;-</span> <span class="va">mean_signal</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_time</span> <span class="op">*</span> <span class="va">n_voxels</span>, sd <span class="op">=</span> <span class="va">noise_sd</span><span class="op">)</span>,</span>
+<span>  <span class="va">n_time</span>,</span>
+<span>  <span class="va">n_voxels</span>,</span>
+<span>  dimnames <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="cn">NULL</span>, <span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">true_betas</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<caption>Matrix shapes in the example workflow.</caption>
+<thead><tr class="header">
+<th align="left">Object</th>
+<th align="right">Rows</th>
+<th align="right">Columns</th>
+<th align="left">Role</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">Y</td>
+<td align="right">160</td>
+<td align="right">8</td>
+<td align="left">observed voxel time series</td>
+</tr>
+<tr class="even">
+<td align="left">X</td>
+<td align="right">160</td>
+<td align="right">24</td>
+<td align="left">one HRF-convolved column per trial</td>
+</tr>
+<tr class="odd">
+<td align="left">Z</td>
+<td align="right">160</td>
+<td align="right">2</td>
+<td align="left">shared modeled regressors</td>
+</tr>
+<tr class="even">
+<td align="left">Nuisance</td>
+<td align="right">160</td>
+<td align="right">2</td>
+<td align="left">projected nuisance regressors</td>
+</tr>
+<tr class="odd">
+<td align="left">LSS result</td>
+<td align="right">24</td>
+<td align="right">8</td>
+<td align="left">one estimate per trial and voxel</td>
+</tr>
+</tbody>
+</table>
 </div>
-<div class="section level3">
-<h3 id="add-baseline-and-nuisance-regressors">Add baseline and nuisance regressors<a class="anchor" aria-label="anchor" href="#add-baseline-and-nuisance-regressors"></a>
-</h3>
+<div class="section level2">
+<h2 id="how-do-i-estimate-the-trial-betas">How do I estimate the trial betas?<a class="anchor" aria-label="anchor" href="#how-do-i-estimate-the-trial-betas"></a>
+</h2>
+<p>The default optimized R backend is the clearest first path. Supply
+all parts of the model in the same call:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">Z</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_time</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>       <span class="co"># intercept + linear trend</span></span>
-<span><span class="va">Nuisance</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_time</span> <span class="op">*</span> <span class="fl">6</span><span class="op">)</span>, <span class="va">n_time</span>, <span class="fl">6</span><span class="op">)</span>  <span class="co"># e.g. motion</span></span></code></pre></div>
-</div>
-<div class="section level3">
-<h3 id="simulate-data-with-known-ground-truth">Simulate data with known ground truth<a class="anchor" aria-label="anchor" href="#simulate-data-with-known-ground-truth"></a>
-</h3>
+<code class="sourceCode R"><span><span class="va">beta_lss</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_lss</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 24  8</span></span></code></pre></div>
+<p><code>beta_lss</code> is the promised 24 by 8 trial-by-voxel matrix.
+A small preview is usually more useful than printing the whole
+object:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">true_betas</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_trials</span> <span class="op">*</span> <span class="va">n_vox</span>, <span class="fl">0</span>, <span class="fl">1.2</span><span class="op">)</span>, <span class="va">n_trials</span>, <span class="va">n_vox</span><span class="op">)</span></span>
-<span><span class="va">Y</span> <span class="op">&lt;-</span> <span class="va">X</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">true_betas</span> <span class="op">+</span></span>
-<span>     <span class="va">Z</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">2</span> <span class="op">*</span> <span class="va">n_vox</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span> <span class="op">+</span></span>
-<span>     <span class="va">Nuisance</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">6</span> <span class="op">*</span> <span class="va">n_vox</span><span class="op">)</span>, <span class="fl">6</span><span class="op">)</span> <span class="op">+</span></span>
-<span>     <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_time</span> <span class="op">*</span> <span class="va">n_vox</span><span class="op">)</span>, <span class="va">n_time</span>, <span class="va">n_vox</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">beta_lss</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">4</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">4</span><span class="op">]</span>, <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="co">#&gt;          voxel_01 voxel_02 voxel_03 voxel_04</span></span>
+<span><span class="co">#&gt; trial_01    -3.41     1.94     0.43    -0.10</span></span>
+<span><span class="co">#&gt; trial_02     1.56     2.75    -1.40    -0.77</span></span>
+<span><span class="co">#&gt; trial_03     0.87     1.80    -2.84    -1.15</span></span>
+<span><span class="co">#&gt; trial_04     2.39     0.02    -1.08    -0.59</span></span></code></pre></div>
+<p>Each row comes from a model with three parts: the target trial, the
+sum of all other trials, and the shared regressors. The target
+coefficient becomes the reported beta. Repeating that model for every
+trial reduces competition among individual trial columns, but it does
+not make a poor or rank-deficient design informative.</p>
+<div class="figure">
+<img src="fmrilss_files/figure-html/beta-heatmap-1.png" class="r-plt" alt="Heatmap with 24 trial rows and 8 voxel columns. Dark red cells are strongly negative and dark blue cells are strongly positive." width="1050"><p class="caption">
+Estimated single-trial responses for the eight simulated voxels. Red is
+negative and blue is positive; deeper colour indicates larger magnitude,
+not statistical significance.
+</p>
 </div>
-<div class="section level3">
-<h3 id="run-lss">Run LSS<a class="anchor" aria-label="anchor" href="#run-lss"></a>
-</h3>
-<p>At its simplest, <code><a href="../reference/lss.html">lss()</a></code> needs only the data and the trial
-design:</p>
+</div>
+<div class="section level2">
+<h2 id="how-should-i-handle-nuisance-regressors">How should I handle nuisance regressors?<a class="anchor" aria-label="anchor" href="#how-should-i-handle-nuisance-regressors"></a>
+</h2>
+<p>The safest route is to pass <code>Nuisance</code> directly to
+<code><a href="../reference/lss.html">lss()</a></code>, as above. The package applies a rank-aware
+Frisch–Waugh–Lovell step for the shared <code>Z</code> and
+<code>Nuisance</code> span before fitting the trial models.</p>
+<p>If you deliberately cache a projection for repeated analyses, apply
+it to every matrix that remains in the model. Here we project only
+<code>Nuisance</code>, so the same projection must transform
+<code>Y</code>, <code>X</code>, and <code>Z</code>:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">beta</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 12 25</span></span></code></pre></div>
-<p>Include <code>Z</code> and <code>Nuisance</code> for a more complete
-model:</p>
+<code class="sourceCode R"><span><span class="va">Q_nuisance</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/project_confounds.html">project_confounds</a></span><span class="op">(</span><span class="va">Nuisance</span><span class="op">)</span></span>
+<span><span class="va">beta_projected</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>  <span class="va">Q_nuisance</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">Y</span>,</span>
+<span>  <span class="va">Q_nuisance</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">X</span>,</span>
+<span>  Z <span class="op">=</span> <span class="va">Q_nuisance</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">Z</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>maximum_absolute_difference <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">beta_lss</span> <span class="op">-</span> <span class="va">beta_projected</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; maximum_absolute_difference </span></span>
+<span><span class="co">#&gt;                9.200973e-14</span></span></code></pre></div>
+<p>Leaving <code>Z</code> unprojected changes the model and can change
+the trial estimates. Also note that <code><a href="../reference/project_confounds.html">project_confounds()</a></code>
+materializes an
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>×</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">n \times n</annotation></semantics></math>
+matrix; passing <code>Nuisance</code> to <code><a href="../reference/lss.html">lss()</a></code> avoids that
+storage and should be your default.</p>
+</div>
+<div class="section level2">
+<h2 id="when-does-lss-differ-from-lsa">When does LSS differ from LSA?<a class="anchor" aria-label="anchor" href="#when-does-lss-differ-from-lsa"></a>
+</h2>
+<p>Least Squares All (LSA) estimates every trial column simultaneously.
+LSS replaces the non-target columns with their sum in each
+trial-specific model. That creates a bias–variance trade-off rather than
+a universal winner.</p>
+<p>To make the comparison reproducible, the next experiment holds
+<code>X</code>, <code>true_betas</code>, and all nuisance effects fixed.
+Because both estimators are linear here, we can calculate conditional
+squared bias and noise variance directly. We also generate 100
+independent noise realizations as a check on that calculation.</p>
+<table class="table">
+<caption>Diagnostics for the residualized trial design used in the
+comparison.</caption>
+<thead><tr class="header">
+<th align="left">Diagnostic</th>
+<th align="right">Value</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">Residualized trial-design rank</td>
+<td align="right">24.000</td>
+</tr>
+<tr class="even">
+<td align="left">Largest absolute trial correlation</td>
+<td align="right">0.378</td>
+</tr>
+<tr class="odd">
+<td align="left">Scaled condition number</td>
+<td align="right">8.706</td>
+</tr>
+</tbody>
+</table>
+<table class="table">
+<caption>Exact conditional decomposition at noise SD = 2.5.</caption>
+<colgroup>
+<col width="13%">
+<col width="29%">
+<col width="24%">
+<col width="17%">
+<col width="16%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">Estimator</th>
+<th align="right">Squared bias (beta^2)</th>
+<th align="right">Variance (beta^2)</th>
+<th align="right">MSE (beta^2)</th>
+<th align="right">RMSE (beta)</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">LSS</td>
+<td align="right">0.374</td>
+<td align="right">1.927</td>
+<td align="right">2.301</td>
+<td align="right">1.517</td>
+</tr>
+<tr class="even">
+<td align="left">LSA</td>
+<td align="right">0.000</td>
+<td align="right">5.423</td>
+<td align="right">5.423</td>
+<td align="right">2.329</td>
+</tr>
+</tbody>
+</table>
+<p>The 100-repetition check gave MSE = 2.285 for LSS and 5.296 for LSA,
+close to the exact values in the table.</p>
+<div class="figure">
+<img src="fmrilss_files/figure-html/comparison-plot-1.png" class="r-plt" alt="Grouped bar chart comparing LSS and LSA squared bias, variance, and mean squared error on a common beta-squared scale. LSS has higher squared bias and lower variance and mean squared error." width="1050"><p class="caption">
+At noise SD 2.5, LSS has more squared bias but sufficiently lower
+variance to produce lower mean squared error than LSA.
+</p>
+</div>
+<p>The noise scale matters. The calculated crossover for this fixed
+design and truth is SD = 0.818:</p>
+<table class="table">
+<caption>Conditional RMSE on both sides of the design-specific
+crossover.</caption>
+<thead><tr class="header">
+<th align="right">Noise SD</th>
+<th align="right">LSS RMSE</th>
+<th align="right">LSA RMSE</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="right">0.410</td>
+<td align="right">0.653</td>
+<td align="right">0.382</td>
+</tr>
+<tr class="even">
+<td align="right">0.818</td>
+<td align="right">0.762</td>
+<td align="right">0.762</td>
+</tr>
+<tr class="odd">
+<td align="right">2.500</td>
+<td align="right">1.517</td>
+<td align="right">2.329</td>
+</tr>
+</tbody>
+</table>
+<p>At noise SD 0.41, below the crossover, LSA has lower RMSE; at the
+illustrated SD 2.5, LSS has lower RMSE. The example therefore
+demonstrates both sides of the trade-off rather than supplying a general
+estimator-selection rule. Event spacing, noise, HRF mismatch, and the
+distribution of true trial effects can all move the crossover. Simulate
+conditions that resemble your own acquisition.</p>
+</div>
+<div class="section level2">
+<h2 id="what-should-i-change-for-real-data">What should I change for real data?<a class="anchor" aria-label="anchor" href="#what-should-i-change-for-real-data"></a>
+</h2>
+<p>Real fMRI errors are temporally correlated. Once the design is
+correct, pass a validated prewhitening specification so the response and
+every design matrix receive the same filter. This call also selects the
+optimized C++ backend; prewhitening has the same model meaning across
+backends:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">beta_full</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span><span class="op">)</span></span></code></pre></div>
-<p>That’s it — <code>beta_full</code> is a 12 x 25 matrix of
-trial-by-voxel estimates.</p>
-</div>
-</div>
-<div class="section level2">
-<h2 id="lss-vs-standard-glm">LSS vs standard GLM<a class="anchor" aria-label="anchor" href="#lss-vs-standard-glm"></a>
-</h2>
-<p>The traditional approach (“Least Squares All”, LSA) estimates all
-trials in one model. Let’s compare:</p>
+<code class="sourceCode R"><span><span class="va">beta_ar1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>  <span class="va">Y</span>,</span>
+<span>  <span class="va">X</span>,</span>
+<span>  Z <span class="op">=</span> <span class="va">Z</span>,</span>
+<span>  Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"cpp_optimized"</span>,</span>
+<span>  prewhiten <span class="op">=</span> <span class="fu"><a href="../reference/prewhiten_options.html">prewhiten_options</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>The simulated errors above are independent, so this call demonstrates
+the API and backend agreement, not a benefit from whitening. Treat AR(1)
+as an example starting model: choose an order and pooling strategy using
+residual diagnostics and acquisition-aware validation.</p>
+<p>For multiple runs, use run-aware intercepts and supply run labels to
+<code>prewhiten_options(method = "ar", p = 1, pooling = "run", runs = ...)</code>.
+Do not concatenate runs and let filtering cross a run boundary.</p>
+<p>For a large voxel matrix, the optimized C++ backend changes
+computation, not the estimand:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">beta_lsa</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lsa.html">lsa</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">comparison_summary</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>  Method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"LSS"</span>, <span class="st">"LSA"</span><span class="op">)</span>,</span>
-<span>  CorrelationToTruth <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">beta_full</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">true_betas</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">beta_lsa</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">true_betas</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="op">)</span>,</span>
-<span>  MeanTrialVariance <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">beta_full</span>, <span class="fl">2</span>, <span class="va">var</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">beta_lsa</span>, <span class="fl">2</span>, <span class="va">var</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">beta_cpp</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>  <span class="va">Y</span>,</span>
+<span>  <span class="va">X</span>,</span>
+<span>  Z <span class="op">=</span> <span class="va">Z</span>,</span>
+<span>  Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"cpp_optimized"</span></span>
 <span><span class="op">)</span></span>
-<span><span class="va">comparison_summary</span></span>
-<span><span class="co">#&gt;   Method CorrelationToTruth MeanTrialVariance</span></span>
-<span><span class="co">#&gt; 1    LSS          0.9602123          1.675530</span></span>
-<span><span class="co">#&gt; 2    LSA          0.8996540          2.163055</span></span></code></pre></div>
-<p>In this simulation, LSS is both less variable and closer to the known
-trial effects. A scatter plot shows how the two estimators relate to
-each other:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">beta_lsa</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">beta_full</span><span class="op">)</span>,</span>
-<span>     pch <span class="op">=</span> <span class="fl">19</span>, col <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/grDevices/adjustcolor.html" class="external-link">adjustcolor</a></span><span class="op">(</span><span class="st">"steelblue"</span>, <span class="fl">0.3</span><span class="op">)</span>, cex <span class="op">=</span> <span class="fl">0.6</span>,</span>
-<span>     xlab <span class="op">=</span> <span class="st">"LSA beta"</span>, ylab <span class="op">=</span> <span class="st">"LSS beta"</span>,</span>
-<span>     main <span class="op">=</span> <span class="st">"Trial-wise betas: LSS vs LSA"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, lty <span class="op">=</span> <span class="fl">2</span>, col <span class="op">=</span> <span class="st">"gray40"</span><span class="op">)</span></span></code></pre></div>
-<p><img src="fmrilss_files/figure-html/lss-lsa-scatter-1.png" class="r-plt" alt="Scatter plot of LSA vs LSS trial-wise betas showing shrinkage." width="825"></p>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>maximum_absolute_difference <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">beta_lss</span> <span class="op">-</span> <span class="va">beta_cpp</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; maximum_absolute_difference </span></span>
+<span><span class="co">#&gt;                1.776357e-15</span></span></code></pre></div>
+<p>Start with the default backend while developing the analysis, then
+switch when runtime or memory justifies it. Backend agreement is a
+useful regression check, but agreement alone does not validate the
+scientific model.</p>
 </div>
 <div class="section level2">
-<h2 id="prewhitening">Prewhitening<a class="anchor" aria-label="anchor" href="#prewhitening"></a>
-</h2>
-<p>fMRI time series have temporal autocorrelation. Pass a
-<code>prewhiten</code> list to correct for it:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">beta_ar1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
-<span>                prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p>Automatic AR order selection:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">beta_auto</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
-<span>                 prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="st">"auto"</span>, p_max <span class="op">=</span> <span class="fl">4</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p>See <code><a href="../reference/lss.html">?lss</a></code> for additional pooling strategies
-(<code>"voxel"</code>, <code>"run"</code>, <code>"parcel"</code>) and
-ARMA models.</p>
-</div>
-<div class="section level2">
-<h2 id="computational-backends">Computational backends<a class="anchor" aria-label="anchor" href="#computational-backends"></a>
-</h2>
-<p>The default backend (<code>"r_optimized"</code>) is fast and
-readable. For large datasets, switch to the parallelized C++ engine:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">beta_cpp</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>, method <span class="op">=</span> <span class="st">"cpp_optimized"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/all.equal.html" class="external-link">all.equal</a></span><span class="op">(</span><span class="va">beta_full</span>, <span class="va">beta_cpp</span>, tolerance <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
-<p>Available methods: <code>"naive"</code>, <code>"r_vectorized"</code>,
-<code>"r_optimized"</code> (default), <code>"cpp_optimized"</code>,
-<code>"oasis"</code>.</p>
-</div>
-<div class="section level2">
-<h2 id="oasis-single-pass-lss-with-extras">OASIS: single-pass LSS with extras<a class="anchor" aria-label="anchor" href="#oasis-single-pass-lss-with-extras"></a>
-</h2>
-<p>OASIS can build the design matrix from event specifications, add
-ridge regularization, and fit multi-basis HRFs — all in one call:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">beta_oasis</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
-<span>  <span class="va">Y</span>, X <span class="op">=</span> <span class="cn">NULL</span>, method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
-<span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>    design_spec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      sframe <span class="op">=</span> <span class="va">sframe</span>,</span>
-<span>      cond <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>onsets <span class="op">=</span> <span class="va">onsets</span>, hrf <span class="op">=</span> <span class="va">HRF_SPMG1</span>, span <span class="op">=</span> <span class="fl">24</span><span class="op">)</span></span>
-<span>    <span class="op">)</span></span>
-<span>  <span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_oasis</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 12 25</span></span></code></pre></div>
-<p>Setting <code>X = NULL</code> lets OASIS construct the design
-internally from <code>design_spec</code>. Fractional ridge
-regularization (5%) is applied by default to stabilize overlapping
-designs. See <code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code> for ridge tuning,
-multi-basis HRFs, standard errors, and diagnostics.</p>
-</div>
-<div class="section level2">
-<h2 id="nuisance-pre-projection">Nuisance pre-projection<a class="anchor" aria-label="anchor" href="#nuisance-pre-projection"></a>
-</h2>
-<p>If you plan to re-run LSS with different settings, it can be faster
-to project out nuisance once up front:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">Q</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/project_confounds.html">project_confounds</a></span><span class="op">(</span><span class="va">Nuisance</span><span class="op">)</span></span>
-<span><span class="va">beta_pre</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Q</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">Y</span>, <span class="va">Q</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, method <span class="op">=</span> <span class="st">"r_optimized"</span><span class="op">)</span></span></code></pre></div>
-<p>This is useful when sweeping over hyperparameters (e.g., ridge
-values) without re-projecting nuisance regressors each time.</p>
-</div>
-<div class="section level2">
-<h2 id="next-steps">Next steps<a class="anchor" aria-label="anchor" href="#next-steps"></a>
+<h2 id="what-are-the-important-limits">What are the important limits?<a class="anchor" aria-label="anchor" href="#what-are-the-important-limits"></a>
 </h2>
 <ul>
 <li>
-<code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code> — OASIS solver with ridge,
-multi-basis HRFs, and standard errors</li>
-<li>
-<code><a href="../articles/voxel-wise-hrf.html">vignette("voxel-wise-hrf")</a></code> — per-voxel HRF estimation
-before LSS</li>
-<li>
-<code><a href="../articles/sbhm.html">vignette("sbhm")</a></code> — library-constrained voxel-specific
-HRFs</li>
-<li>
-<code><a href="../articles/lss_with_fmridesign.html">vignette("lss_with_fmridesign")</a></code> — formula-based design
-interface for multi-run experiments</li>
+<code>X</code> must already encode the HRF-convolved response for
+each trial. Use a design-aware workflow if you begin from event
+tables.</li>
+<li>LSS reduces competition among individual trial columns; it cannot
+recover information absent from the acquisition or rescue a singular
+design.</li>
+<li>The output contains trial coefficients, not significance tests or an
+automatic decision about whether a trial is usable.</li>
+<li>Nuisance projection and prewhitening change the model. Apply them
+consistently to the response and every relevant design matrix.</li>
+<li>LSS versus LSA is a design- and noise-dependent choice. Validate it
+with repeated simulations, not a single attractive plot.</li>
 </ul>
 </div>
 <div class="section level2">
-<h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
+<h2 id="where-should-i-go-next">Where should I go next?<a class="anchor" aria-label="anchor" href="#where-should-i-go-next"></a>
+</h2>
+<ul>
+<li>Read <code><a href="../reference/lss.html">?lss</a></code> and <code><a href="../reference/prewhiten_options.html">?prewhiten_options</a></code> for the
+complete core interface.</li>
+<li>Continue to <code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code> for the OASIS
+solver, explicit ridge regularization, diagnostics, and multi-basis
+designs.</li>
+<li>Then read <code><a href="../articles/oasis_theory.html">vignette("oasis_theory")</a></code> for the derivation
+and computational contract behind that practical guide.</li>
+<li>Next, use <code><a href="../articles/lss_with_fmridesign.html">vignette("lss_with_fmridesign")</a></code> when your
+inputs are event tables, formulas, and multiple runs.</li>
+<li>Continue to <code><a href="../articles/voxel-wise-hrf.html">vignette("voxel-wise-hrf")</a></code> for estimated
+voxel-wise HRF shapes and trial coefficients.</li>
+<li>Finish with <code><a href="../articles/sbhm.html">vignette("sbhm")</a></code> for library-constrained
+voxel-specific shapes, score margins, and trial coefficients.</li>
+</ul>
+</div>
+<div class="section level2">
+<h2 id="reference">Reference<a class="anchor" aria-label="anchor" href="#reference"></a>
 </h2>
 <p>Mumford, J. A., Turner, B. O., Ashby, F. G., &amp; Poldrack, R. A.
 (2012). Deconvolving BOLD activation in event-related designs for
 multivoxel pattern classification analyses. <em>NeuroImage</em>, 59(3),
-2636–2643.</p>
+2636–2643. <a href="https://doi.org/10.1016/j.neuroimage.2011.08.076" class="external-link uri">https://doi.org/10.1016/j.neuroimage.2011.08.076</a></p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

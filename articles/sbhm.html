@@ -5,12 +5,14 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation • fmrilss</title>
+<title>Shared-basis HRF matching: shapes, score margins, and trial coefficients • fmrilss</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
 <script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Shared-basis HRF matching: shapes, score margins, and trial coefficients">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -34,11 +36,14 @@
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Using fmridesign with fmrilss</a></li>
-    <li><a class="dropdown-item" href="../articles/oasis_method.html">The OASIS Method: Optimized Analytic Single-pass Inverse Solution</a></li>
-    <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: Algebra and Implementation Details</a></li>
-    <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation</a></li>
-    <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF Modeling with fmrilss</a></li>
+<li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Articles</h6></li>
+    <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
+    <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
+    <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -61,7 +66,7 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
 
-      <h1>Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation</h1>
+      <h1>Shared-basis HRF matching: shapes, score margins, and trial coefficients</h1>
             
       
       <small class="dont-index">Source: <a href="https://github.com/bbuchsbaum/fmrilss/blob/main/vignettes/sbhm.Rmd" class="external-link"><code>vignettes/sbhm.Rmd</code></a></small>
@@ -71,542 +76,743 @@
     
     
 <script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><div class="section level2">
-<h2 id="the-problem">The Problem<a class="anchor" aria-label="anchor" href="#the-problem"></a>
+<h2 id="what-this-workflow-estimates">What this workflow estimates<a class="anchor" aria-label="anchor" href="#what-this-workflow-estimates"></a>
 </h2>
-<p>Real fMRI data shows substantial HRF variability across brain
-regions. A single canonical HRF often fits poorly, but estimating fully
-unconstrained voxel-wise HRFs is expensive and noisy. SBHM offers a
-middle path: learn a shared basis from a library of plausible HRFs, then
-match each voxel to its best library member in a low-dimensional
-space.</p>
-<p>The pipeline has four steps:</p>
+<p>This is the final specialist article in the learning path. Read
+<code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code>, <code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code>,
+and <code><a href="../articles/voxel-wise-hrf.html">vignette("voxel-wise-hrf")</a></code> first. The voxel-wise HRF
+article estimates a continuous shape in a small basis. This article
+instead restricts each voxel to a finite library, or to a declared blend
+of nearby library members.</p>
+<p>SBHM separates two quantities:</p>
 <ol style="list-style-type: decimal">
-<li>
-<strong>Build</strong> a shared basis from an HRF library via SVD
-(<code><a href="../reference/sbhm_build.html">sbhm_build()</a></code>)</li>
-<li>
-<strong>Prepass</strong> aggregate model fit per voxel
-(<code><a href="../reference/sbhm_prepass.html">sbhm_prepass()</a></code>)</li>
-<li>
-<strong>Match</strong> voxels to library members by cosine
-similarity (<code><a href="../reference/sbhm_match.html">sbhm_match()</a></code>)</li>
-<li>
-<strong>Project</strong> trial-wise coefficients to scalar
-amplitudes (<code><a href="../reference/sbhm_project.html">sbhm_project()</a></code>)</li>
+<li>a voxel-specific HRF <strong>shape coordinate</strong> in a shared
+basis; and</li>
+<li>a trial-wise <strong>coefficient on the event design built from that
+shape</strong>.</li>
 </ol>
-<p>In practice, <code><a href="../reference/lss_sbhm.html">lss_sbhm()</a></code> runs all four steps in a single
-call.</p>
+<p>The coefficient is not automatically a peak BOLD response. With
+<code>normalize = TRUE</code>, <code><a href="../reference/sbhm_build.html">sbhm_build()</a></code> normalizes each
+candidate to discrete unit
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>L</mi><mn>2</mn></msub><annotation encoding="application/x-tex">L_2</annotation></semantics></math>
+energy before rank truncation. The returned coefficient is therefore on
+the scale of the selected rank-truncated waveform and the supplied event
+duration and amplitude. Changing any of those changes the coefficient
+scale.</p>
+<p>SBHM produces adaptive point estimates. Shape matching, optional
+blending, ridge penalties, and reuse of the same data for shape
+selection and coefficient estimation are not covered by a calibrated
+standard-error or test-statistic contract. Every SBHM amplitude route
+rejects <code>return_se = TRUE</code>.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/" class="external-link">fmrihrf</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrilss/">fmrilss</a></span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Derived convenience defaults for examples</span></span>
-<span><span class="va">n_voxels_default</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="va">fast_mode</span><span class="op">)</span> <span class="fl">20</span> <span class="kw">else</span> <span class="fl">50</span></span>
-<span><span class="va">n_trials_default</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="va">fast_mode</span><span class="op">)</span> <span class="fl">6</span> <span class="kw">else</span> <span class="fl">10</span></span>
-<span><span class="va">ranks_default</span>    <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="va">fast_mode</span><span class="op">)</span> <span class="fl">2</span><span class="op">:</span><span class="fl">6</span> <span class="kw">else</span> <span class="fl">2</span><span class="op">:</span><span class="fl">10</span></span></code></pre></div>
-</div>
-<div class="section level2">
-<h2 id="step-1-build-the-shared-basis">Step 1: Build the Shared Basis<a class="anchor" aria-label="anchor" href="#step-1-build-the-shared-basis"></a>
-</h2>
-<p>We start by defining a grid of gamma HRF parameters spanning
-physiological variability in peak time and width.</p>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">suppressPackageStartupMessages</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>  <span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/" class="external-link">fmrihrf</a></span><span class="op">)</span></span>
+<span>  <span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrilss/">fmrilss</a></span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">shapes</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="va">fast_mode</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">6</span>, <span class="fl">10</span>, by <span class="op">=</span> <span class="fl">2</span><span class="op">)</span> <span class="kw">else</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">5</span>, <span class="fl">11</span>, by <span class="op">=</span> <span class="fl">1.5</span><span class="op">)</span></span>
-<span><span class="va">rates</span>  <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="va">fast_mode</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0.8</span>, <span class="fl">1.2</span>, by <span class="op">=</span> <span class="fl">0.2</span><span class="op">)</span> <span class="kw">else</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0.7</span>, <span class="fl">1.3</span>, by <span class="op">=</span> <span class="fl">0.15</span><span class="op">)</span></span>
-<span><span class="va">param_grid</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/expand.grid.html" class="external-link">expand.grid</a></span><span class="op">(</span>shape <span class="op">=</span> <span class="va">shapes</span>, rate <span class="op">=</span> <span class="va">rates</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Library size:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">param_grid</span><span class="op">)</span>, <span class="st">"HRFs\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Library size: 9 HRFs</span></span></code></pre></div>
-<p>Each grid row becomes a gamma HRF. We wrap this in a factory function
-that <code><a href="../reference/sbhm_build.html">sbhm_build()</a></code> can evaluate across the grid.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">gamma_fun</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">shape</span>, <span class="va">rate</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">f</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span><span class="op">)</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/hrf_gamma.html" class="external-link">hrf_gamma</a></span><span class="op">(</span><span class="va">t</span>, shape <span class="op">=</span> <span class="va">shape</span>, rate <span class="op">=</span> <span class="va">rate</span><span class="op">)</span></span>
-<span>  <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/as_hrf.html" class="external-link">as_hrf</a></span><span class="op">(</span><span class="va">f</span>, name <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"gamma(s=%.2f,r=%.2f)"</span>, <span class="va">shape</span>, <span class="va">rate</span><span class="op">)</span>, span <span class="op">=</span> <span class="fl">32</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p>Now we build the SBHM basis. The SVD decomposes the library into a
-shared time basis <code>B</code>, singular values <code>S</code>, and
-per-HRF coordinates <code>A</code>.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">sframe</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="va">n_time</span>, TR <span class="op">=</span> <span class="va">TR</span><span class="op">)</span></span>
-<span><span class="va">sbhm</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sbhm_build.html">sbhm_build</a></span><span class="op">(</span></span>
-<span>  library_spec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>fun <span class="op">=</span> <span class="va">gamma_fun</span>, pgrid <span class="op">=</span> <span class="va">param_grid</span>, span <span class="op">=</span> <span class="fl">32</span>,</span>
-<span>                      precision <span class="op">=</span> <span class="fl">0.1</span>, method <span class="op">=</span> <span class="st">"conv"</span><span class="op">)</span>,</span>
-<span>  r <span class="op">=</span> <span class="fl">6</span>, sframe <span class="op">=</span> <span class="va">sframe</span>,</span>
-<span>  baseline <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.5</span><span class="op">)</span>, normalize <span class="op">=</span> <span class="cn">TRUE</span>, ref <span class="op">=</span> <span class="st">"mean"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"B (time basis):"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">B</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; B (time basis): 160 6</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"A (library coords):"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">A</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; A (library coords): 6 9</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Singular values:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">S</span>, <span class="fl">2</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Singular values: 2.68 1.23 0.52 0.17 0.04 0</span></span></code></pre></div>
-<div class="section level3">
-<h3 id="visualizing-the-basis">Visualizing the Basis<a class="anchor" aria-label="anchor" href="#visualizing-the-basis"></a>
-</h3>
-<p>Each basis function captures a principal mode of HRF variation: the
-main shape, timing shifts, width differences, and undershoot
-features.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>  <span class="va">oldpar</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">3</span><span class="op">)</span>, mar <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">3</span>, <span class="fl">3</span>, <span class="fl">2</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span><span class="va">oldpar</span><span class="op">)</span>, add <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">B</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">tgrid</span>, <span class="va">sbhm</span><span class="op">$</span><span class="va">B</span><span class="op">[</span>, <span class="va">i</span><span class="op">]</span>, type <span class="op">=</span> <span class="st">"l"</span>, col <span class="op">=</span> <span class="st">"navy"</span>, lwd <span class="op">=</span> <span class="fl">2</span>,</span>
-<span>         main <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"Basis "</span>, <span class="va">i</span>, <span class="st">" (s="</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">S</span><span class="op">[</span><span class="va">i</span><span class="op">]</span>, <span class="fl">2</span><span class="op">)</span>, <span class="st">")"</span><span class="op">)</span>,</span>
-<span>         xlab <span class="op">=</span> <span class="st">"Time (s)"</span>, ylab <span class="op">=</span> <span class="st">"Amplitude"</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span>h <span class="op">=</span> <span class="fl">0</span>, col <span class="op">=</span> <span class="st">"gray"</span>, lty <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
-<p><img src="sbhm_files/figure-html/visualize-basis-1.png" class="r-plt" alt="Six panels showing SBHM shared basis functions capturing principal modes of HRF variation." width="1500"></p>
-</div>
-<div class="section level3">
-<h3 id="choosing-the-rank">Choosing the Rank<a class="anchor" aria-label="anchor" href="#choosing-the-rank"></a>
-</h3>
-<p>Aim for 90–95% variance explained. We can sweep ranks to find the
-elbow.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">ranks</span> <span class="op">&lt;-</span> <span class="va">ranks_default</span></span>
-<span><span class="va">ve</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">sapply</a></span><span class="op">(</span><span class="va">ranks</span>, <span class="kw">function</span><span class="op">(</span><span class="va">ri</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="fu"><a href="../reference/sbhm_build.html">sbhm_build</a></span><span class="op">(</span>library_spec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>fun <span class="op">=</span> <span class="va">gamma_fun</span>, pgrid <span class="op">=</span> <span class="va">param_grid</span>, span <span class="op">=</span> <span class="fl">32</span><span class="op">)</span>,</span>
-<span>                 r <span class="op">=</span> <span class="va">ri</span>, sframe <span class="op">=</span> <span class="va">sframe</span>, normalize <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">$</span><span class="va">S</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span></span>
-<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">ranks</span>, <span class="va">ve</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">ve</span><span class="op">)</span> <span class="op">*</span> <span class="fl">100</span>, type <span class="op">=</span> <span class="st">"b"</span>, pch <span class="op">=</span> <span class="fl">19</span>, col <span class="op">=</span> <span class="st">"navy"</span>,</span>
-<span>     lwd <span class="op">=</span> <span class="fl">2</span>, xlab <span class="op">=</span> <span class="st">"Rank (r)"</span>, ylab <span class="op">=</span> <span class="st">"Variance Explained (%)"</span>,</span>
-<span>     main <span class="op">=</span> <span class="st">"Choosing SBHM Rank"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span>h <span class="op">=</span> <span class="fl">95</span>, col <span class="op">=</span> <span class="st">"red"</span>, lty <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/grid.html" class="external-link">grid</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="sbhm_files/figure-html/plot-rank-1.png" class="r-plt" alt="Line plot of variance explained vs rank showing elbow around rank 6." width="1200"></p>
-</div>
-<div class="section level3">
-<h3 id="library-coverage">Library Coverage<a class="anchor" aria-label="anchor" href="#library-coverage"></a>
-</h3>
-<p>A sample of rank-r reconstructed HRFs shows the range of shapes the
-library spans.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">H_hat</span> <span class="op">&lt;-</span> <span class="va">sbhm</span><span class="op">$</span><span class="va">B</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">sbhm</span><span class="op">$</span><span class="va">A</span></span>
-<span><span class="va">sel</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">H_hat</span><span class="op">)</span>, length.out <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">H_hat</span><span class="op">)</span>, <span class="fl">12</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/matplot.html" class="external-link">matplot</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">tgrid</span>, <span class="va">H_hat</span><span class="op">[</span>, <span class="va">sel</span>, drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span>, type <span class="op">=</span> <span class="st">"l"</span>, lty <span class="op">=</span> <span class="fl">1</span>,</span>
-<span>        col <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/grDevices/colorRamp.html" class="external-link">colorRampPalette</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"#6baed6"</span>, <span class="st">"#08519c"</span><span class="op">)</span><span class="op">)</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">sel</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>        lwd <span class="op">=</span> <span class="fl">1.5</span>, xlab <span class="op">=</span> <span class="st">"Time (s)"</span>, ylab <span class="op">=</span> <span class="st">"Amplitude"</span>,</span>
-<span>        main <span class="op">=</span> <span class="st">"Sample of Library HRFs (rank-r reconstruction)"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span>h <span class="op">=</span> <span class="fl">0</span>, col <span class="op">=</span> <span class="st">"gray80"</span>, lty <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></code></pre></div>
-<p><img src="sbhm_files/figure-html/library-coverage-1.png" class="r-plt" alt="Overlaid HRF curves showing the range of shapes spanned by the library reconstruction." width="1200"></p>
-</div>
-</div>
-<div class="section level2">
-<h2 id="step-2-generate-synthetic-data">Step 2: Generate Synthetic Data<a class="anchor" aria-label="anchor" href="#step-2-generate-synthetic-data"></a>
-</h2>
-<p>To demonstrate recovery, we create data where each voxel uses a known
-HRF from the library. First, set up the experimental design.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">n_voxels</span> <span class="op">&lt;-</span> <span class="va">n_voxels_default</span></span>
-<span><span class="va">n_trials</span> <span class="op">&lt;-</span> <span class="va">n_trials_default</span></span>
-<span><span class="va">safe_end</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">tgrid</span><span class="op">)</span> <span class="op">-</span> <span class="fl">30</span></span>
-<span><span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">20</span>, <span class="va">safe_end</span>, length.out <span class="op">=</span> <span class="va">n_trials</span><span class="op">)</span></span></code></pre></div>
-<p>Assign each voxel a random library HRF and build per-trial
-regressors. The fresh <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code> here keeps the HRF
-assignment reproducible independently of earlier random draws.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">456</span><span class="op">)</span></span>
-<span><span class="va">true_hrf_idx</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sample.html" class="external-link">sample</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">A</span><span class="op">)</span>, <span class="va">n_voxels</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="va">design_spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>  sframe <span class="op">=</span> <span class="va">sframe</span>,</span>
-<span>  cond <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>onsets <span class="op">=</span> <span class="va">onsets</span>, duration <span class="op">=</span> <span class="fl">0</span>, span <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">contract</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  Object <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Library"</span>, <span class="st">"Shared basis"</span>, <span class="st">"Shape match"</span>, <span class="st">"Trial output"</span>, <span class="st">"Uncertainty"</span><span class="op">)</span>,</span>
+<span>  Contract <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>    <span class="st">"Finite, uniquely named candidate waveforms; optional discrete-L2 normalization"</span>,</span>
+<span>    <span class="st">"Rank-r SVD representation with total-energy and numerical-rank metadata"</span>,</span>
+<span>    <span class="st">"Hard candidate or explicit soft blend; margin is an uncalibrated score difference"</span>,</span>
+<span>    <span class="st">"Coefficient on the supplied event design using the selected rank-truncated shape"</span>,</span>
+<span>    <span class="st">"Point estimates only; SBHM standard errors and tests are not calibrated"</span></span>
+<span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span>
-<span><span class="va">hrf_B</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sbhm_hrf.html">sbhm_hrf</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">B</span>, <span class="va">sbhm</span><span class="op">$</span><span class="va">tgrid</span>, <span class="va">sbhm</span><span class="op">$</span><span class="va">span</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">regressors_by_trial</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">onsets</span>, <span class="kw">function</span><span class="op">(</span><span class="va">ot</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">rr_t</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/regressor.html" class="external-link">regressor</a></span><span class="op">(</span>onsets <span class="op">=</span> <span class="va">ot</span>, hrf <span class="op">=</span> <span class="va">hrf_B</span>, duration <span class="op">=</span> <span class="fl">0</span>, span <span class="op">=</span> <span class="fl">30</span>, summate <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/evaluate.html" class="external-link">evaluate</a></span><span class="op">(</span><span class="va">rr_t</span>, grid <span class="op">=</span> <span class="va">sbhm</span><span class="op">$</span><span class="va">tgrid</span>, precision <span class="op">=</span> <span class="fl">0.1</span>, method <span class="op">=</span> <span class="st">"conv"</span><span class="op">)</span></span>
-<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
-<p>Now generate the signal. Each voxel’s response is the sum of
-per-trial regressors projected through that voxel’s HRF coordinates,
-scaled by a random amplitude, plus noise.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">Y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_time</span> <span class="op">*</span> <span class="va">n_voxels</span>, sd <span class="op">=</span> <span class="fl">0.5</span><span class="op">)</span>, <span class="va">n_time</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
-<span><span class="va">true_amplitudes</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_trials</span> <span class="op">*</span> <span class="va">n_voxels</span>, mean <span class="op">=</span> <span class="fl">2</span>, sd <span class="op">=</span> <span class="fl">0.5</span><span class="op">)</span>,</span>
-<span>                          <span class="va">n_trials</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
-<span><span class="kw">for</span> <span class="op">(</span><span class="va">v</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_voxels</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">alpha_true</span> <span class="op">&lt;-</span> <span class="va">sbhm</span><span class="op">$</span><span class="va">A</span><span class="op">[</span>, <span class="va">true_hrf_idx</span><span class="op">[</span><span class="va">v</span><span class="op">]</span><span class="op">]</span></span>
-<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">t</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">n_trials</span><span class="op">)</span></span>
-<span>    <span class="va">Y</span><span class="op">[</span>, <span class="va">v</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">Y</span><span class="op">[</span>, <span class="va">v</span><span class="op">]</span> <span class="op">+</span> <span class="va">true_amplitudes</span><span class="op">[</span><span class="va">t</span>, <span class="va">v</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span><span class="va">regressors_by_trial</span><span class="op">[[</span><span class="va">t</span><span class="op">]</span><span class="op">]</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">alpha_true</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Y:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Y: 160 20</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Unique true HRFs:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">true_hrf_idx</span><span class="op">)</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Unique true HRFs: 9</span></span></code></pre></div>
-</div>
-<div class="section level2">
-<h2 id="step-3-run-the-sbhm-pipeline">Step 3: Run the SBHM Pipeline<a class="anchor" aria-label="anchor" href="#step-3-run-the-sbhm-pipeline"></a>
-</h2>
-<p>A single call to <code><a href="../reference/lss_sbhm.html">lss_sbhm()</a></code> runs the entire pipeline.
-All control lists (<code>prepass</code>, <code>match</code>,
-<code>oasis</code>, <code>amplitude</code>) are optional; pass only what
-you want to override. See <code><a href="../reference/lss_sbhm.html">?lss_sbhm</a></code> for full parameter
-documentation.</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">res_sbhm</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span></span>
-<span>  Y <span class="op">=</span> <span class="va">Y</span>, sbhm <span class="op">=</span> <span class="va">sbhm</span>, design_spec <span class="op">=</span> <span class="va">design_spec</span>,</span>
-<span>  return <span class="op">=</span> <span class="st">"both"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Amplitudes:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">amplitude</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Amplitudes: 6 20</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Coefficients:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">coeffs_r</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Coefficients: 6 6 20</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Matched indices:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">matched_idx</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Matched indices: 20</span></span></code></pre></div>
-<p>If you use <code>fmridesign</code>, prefer
-<code><a href="../reference/lss_sbhm_design.html">lss_sbhm_design()</a></code> for an even simpler interface that
-mirrors <code><a href="../reference/lss_design.html">lss_design()</a></code>. See
-<code><a href="../reference/lss_sbhm_design.html">?lss_sbhm_design</a></code>.</p>
-</div>
-<div class="section level2">
-<h2 id="step-4-evaluate-recovery">Step 4: Evaluate Recovery<a class="anchor" aria-label="anchor" href="#step-4-evaluate-recovery"></a>
-</h2>
-<div class="section level3">
-<h3 id="matching-accuracy">Matching Accuracy<a class="anchor" aria-label="anchor" href="#matching-accuracy"></a>
-</h3>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">accuracy</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">matched_idx</span> <span class="op">==</span> <span class="va">true_hrf_idx</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"HRF matching accuracy:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fl">100</span> <span class="op">*</span> <span class="va">accuracy</span>, <span class="fl">1</span><span class="op">)</span>, <span class="st">"%\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; HRF matching accuracy: 75 %</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Confused voxels:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">matched_idx</span> <span class="op">!=</span> <span class="va">true_hrf_idx</span><span class="op">)</span>,</span>
-<span>    <span class="st">"/"</span>, <span class="va">n_voxels</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Confused voxels: 5 / 20</span></span></code></pre></div>
-</div>
-<div class="section level3">
-<h3 id="matching-confidence">Matching Confidence<a class="anchor" aria-label="anchor" href="#matching-confidence"></a>
-</h3>
-<p>The <code>margin</code> (top-1 minus top-2 cosine score) indicates
-how unambiguous each assignment is. Higher is better.</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Margin -- mean:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">margin</span><span class="op">)</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span>    <span class="st">" median:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/median.html" class="external-link">median</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">margin</span><span class="op">)</span>, <span class="fl">3</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Margin -- mean: 0.023  median: 0.006</span></span></code></pre></div>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/hist.html" class="external-link">hist</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">margin</span>, breaks <span class="op">=</span> <span class="fl">20</span>, col <span class="op">=</span> <span class="st">"skyblue"</span>, border <span class="op">=</span> <span class="st">"white"</span>,</span>
-<span>     main <span class="op">=</span> <span class="st">"Matching Confidence (Margin)"</span>,</span>
-<span>     xlab <span class="op">=</span> <span class="st">"Margin (top1 - top2 cosine score)"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span>v <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/median.html" class="external-link">median</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">margin</span><span class="op">)</span>, col <span class="op">=</span> <span class="st">"red"</span>, lwd <span class="op">=</span> <span class="fl">2</span>, lty <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/grid.html" class="external-link">grid</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="sbhm_files/figure-html/visualize-margin-1.png" class="r-plt" alt="Histogram of matching confidence margins with median line." width="1200"></p>
-<p>In this simulation the median margin is small, which means many
-voxels sit close to multiple library members. That is exactly the regime
-where soft blending (see below) can help.</p>
-</div>
-<div class="section level3">
-<h3 id="amplitude-recovery">Amplitude Recovery<a class="anchor" aria-label="anchor" href="#amplitude-recovery"></a>
-</h3>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">cor_amp</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">amplitude</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">true_amplitudes</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">true_amplitudes</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">amplitude</span><span class="op">)</span>,</span>
-<span>     pch <span class="op">=</span> <span class="fl">19</span>, col <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/grDevices/adjustcolor.html" class="external-link">adjustcolor</a></span><span class="op">(</span><span class="st">"navy"</span>, alpha.f <span class="op">=</span> <span class="fl">0.3</span><span class="op">)</span>,</span>
-<span>     xlab <span class="op">=</span> <span class="st">"True Amplitude"</span>, ylab <span class="op">=</span> <span class="st">"Estimated Amplitude"</span>,</span>
-<span>     main <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"Amplitude Recovery (r = "</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">cor_amp</span>, <span class="fl">3</span><span class="op">)</span>, <span class="st">")"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, col <span class="op">=</span> <span class="st">"red"</span>, lwd <span class="op">=</span> <span class="fl">2</span>, lty <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/grid.html" class="external-link">grid</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="sbhm_files/figure-html/compare-amplitudes-1.png" class="r-plt" alt="Scatter plot of true vs estimated amplitudes showing recovery quality." width="1200"></p>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">recovery_summary</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>  HRFMatchingAccuracy <span class="op">=</span> <span class="va">accuracy</span>,</span>
-<span>  AmplitudeCorrelation <span class="op">=</span> <span class="va">cor_amp</span>,</span>
-<span>  MedianMargin <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/median.html" class="external-link">median</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">margin</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span><span class="va">recovery_summary</span></span>
-<span><span class="co">#&gt;   HRFMatchingAccuracy AmplitudeCorrelation MedianMargin</span></span>
-<span><span class="co">#&gt; 1                0.75            0.6245209  0.005994378</span></span></code></pre></div>
-</div>
-<div class="section level3">
-<h3 id="recovered-hrf-shapes">Recovered HRF Shapes<a class="anchor" aria-label="anchor" href="#recovered-hrf-shapes"></a>
-</h3>
-<p>For the most confidently matched voxels, the recovered and true HRFs
-should overlap closely.</p>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">H_hat</span> <span class="op">&lt;-</span> <span class="va">sbhm</span><span class="op">$</span><span class="va">B</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">sbhm</span><span class="op">$</span><span class="va">A</span></span>
-<span><span class="va">vox_show</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/order.html" class="external-link">order</a></span><span class="op">(</span><span class="op">-</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">margin</span><span class="op">)</span>, n <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="fl">6</span>, <span class="va">n_voxels</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>  <span class="va">oldpar</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">3</span><span class="op">)</span>, mar <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">3</span>, <span class="fl">3</span>, <span class="fl">2</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span><span class="va">oldpar</span><span class="op">)</span>, add <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">v</span> <span class="kw">in</span> <span class="va">vox_show</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">rng</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/range.html" class="external-link">range</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">H_hat</span><span class="op">[</span>, <span class="va">true_hrf_idx</span><span class="op">[</span><span class="va">v</span><span class="op">]</span><span class="op">]</span>, <span class="va">H_hat</span><span class="op">[</span>, <span class="va">res_sbhm</span><span class="op">$</span><span class="va">matched_idx</span><span class="op">[</span><span class="va">v</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">tgrid</span>, <span class="va">H_hat</span><span class="op">[</span>, <span class="va">true_hrf_idx</span><span class="op">[</span><span class="va">v</span><span class="op">]</span><span class="op">]</span>, type <span class="op">=</span> <span class="st">"l"</span>, col <span class="op">=</span> <span class="st">"#2c7fb8"</span>,</span>
-<span>         lwd <span class="op">=</span> <span class="fl">2</span>, ylim <span class="op">=</span> <span class="va">rng</span>, main <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"Voxel "</span>, <span class="va">v</span><span class="op">)</span>, xlab <span class="op">=</span> <span class="st">"Time (s)"</span>, ylab <span class="op">=</span> <span class="st">"HRF"</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/graphics/lines.html" class="external-link">lines</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">tgrid</span>, <span class="va">H_hat</span><span class="op">[</span>, <span class="va">res_sbhm</span><span class="op">$</span><span class="va">matched_idx</span><span class="op">[</span><span class="va">v</span><span class="op">]</span><span class="op">]</span>, col <span class="op">=</span> <span class="st">"#d95f02"</span>, lwd <span class="op">=</span> <span class="fl">2</span>, lty <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">"topright"</span>, bty <span class="op">=</span> <span class="st">"n"</span>, cex <span class="op">=</span> <span class="fl">0.8</span>, legend <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"True"</span>, <span class="st">"Matched"</span><span class="op">)</span>,</span>
-<span>           lty <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, lwd <span class="op">=</span> <span class="fl">2</span>, col <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"#2c7fb8"</span>, <span class="st">"#d95f02"</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
-<p><img src="sbhm_files/figure-html/matched-vs-true-1.png" class="r-plt" alt="Six panels comparing true and matched HRF shapes for the most confident voxels." width="1500"></p>
-</div>
-<div class="section level3">
-<h3 id="library-manifold">Library Manifold<a class="anchor" aria-label="anchor" href="#library-manifold"></a>
-</h3>
-<p>PCA of the library coordinates shows which HRFs were present (true)
-versus selected (matched).</p>
-<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">pca</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/prcomp.html" class="external-link">prcomp</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">A</span><span class="op">)</span>, center <span class="op">=</span> <span class="cn">TRUE</span>, scale. <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="va">pc</span> <span class="op">&lt;-</span> <span class="va">pca</span><span class="op">$</span><span class="va">x</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">pc</span>, pch <span class="op">=</span> <span class="fl">16</span>, col <span class="op">=</span> <span class="st">"gray70"</span>, xlab <span class="op">=</span> <span class="st">"PC1"</span>, ylab <span class="op">=</span> <span class="st">"PC2"</span>,</span>
-<span>     main <span class="op">=</span> <span class="st">"Library Coordinate Space (PCA)"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/points.html" class="external-link">points</a></span><span class="op">(</span><span class="va">pc</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">true_hrf_idx</span><span class="op">)</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span>, pch <span class="op">=</span> <span class="fl">1</span>, col <span class="op">=</span> <span class="st">"#2c7fb8"</span>, lwd <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/points.html" class="external-link">points</a></span><span class="op">(</span><span class="va">pc</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">matched_idx</span><span class="op">)</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span>, pch <span class="op">=</span> <span class="fl">4</span>, col <span class="op">=</span> <span class="st">"#d95f02"</span>, lwd <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">"topright"</span>, bty <span class="op">=</span> <span class="st">"n"</span>,</span>
-<span>       legend <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Library"</span>, <span class="st">"True"</span>, <span class="st">"Matched"</span><span class="op">)</span>,</span>
-<span>       pch <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">16</span>, <span class="fl">1</span>, <span class="fl">4</span><span class="op">)</span>, col <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"gray60"</span>, <span class="st">"#2c7fb8"</span>, <span class="st">"#d95f02"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p><img src="sbhm_files/figure-html/pca-library-1.png" class="r-plt" alt="PCA scatter of library coordinates showing true and matched HRF positions." width="1200"></p>
-</div>
-</div>
-<div class="section level2">
-<h2 id="soft-assignment-for-ambiguous-voxels">Soft Assignment for Ambiguous Voxels<a class="anchor" aria-label="anchor" href="#soft-assignment-for-ambiguous-voxels"></a>
-</h2>
-<p>Hard assignment picks the single best HRF per voxel. When the margin
-is small, blending the top-K candidates can reduce variance. The
-built-in approach requires just two extra arguments.</p>
-<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">res_soft</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span></span>
-<span>  Y <span class="op">=</span> <span class="va">Y</span>, sbhm <span class="op">=</span> <span class="va">sbhm</span>, design_spec <span class="op">=</span> <span class="va">design_spec</span>,</span>
-<span>  match <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>topK <span class="op">=</span> <span class="fl">3</span>, soft_blend <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>               blend_margin <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/median.html" class="external-link">median</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">margin</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  return <span class="op">=</span> <span class="st">"amplitude"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">cor_sv</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/cor.html" class="external-link">cor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">res_soft</span><span class="op">$</span><span class="va">amplitude</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">res_sbhm</span><span class="op">$</span><span class="va">amplitude</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Soft vs hard amplitude correlation:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">cor_sv</span>, <span class="fl">3</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Soft vs hard amplitude correlation: 0.994</span></span></code></pre></div>
-<p>Blending only applies to voxels whose margin falls below
-<code>blend_margin</code>; confident voxels keep their hard assignment.
-For manual control over the blending weights, use
-<code><a href="../reference/sbhm_prepass.html">sbhm_prepass()</a></code>, <code>sbhm_match(topK = K)</code>, and
-<code><a href="../reference/sbhm_project.html">sbhm_project()</a></code> directly. See <code><a href="../reference/sbhm_match.html">?sbhm_match</a></code> for
-details.</p>
-</div>
-<div class="section level2">
-<h2 id="shape-estimation-strategies">Shape Estimation Strategies<a class="anchor" aria-label="anchor" href="#shape-estimation-strategies"></a>
-</h2>
-<p>By default, SBHM estimates each voxel’s HRF shape from an aggregate
-prepass fit (<code>alpha_source = "prepass"</code>). Two alternative
-strategies are available when the prepass is unreliable:</p>
-<ul>
-<li>
-<code>"trial_projection"</code> estimates shape from per-trial
-projection coefficients in the shared basis, using the leading singular
-vector across trials.</li>
-<li>
-<code>"oasis_rank1"</code> extracts shape from the rank-1
-approximation of the trial-wise OASIS betas. Set <code>rank1_min</code>
-to gate voxels with low rank-1 variance fraction back to prepass.</li>
-</ul>
-<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">res_proj</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span></span>
-<span>  <span class="va">Y</span>, <span class="va">sbhm</span>, <span class="va">design_spec</span>,</span>
-<span>  match <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>alpha_source <span class="op">=</span> <span class="st">"trial_projection"</span><span class="op">)</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<div class="section level3">
-<h3 id="low-confidence-gating">Low-Confidence Gating<a class="anchor" aria-label="anchor" href="#low-confidence-gating"></a>
-</h3>
-<p>For voxels where matching is uncertain (low margin or weak signal),
-you can gate them to a fallback shape using <code>min_margin</code> and
-<code>min_beta_norm</code>. Gated voxels use the reference coordinate
-instead of the matched one.</p>
-<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">res_gated</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span></span>
-<span>  <span class="va">Y</span>, <span class="va">sbhm</span>, <span class="va">design_spec</span>,</span>
-<span>  match <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>min_margin <span class="op">=</span> <span class="fl">0.05</span>, min_beta_norm <span class="op">=</span> <span class="fl">1e-3</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Voxels gated to fallback:"</span>, <span class="va">res_gated</span><span class="op">$</span><span class="va">diag</span><span class="op">$</span><span class="va">fallback_low_conf_n</span>, <span class="st">"\n"</span><span class="op">)</span></span></code></pre></div>
-</div>
-</div>
-<div class="section level2">
-<h2 id="amplitude-policy">Amplitude Policy<a class="anchor" aria-label="anchor" href="#amplitude-policy"></a>
-</h2>
-<p>The final amplitude stage estimates per-trial scalars from the
-matched HRF. The <code>amplitude$method</code> argument selects the
-estimator: <code>"lss1"</code> (default, per-trial 2x2 LSS—robust under
-overlap), <code>"global_ls"</code> (fast ridge-regularized GLM across
-all trials), or <code>"oasis_voxel"</code> (full OASIS per voxel,
-heaviest but returns SEs).</p>
-<p>The default <code>"lss1"</code> provides the best balance of
-robustness and accuracy for typical rapid event-related designs. For
-slow designs with well-separated trials, <code>"global_ls"</code> can be
-faster. Use <code>cond_gate</code> to fall back automatically when the
-design is too collinear for a given method.</p>
-<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">out</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span></span>
-<span>  <span class="va">Y</span>, <span class="va">sbhm</span>, <span class="va">design_spec</span>,</span>
-<span>  amplitude <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"lss1"</span>,</span>
-<span>                   ridge_frac <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fl">0.02</span>, b <span class="op">=</span> <span class="fl">0.02</span><span class="op">)</span>,</span>
-<span>                   cond_gate <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>metric <span class="op">=</span> <span class="st">"rho"</span>, thr <span class="op">=</span> <span class="fl">0.999</span>, fallback <span class="op">=</span> <span class="st">"global_ls"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<p>See <code><a href="../reference/lss_sbhm.html">?lss_sbhm</a></code> for guidance on choosing by ISI regime
-(slow, moderate, fast ER).</p>
-</div>
-<div class="section level2">
-<h2 id="returning-coefficients-for-custom-analysis">Returning Coefficients for Custom Analysis<a class="anchor" aria-label="anchor" href="#returning-coefficients-for-custom-analysis"></a>
-</h2>
-<p>When you need the full r-dimensional trial-wise coefficients instead
-of scalar amplitudes, request <code>return = "coefficients"</code>.</p>
-<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">res_c</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span>Y <span class="op">=</span> <span class="va">Y</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">5</span><span class="op">]</span>, sbhm <span class="op">=</span> <span class="va">sbhm</span>,</span>
-<span>                   design_spec <span class="op">=</span> <span class="va">design_spec</span>, return <span class="op">=</span> <span class="st">"coefficients"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Coefficients:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">res_c</span><span class="op">$</span><span class="va">coeffs_r</span><span class="op">)</span>, <span class="st">" [r x trials x voxels]\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Coefficients: 6 6 5  [r x trials x voxels]</span></span></code></pre></div>
-</div>
-<div class="section level2">
-<h2 id="parameter-quick-reference">Parameter Quick Reference<a class="anchor" aria-label="anchor" href="#parameter-quick-reference"></a>
-</h2>
+<span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="va">contract</span>, caption <span class="op">=</span> <span class="st">"The estimands and boundaries used throughout this article."</span><span class="op">)</span></span></code></pre></div>
 <table class="table">
+<caption>The estimands and boundaries used throughout this
+article.</caption>
 <colgroup>
-<col width="27%">
-<col width="22%">
-<col width="32%">
-<col width="17%">
+<col width="13%">
+<col width="86%">
 </colgroup>
 <thead><tr class="header">
-<th>Parameter</th>
-<th>Default</th>
-<th>Recommended</th>
-<th>Notes</th>
+<th align="left">Object</th>
+<th align="left">Contract</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td>
-<code>r</code> (rank)</td>
-<td>–</td>
-<td>6–12</td>
-<td>Aim for 90–95% variance explained</td>
+<td align="left">Library</td>
+<td align="left">Finite, uniquely named candidate waveforms; optional
+discrete-L2 normalization</td>
 </tr>
 <tr class="even">
-<td><code>topK</code></td>
-<td>3</td>
-<td>1–5</td>
-<td>Use 3–5 with <code>soft_blend = TRUE</code> for ambiguous cases</td>
+<td align="left">Shared basis</td>
+<td align="left">Rank-r SVD representation with total-energy and
+numerical-rank metadata</td>
 </tr>
 <tr class="odd">
-<td><code>soft_blend</code></td>
-<td>TRUE</td>
-<td>TRUE</td>
-<td>Blend top-K candidates for uncertain voxels</td>
+<td align="left">Shape match</td>
+<td align="left">Hard candidate or explicit soft blend; margin is an
+uncalibrated score difference</td>
 </tr>
 <tr class="even">
-<td><code>blend_margin</code></td>
-<td>0.08</td>
-<td>0.05–0.15</td>
-<td>Only blend voxels with margin below this</td>
+<td align="left">Trial output</td>
+<td align="left">Coefficient on the supplied event design using the
+selected rank-truncated shape</td>
 </tr>
 <tr class="odd">
-<td><code>alpha_source</code></td>
-<td><code>"prepass"</code></td>
-<td><code>"prepass"</code></td>
-<td>Also <code>"trial_projection"</code> or
-<code>"oasis_rank1"</code>
-</td>
-</tr>
-<tr class="even">
-<td><code>prepass$ridge</code></td>
-<td>NULL</td>
-<td><code>list(mode = "fractional", lambda = 0.01)</code></td>
-<td>Stabilizes noisy/collinear designs</td>
-</tr>
-<tr class="odd">
-<td><code>match$shrink$tau</code></td>
-<td>0</td>
-<td>0–0.2</td>
-<td>Increase for low SNR</td>
-</tr>
-<tr class="even">
-<td><code>match$whiten</code></td>
-<td>FALSE</td>
-<td>FALSE</td>
-<td>Set TRUE with <code>whiten_power = 0.5</code> for partial
-whitening</td>
-</tr>
-<tr class="odd">
-<td><code>match$min_margin</code></td>
-<td>NULL</td>
-<td>0.05–0.1</td>
-<td>Gate low-confidence voxels to fallback shape</td>
-</tr>
-<tr class="even">
-<td><code>prewhiten</code></td>
-<td>NULL</td>
-<td><code>list(method = "ar", p = 1L)</code></td>
-<td>Use for TR &lt; 2s</td>
-</tr>
-<tr class="odd">
-<td><code>amplitude$method</code></td>
-<td><code>"lss1"</code></td>
-<td>varies by ISI</td>
-<td>
-<code>"global_ls"</code> for slow ER, <code>"lss1"</code>
-otherwise</td>
+<td align="left">Uncertainty</td>
+<td align="left">Point estimates only; SBHM standard errors and tests
+are not calibrated</td>
 </tr>
 </tbody>
 </table>
-<p>For full details on every parameter, see <code><a href="../reference/sbhm_build.html">?sbhm_build</a></code>,
-<code><a href="../reference/sbhm_match.html">?sbhm_match</a></code>, and <code><a href="../reference/lss_sbhm.html">?lss_sbhm</a></code>.</p>
 </div>
 <div class="section level2">
-<h2 id="performance-considerations">Performance Considerations<a class="anchor" aria-label="anchor" href="#performance-considerations"></a>
+<h2 id="build-one-transparent-library">Build one transparent library<a class="anchor" aria-label="anchor" href="#build-one-transparent-library"></a>
 </h2>
-<p>SBHM’s cost scales as O(T<em>r</em>N<em>V) for the LSS step, where N
-is the number of trials. Compared to unconstrained voxel-wise HRF
-estimation this is typically 10–50x faster, since r &lt;&lt;
-K</em>N.</p>
-<p>For very large datasets (V &gt; 50,000), PCA factorization reduces
-memory by fitting the prepass on q “meta-voxels” instead of V
-voxels.</p>
-<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">pca_Y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/prcomp.html" class="external-link">prcomp</a></span><span class="op">(</span><span class="va">Y</span>, center <span class="op">=</span> <span class="cn">TRUE</span>, rank. <span class="op">=</span> <span class="fl">100</span><span class="op">)</span></span>
-<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span></span>
-<span>  Y <span class="op">=</span> <span class="va">pca_Y</span><span class="op">$</span><span class="va">x</span>, sbhm <span class="op">=</span> <span class="va">sbhm</span>, design_spec <span class="op">=</span> <span class="va">design_spec</span>,</span>
-<span>  prepass <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>data_fac <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>scores <span class="op">=</span> <span class="va">pca_Y</span><span class="op">$</span><span class="va">x</span>, loadings <span class="op">=</span> <span class="va">pca_Y</span><span class="op">$</span><span class="va">rotation</span><span class="op">)</span><span class="op">)</span></span>
+<p>For a compact computational example, we use a grid of positive gamma
+curves. It is a demonstration library, not a package recommendation and
+not a claim that the grid spans physiological HRFs. A scientific
+analysis must justify its own candidates, preprocessing, and
+coverage.</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">TR</span> <span class="op">&lt;-</span> <span class="fl">1</span></span>
+<span><span class="va">n_time</span> <span class="op">&lt;-</span> <span class="fl">180L</span></span>
+<span><span class="va">sframe</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="va">n_time</span>, TR <span class="op">=</span> <span class="va">TR</span><span class="op">)</span></span>
+<span><span class="va">time</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/samples.html" class="external-link">samples</a></span><span class="op">(</span><span class="va">sframe</span>, global <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">span</span> <span class="op">&lt;-</span> <span class="fl">32</span></span>
+<span></span>
+<span><span class="va">library_grid</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/expand.grid.html" class="external-link">expand.grid</a></span><span class="op">(</span></span>
+<span>  shape <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">5</span>, <span class="fl">6.5</span>, <span class="fl">8</span>, <span class="fl">9.5</span><span class="op">)</span>,</span>
+<span>  rate <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.85</span>, <span class="fl">1.00</span>, <span class="fl">1.15</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">library_H</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">library_grid</span><span class="op">)</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">i</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">h</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/GammaDist.html" class="external-link">dgamma</a></span><span class="op">(</span><span class="va">time</span>, shape <span class="op">=</span> <span class="va">library_grid</span><span class="op">$</span><span class="va">shape</span><span class="op">[</span><span class="va">i</span><span class="op">]</span>, rate <span class="op">=</span> <span class="va">library_grid</span><span class="op">$</span><span class="va">rate</span><span class="op">[</span><span class="va">i</span><span class="op">]</span><span class="op">)</span></span>
+<span>  <span class="va">h</span><span class="op">[</span><span class="va">time</span> <span class="op">&gt;</span> <span class="va">span</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">0</span></span>
+<span>  <span class="va">h</span></span>
+<span><span class="op">}</span>, <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">time</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">library_H</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span></span>
+<span>  <span class="st">"gamma_s%02d_r%03d"</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fl">10</span> <span class="op">*</span> <span class="va">library_grid</span><span class="op">$</span><span class="va">shape</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fl">100</span> <span class="op">*</span> <span class="va">library_grid</span><span class="op">$</span><span class="va">rate</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">rank_used</span> <span class="op">&lt;-</span> <span class="fl">4L</span></span>
+<span><span class="va">sbhm</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sbhm_build.html">sbhm_build</a></span><span class="op">(</span></span>
+<span>  library_H <span class="op">=</span> <span class="va">library_H</span>,</span>
+<span>  r <span class="op">=</span> <span class="va">rank_used</span>,</span>
+<span>  tgrid <span class="op">=</span> <span class="va">time</span>,</span>
+<span>  span <span class="op">=</span> <span class="va">span</span>,</span>
+<span>  normalize <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  baseline <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  ref <span class="op">=</span> <span class="st">"mean"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>For ROI-based analyses, simply subset columns of Y before calling
-<code><a href="../reference/lss_sbhm.html">lss_sbhm()</a></code>. A benchmark script is available via
-<code>system.file("benchmarks", "bench_sbhm.R", package = "fmrilss")</code>.</p>
-</div>
-<div class="section level2">
-<h2 id="prewhitening">Prewhitening<a class="anchor" aria-label="anchor" href="#prewhitening"></a>
-</h2>
-<p>If your TR is short (&lt; 2s) or residuals show autocorrelation, add
-prewhitening to the final OASIS step.</p>
-<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">res_pw</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span></span>
-<span>  Y <span class="op">=</span> <span class="va">Y</span>, sbhm <span class="op">=</span> <span class="va">sbhm</span>, design_spec <span class="op">=</span> <span class="va">design_spec</span>,</span>
-<span>  prewhiten <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="fl">1L</span>, pooling <span class="op">=</span> <span class="st">"global"</span>, exact_first <span class="op">=</span> <span class="st">"ar1"</span><span class="op">)</span></span>
+<div class="section level3">
+<h3 id="rank-is-a-declared-approximation">Rank is a declared approximation<a class="anchor" aria-label="anchor" href="#rank-is-a-declared-approximation"></a>
+</h3>
+<p><code><a href="../reference/sbhm_build.html">sbhm_build()</a></code> performs one decomposition and retains the
+full singular-value spectrum as metadata. The cumulative fraction below
+uses total squared singular-value energy—not the energy of the largest
+rank we happened to plot. Rank four is a modeling choice for this
+fixture; the table makes its approximation error inspectable rather than
+turning it into a generic rule.</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">singular_values</span> <span class="op">&lt;-</span> <span class="va">sbhm</span><span class="op">$</span><span class="va">meta</span><span class="op">$</span><span class="va">singular_values_full</span></span>
+<span><span class="va">rank_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  Rank <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along</a></span><span class="op">(</span><span class="va">singular_values</span><span class="op">)</span>,</span>
+<span>  CumulativeEnergy <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/cumsum.html" class="external-link">cumsum</a></span><span class="op">(</span><span class="va">singular_values</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">singular_values</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span>,</span>
+<span>  RelativeResidual <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">pmax</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/cumsum.html" class="external-link">cumsum</a></span><span class="op">(</span><span class="va">singular_values</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">singular_values</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">rank_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">rank_table</span>, <span class="fl">6</span><span class="op">)</span></span>
+<span><span class="va">rank_table</span><span class="op">$</span><span class="va">CumulativeEnergy</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">rank_table</span><span class="op">$</span><span class="va">CumulativeEnergy</span>, <span class="fl">6</span><span class="op">)</span></span>
+<span><span class="va">rank_table</span><span class="op">$</span><span class="va">RelativeResidual</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">rank_table</span><span class="op">$</span><span class="va">RelativeResidual</span>, <span class="fl">6</span><span class="op">)</span></span>
+<span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span></span>
+<span>  <span class="va">rank_table</span>,</span>
+<span>  caption <span class="op">=</span> <span class="st">"Total library energy retained and relative Frobenius residual by rank."</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>Note: the factorized prepass intentionally skips prewhitening for
-efficiency. The final OASIS step still applies it when
-<code>prewhiten</code> is provided.</p>
+<table class="table">
+<caption>Total library energy retained and relative Frobenius residual
+by rank.</caption>
+<thead><tr class="header">
+<th align="right">Rank</th>
+<th align="right">CumulativeEnergy</th>
+<th align="right">RelativeResidual</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="right">1</td>
+<td align="right">0.805168</td>
+<td align="right">0.441398</td>
+</tr>
+<tr class="even">
+<td align="right">2</td>
+<td align="right">0.972669</td>
+<td align="right">0.165321</td>
+</tr>
+<tr class="odd">
+<td align="right">3</td>
+<td align="right">0.997154</td>
+<td align="right">0.053345</td>
+</tr>
+<tr class="even">
+<td align="right">4</td>
+<td align="right">0.999824</td>
+<td align="right">0.013274</td>
+</tr>
+<tr class="odd">
+<td align="right">5</td>
+<td align="right">0.999991</td>
+<td align="right">0.003067</td>
+</tr>
+<tr class="even">
+<td align="right">6</td>
+<td align="right">1.000000</td>
+<td align="right">0.000311</td>
+</tr>
+</tbody>
+</table>
+<p>The shared basis <code>B</code> is orthonormal on this sampled grid.
+The coordinates <code>A</code> reconstruct the rank-four candidate
+waveforms as <code>B %*% A</code>; basis vectors are algebraic modes,
+not direct estimates of latency, width, or physiology.</p>
+</div>
 </div>
 <div class="section level2">
-<h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
+<h2 id="a-truth-referenced-fixture">A truth-referenced fixture<a class="anchor" aria-label="anchor" href="#a-truth-referenced-fixture"></a>
 </h2>
+<p>The fixture contains twelve voxels. Six use an exact library member
+and six use an off-library convex mixture. This tests both interpolation
+and the limitation of hard matching. Trial coefficients vary across
+trials and voxels. Motion-like nuisance signals and independent Gaussian
+noise are added explicitly.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">n_voxels</span> <span class="op">&lt;-</span> <span class="fl">12L</span></span>
+<span><span class="va">voxel_names</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"voxel_"</span>, <span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"%02d"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_voxels</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">onsets</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">12</span>, <span class="fl">138</span>, length.out <span class="op">=</span> <span class="fl">8</span><span class="op">)</span></span>
+<span><span class="va">n_trials</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">onsets</span><span class="op">)</span></span>
+<span><span class="va">trial_names</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"event_"</span>, <span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"%02d"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_trials</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">design_spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>  sframe <span class="op">=</span> <span class="va">sframe</span>,</span>
+<span>  cond <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    onsets <span class="op">=</span> <span class="va">onsets</span>,</span>
+<span>    duration <span class="op">=</span> <span class="fl">0</span>,</span>
+<span>    amplitude <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>    span <span class="op">=</span> <span class="va">span</span>,</span>
+<span>    trial_names <span class="op">=</span> <span class="va">trial_names</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  precision <span class="op">=</span> <span class="fl">0.1</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"conv"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">on_library_idx</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1L</span>, <span class="fl">3L</span>, <span class="fl">5L</span>, <span class="fl">7L</span>, <span class="fl">9L</span>, <span class="fl">11L</span><span class="op">)</span></span>
+<span><span class="va">alpha_true</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="cn">NA_real_</span>, <span class="va">rank_used</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
+<span><span class="va">alpha_true</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">6</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">sbhm</span><span class="op">$</span><span class="va">A</span><span class="op">[</span>, <span class="va">on_library_idx</span>, drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span><span class="va">mix_pairs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">3</span>, <span class="fl">4</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">5</span>, <span class="fl">6</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">7</span>, <span class="fl">8</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">9</span>, <span class="fl">10</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">11</span>, <span class="fl">12</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">mix_weight</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.25</span>, <span class="fl">0.40</span>, <span class="fl">0.55</span>, <span class="fl">0.70</span>, <span class="fl">0.35</span>, <span class="fl">0.60</span><span class="op">)</span></span>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">v</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">6</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">alpha_true</span><span class="op">[</span>, <span class="fl">6</span> <span class="op">+</span> <span class="va">v</span><span class="op">]</span> <span class="op">&lt;-</span></span>
+<span>    <span class="va">mix_weight</span><span class="op">[</span><span class="va">v</span><span class="op">]</span> <span class="op">*</span> <span class="va">sbhm</span><span class="op">$</span><span class="va">A</span><span class="op">[</span>, <span class="va">mix_pairs</span><span class="op">[</span><span class="va">v</span>, <span class="fl">1</span><span class="op">]</span><span class="op">]</span> <span class="op">+</span></span>
+<span>    <span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">mix_weight</span><span class="op">[</span><span class="va">v</span><span class="op">]</span><span class="op">)</span> <span class="op">*</span> <span class="va">sbhm</span><span class="op">$</span><span class="va">A</span><span class="op">[</span>, <span class="va">mix_pairs</span><span class="op">[</span><span class="va">v</span>, <span class="fl">2</span><span class="op">]</span><span class="op">]</span></span>
+<span><span class="op">}</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">alpha_true</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="va">voxel_names</span></span>
+<span></span>
+<span><span class="va">hrf_B</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sbhm_hrf.html">sbhm_hrf</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">B</span>, <span class="va">sbhm</span><span class="op">$</span><span class="va">tgrid</span>, <span class="va">sbhm</span><span class="op">$</span><span class="va">span</span><span class="op">)</span></span>
+<span><span class="va">trial_regs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along</a></span><span class="op">(</span><span class="va">onsets</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">j</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">rr</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/regressor.html" class="external-link">regressor</a></span><span class="op">(</span></span>
+<span>    onsets <span class="op">=</span> <span class="va">onsets</span><span class="op">[</span><span class="va">j</span><span class="op">]</span>, hrf <span class="op">=</span> <span class="va">hrf_B</span>,</span>
+<span>    duration <span class="op">=</span> <span class="fl">0</span>, amplitude <span class="op">=</span> <span class="fl">1</span>, span <span class="op">=</span> <span class="va">span</span>, summate <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  <span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/evaluate.html" class="external-link">evaluate</a></span><span class="op">(</span><span class="va">rr</span>, grid <span class="op">=</span> <span class="va">time</span>, precision <span class="op">=</span> <span class="fl">0.1</span>, method <span class="op">=</span> <span class="st">"conv"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">trial_index</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_trials</span><span class="op">)</span></span>
+<span><span class="va">voxel_index</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_voxels</span><span class="op">)</span></span>
+<span><span class="va">beta_true</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/outer.html" class="external-link">outer</a></span><span class="op">(</span><span class="va">trial_index</span>, <span class="va">voxel_index</span>, <span class="kw">function</span><span class="op">(</span><span class="va">i</span>, <span class="va">v</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fl">1.6</span> <span class="op">+</span> <span class="fl">0.35</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/Trig.html" class="external-link">sin</a></span><span class="op">(</span><span class="va">i</span> <span class="op">/</span> <span class="fl">1.7</span> <span class="op">+</span> <span class="va">v</span> <span class="op">/</span> <span class="fl">4</span><span class="op">)</span> <span class="op">+</span> <span class="fl">0.12</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/Trig.html" class="external-link">cos</a></span><span class="op">(</span><span class="va">i</span> <span class="op">*</span> <span class="va">v</span> <span class="op">/</span> <span class="fl">5</span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/dimnames.html" class="external-link">dimnames</a></span><span class="op">(</span><span class="va">beta_true</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">trial_names</span>, <span class="va">voxel_names</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">Nuisance</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span></span>
+<span>  linear <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="op">-</span><span class="fl">1</span>, <span class="fl">1</span>, length.out <span class="op">=</span> <span class="va">n_time</span><span class="op">)</span>,</span>
+<span>  slow_sine <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Trig.html" class="external-link">sin</a></span><span class="op">(</span><span class="fl">2</span> <span class="op">*</span> <span class="va">pi</span> <span class="op">*</span> <span class="va">time</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">time</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">nuisance_coef</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="op">-</span><span class="fl">0.25</span>, <span class="fl">0.25</span>, length.out <span class="op">=</span> <span class="va">n_voxels</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0.20</span>, <span class="op">-</span><span class="fl">0.20</span>, length.out <span class="op">=</span> <span class="va">n_voxels</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">Y_mean</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fl">2</span>, <span class="va">n_time</span>, <span class="va">n_voxels</span><span class="op">)</span> <span class="op">+</span> <span class="va">Nuisance</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">nuisance_coef</span></span>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">v</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_voxels</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">j</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_trials</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">Y_mean</span><span class="op">[</span>, <span class="va">v</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">Y_mean</span><span class="op">[</span>, <span class="va">v</span><span class="op">]</span> <span class="op">+</span></span>
+<span>      <span class="va">beta_true</span><span class="op">[</span><span class="va">j</span>, <span class="va">v</span><span class="op">]</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">trial_regs</span><span class="op">[[</span><span class="va">j</span><span class="op">]</span><span class="op">]</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">alpha_true</span><span class="op">[</span>, <span class="va">v</span><span class="op">]</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span><span class="op">}</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">812</span><span class="op">)</span></span>
+<span><span class="va">Y</span> <span class="op">&lt;-</span> <span class="va">Y_mean</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_time</span> <span class="op">*</span> <span class="va">n_voxels</span>, sd <span class="op">=</span> <span class="fl">0.04</span><span class="op">)</span>, <span class="va">n_time</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="va">voxel_names</span></span></code></pre></div>
+<p>The main call makes every consequential choice explicit. Zero
+penalties are used so the later direct-GLM oracle has the same estimand.
+Hard matching is used first; soft matching is evaluated separately
+rather than being hidden in a default.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fit_hard</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span></span>
+<span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
+<span>  sbhm <span class="op">=</span> <span class="va">sbhm</span>,</span>
+<span>  design_spec <span class="op">=</span> <span class="va">design_spec</span>,</span>
+<span>  Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
+<span>  prepass <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>ridge <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>mode <span class="op">=</span> <span class="st">"absolute"</span>, lambda <span class="op">=</span> <span class="fl">0</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  match <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>topK <span class="op">=</span> <span class="fl">1</span>, soft_blend <span class="op">=</span> <span class="cn">FALSE</span>, whiten <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span>,</span>
+<span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>ridge_mode <span class="op">=</span> <span class="st">"absolute"</span>, ridge_x <span class="op">=</span> <span class="fl">0</span>, ridge_b <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span>
+<span>  amplitude <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"global_ls"</span>, ridge <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span>
+<span>  return <span class="op">=</span> <span class="st">"both"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">output_contract</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  Component <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>    <span class="st">"alpha_coords"</span>, <span class="st">"amplitude"</span>, <span class="st">"coeffs_r"</span>, <span class="st">"matched_name"</span>, <span class="st">"shape_mode"</span>,</span>
+<span>    <span class="st">"event_amplitude / event_duration"</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  Shape <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">fit_hard</span><span class="op">$</span><span class="va">alpha_coords</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">" x "</span><span class="op">)</span>,</span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">fit_hard</span><span class="op">$</span><span class="va">amplitude</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">" x "</span><span class="op">)</span>,</span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">fit_hard</span><span class="op">$</span><span class="va">coeffs_r</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">" x "</span><span class="op">)</span>,</span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">fit_hard</span><span class="op">$</span><span class="va">matched_name</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">fit_hard</span><span class="op">$</span><span class="va">shape_mode</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">fit_hard</span><span class="op">$</span><span class="va">event_amplitude</span><span class="op">)</span>, <span class="st">"/"</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">fit_hard</span><span class="op">$</span><span class="va">event_duration</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  Meaning <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>    <span class="st">"rank x voxel coordinates actually used by the amplitude refit"</span>,</span>
+<span>    <span class="st">"trial x voxel event-design coefficients"</span>,</span>
+<span>    <span class="st">"rank x trial x voxel OASIS coefficients"</span>,</span>
+<span>    <span class="st">"top-scoring library candidate for each voxel"</span>,</span>
+<span>    <span class="st">"hard, soft, or fallback shape policy actually used"</span>,</span>
+<span>    <span class="st">"named event-design scale metadata aligned with amplitude rows"</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="va">output_contract</span>, caption <span class="op">=</span> <span class="st">"Reader-facing SBHM output contract for the fitted fixture."</span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<caption>Reader-facing SBHM output contract for the fitted
+fixture.</caption>
+<colgroup>
+<col width="31%">
+<col width="10%">
+<col width="58%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">Component</th>
+<th align="left">Shape</th>
+<th align="left">Meaning</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">alpha_coords</td>
+<td align="left">4 x 12</td>
+<td align="left">rank x voxel coordinates actually used by the amplitude
+refit</td>
+</tr>
+<tr class="even">
+<td align="left">amplitude</td>
+<td align="left">8 x 12</td>
+<td align="left">trial x voxel event-design coefficients</td>
+</tr>
+<tr class="odd">
+<td align="left">coeffs_r</td>
+<td align="left">4 x 8 x 12</td>
+<td align="left">rank x trial x voxel OASIS coefficients</td>
+</tr>
+<tr class="even">
+<td align="left">matched_name</td>
+<td align="left">12</td>
+<td align="left">top-scoring library candidate for each voxel</td>
+</tr>
+<tr class="odd">
+<td align="left">shape_mode</td>
+<td align="left">12</td>
+<td align="left">hard, soft, or fallback shape policy actually used</td>
+</tr>
+<tr class="even">
+<td align="left">event_amplitude / event_duration</td>
+<td align="left">8 / 8</td>
+<td align="left">named event-design scale metadata aligned with
+amplitude rows</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level2">
+<h2 id="evaluate-the-shape-actually-used">Evaluate the shape actually used<a class="anchor" aria-label="anchor" href="#evaluate-the-shape-actually-used"></a>
+</h2>
+<p>Exact library index is secondary: nearby candidates can have almost
+identical waveforms. We therefore evaluate
+<code>B %*% alpha_coords</code> for every voxel. Angular error is zero
+for identical waveform direction and ignores arbitrary positive scale.
+Unit-norm waveform RMSE adds a time-domain discrepancy.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">shape_summary_display</span> <span class="op">&lt;-</span> <span class="va">shape_summary</span></span>
+<span><span class="va">shape_summary_display</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">shape_summary_display</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span>, <span class="va">round</span>, <span class="fl">5</span><span class="op">)</span></span>
+<span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span></span>
+<span>  <span class="va">shape_summary_display</span>,</span>
+<span>  caption <span class="op">=</span> <span class="st">"All-voxel hard-match waveform error, separated by library coverage."</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<caption>All-voxel hard-match waveform error, separated by library
+coverage.</caption>
+<colgroup>
+<col width="15%">
+<col width="30%">
+<col width="28%">
+<col width="26%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">Truth</th>
+<th align="right">MeanAngularErrorRadians</th>
+<th align="right">MaxAngularErrorRadians</th>
+<th align="right">MeanUnitWaveformRMSE</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">Off-library</td>
+<td align="right">0.09139</td>
+<td align="right">0.14766</td>
+<td align="right">0.00681</td>
+</tr>
+<tr class="even">
+<td align="left">On-library</td>
+<td align="right">0.00000</td>
+<td align="right">0.00000</td>
+<td align="right">0.00000</td>
+</tr>
+</tbody>
+</table>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>  <span class="va">oldpar</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">3</span>, <span class="fl">4</span><span class="op">)</span>, mar <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2.7</span>, <span class="fl">2.8</span>, <span class="fl">2.1</span>, <span class="fl">0.6</span><span class="op">)</span>, bg <span class="op">=</span> <span class="st">"white"</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span><span class="va">oldpar</span><span class="op">)</span>, add <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span>  <span class="va">keep</span> <span class="op">&lt;-</span> <span class="va">time</span> <span class="op">&lt;=</span> <span class="va">span</span></span>
+<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">v</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n_voxels</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">ylim</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/range.html" class="external-link">range</a></span><span class="op">(</span><span class="va">true_waveforms</span><span class="op">[</span><span class="va">keep</span>, <span class="va">v</span><span class="op">]</span>, <span class="va">hard_waveforms</span><span class="op">[</span><span class="va">keep</span>, <span class="va">v</span><span class="op">]</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">time</span><span class="op">[</span><span class="va">keep</span><span class="op">]</span>, <span class="va">true_waveforms</span><span class="op">[</span><span class="va">keep</span>, <span class="va">v</span><span class="op">]</span>, type <span class="op">=</span> <span class="st">"l"</span>, lwd <span class="op">=</span> <span class="fl">2</span>,</span>
+<span>         col <span class="op">=</span> <span class="st">"#2c7fb8"</span>, ylim <span class="op">=</span> <span class="va">ylim</span>, xlab <span class="op">=</span> <span class="st">"Seconds"</span>, ylab <span class="op">=</span> <span class="st">"Shape"</span>,</span>
+<span>         main <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="va">voxel_names</span><span class="op">[</span><span class="va">v</span><span class="op">]</span>, <span class="kw">if</span> <span class="op">(</span><span class="va">v</span> <span class="op">&lt;=</span> <span class="fl">6</span><span class="op">)</span> <span class="st">" (on)"</span> <span class="kw">else</span> <span class="st">" (off)"</span><span class="op">)</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/graphics/lines.html" class="external-link">lines</a></span><span class="op">(</span><span class="va">time</span><span class="op">[</span><span class="va">keep</span><span class="op">]</span>, <span class="va">hard_waveforms</span><span class="op">[</span><span class="va">keep</span>, <span class="va">v</span><span class="op">]</span>, lwd <span class="op">=</span> <span class="fl">2</span>, lty <span class="op">=</span> <span class="fl">2</span>, col <span class="op">=</span> <span class="st">"#d95f02"</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span>h <span class="op">=</span> <span class="fl">0</span>, col <span class="op">=</span> <span class="st">"gray85"</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
+<div class="figure">
+<img src="sbhm_files/figure-html/shape-plot-1.png" class="r-plt" alt="Twelve panels compare true solid and hard-matched dashed rank-four waveforms. Mean angular error is 0.000 radians on-library and 0.091 radians off-library." width="1500"><p class="caption">
+True and hard-matched rank-four waveforms for every voxel. Solid blue is
+truth; dashed orange is the coordinate actually used by the amplitude
+refit. Panels marked ‘(off)’ contain off-library mixtures and are
+intentionally harder.
+</p>
+</div>
+<p>For the six on-library voxels, exact candidate identity is also
+judgeable:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">exact_index_accuracy</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span></span>
+<span>  <span class="va">fit_hard</span><span class="op">$</span><span class="va">matched_name</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">6</span><span class="op">]</span> <span class="op">==</span> <span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">sbhm</span><span class="op">$</span><span class="va">A</span><span class="op">)</span><span class="op">[</span><span class="va">on_library_idx</span><span class="op">]</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>OnLibraryExactCandidateAccuracy <span class="op">=</span> <span class="va">exact_index_accuracy</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   OnLibraryExactCandidateAccuracy</span></span>
+<span><span class="co">#&gt; 1                               1</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="hard-and-soft-matching-answer-different-questions">Hard and soft matching answer different questions<a class="anchor" aria-label="anchor" href="#hard-and-soft-matching-answer-different-questions"></a>
+</h2>
+<p>Soft matching uses cosine-score softmax weights; those weights are
+not mixture fractions and the score margin is not calibrated confidence.
+We compare an explicit soft policy with the explicit hard fit against
+the same truth. The result is descriptive for this fixture, not a rule
+that soft matching reduces variance or improves interpolation.</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fit_soft</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span></span>
+<span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
+<span>  sbhm <span class="op">=</span> <span class="va">sbhm</span>,</span>
+<span>  design_spec <span class="op">=</span> <span class="va">design_spec</span>,</span>
+<span>  Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
+<span>  prepass <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>ridge <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>mode <span class="op">=</span> <span class="st">"absolute"</span>, lambda <span class="op">=</span> <span class="fl">0</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  match <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    topK <span class="op">=</span> <span class="fl">3</span>, soft_blend <span class="op">=</span> <span class="cn">TRUE</span>, blend_margin <span class="op">=</span> <span class="fl">2</span>,</span>
+<span>    whiten <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>ridge_mode <span class="op">=</span> <span class="st">"absolute"</span>, ridge_x <span class="op">=</span> <span class="fl">0</span>, ridge_b <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span>
+<span>  amplitude <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"global_ls"</span>, ridge <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span>
+<span>  return <span class="op">=</span> <span class="st">"both"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">soft_shape_by_voxel</span> <span class="op">&lt;-</span> <span class="fu">waveform_metrics</span><span class="op">(</span><span class="va">fit_soft</span><span class="op">$</span><span class="va">alpha_coords</span>, <span class="va">alpha_true</span>, <span class="va">sbhm</span><span class="op">$</span><span class="va">B</span><span class="op">)</span></span>
+<span><span class="va">policy_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>    Policy <span class="op">=</span> <span class="st">"Hard top-1"</span>,</span>
+<span>    VoxelsUsingPolicy <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">fit_hard</span><span class="op">$</span><span class="va">shape_mode</span> <span class="op">==</span> <span class="st">"hard"</span><span class="op">)</span>,</span>
+<span>    MeanAngularError <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">hard_shape_by_voxel</span><span class="op">$</span><span class="va">AngularErrorRadians</span><span class="op">)</span>,</span>
+<span>    AmplitudeBias <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">fit_hard</span><span class="op">$</span><span class="va">amplitude</span> <span class="op">-</span> <span class="va">beta_true</span><span class="op">)</span>,</span>
+<span>    AmplitudeRMSE <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="op">(</span><span class="va">fit_hard</span><span class="op">$</span><span class="va">amplitude</span> <span class="op">-</span> <span class="va">beta_true</span><span class="op">)</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>    Policy <span class="op">=</span> <span class="st">"Soft top-3"</span>,</span>
+<span>    VoxelsUsingPolicy <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">fit_soft</span><span class="op">$</span><span class="va">shape_mode</span> <span class="op">==</span> <span class="st">"soft"</span><span class="op">)</span>,</span>
+<span>    MeanAngularError <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">soft_shape_by_voxel</span><span class="op">$</span><span class="va">AngularErrorRadians</span><span class="op">)</span>,</span>
+<span>    AmplitudeBias <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">fit_soft</span><span class="op">$</span><span class="va">amplitude</span> <span class="op">-</span> <span class="va">beta_true</span><span class="op">)</span>,</span>
+<span>    AmplitudeRMSE <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="op">(</span><span class="va">fit_soft</span><span class="op">$</span><span class="va">amplitude</span> <span class="op">-</span> <span class="va">beta_true</span><span class="op">)</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">policy_table</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">policy_table</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span>, <span class="va">round</span>, <span class="fl">5</span><span class="op">)</span></span>
+<span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span></span>
+<span>  <span class="va">policy_table</span>,</span>
+<span>  caption <span class="op">=</span> <span class="st">"Truth-referenced hard and soft results for this fixed fixture."</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<caption>Truth-referenced hard and soft results for this fixed
+fixture.</caption>
+<colgroup>
+<col width="14%">
+<col width="24%">
+<col width="22%">
+<col width="18%">
+<col width="18%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">Policy</th>
+<th align="right">VoxelsUsingPolicy</th>
+<th align="right">MeanAngularError</th>
+<th align="right">AmplitudeBias</th>
+<th align="right">AmplitudeRMSE</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">Hard top-1</td>
+<td align="right">12</td>
+<td align="right">0.04569</td>
+<td align="right">-0.01927</td>
+<td align="right">0.06106</td>
+</tr>
+<tr class="even">
+<td align="left">Soft top-3</td>
+<td align="right">12</td>
+<td align="right">0.06821</td>
+<td align="right">-0.00646</td>
+<td align="right">0.06817</td>
+</tr>
+</tbody>
+</table>
+<p>The returned <code>margin</code> is simply the top-one minus top-two
+cosine score. Low margin can reveal near-ties, but no universal
+<code>min_margin</code> or <code>blend_margin</code> follows from it. If
+gating is used, inspect <code>shape_mode</code> and
+<code>fallback_low_conf</code>; <code>matched_name</code> remains the
+top-scoring candidate, whereas <code>alpha_coords</code> records the
+shape actually used.</p>
+</div>
+<div class="section level2">
+<h2 id="bind-the-coefficient-estimator-to-an-independent-glm">Bind the coefficient estimator to an independent GLM<a class="anchor" aria-label="anchor" href="#bind-the-coefficient-estimator-to-an-independent-glm"></a>
+</h2>
+<p>With <code>amplitude$method = "global_ls"</code> and zero ridge, the
+final stage is an ordinary trial-wise GLM conditional on the selected
+shape. The following oracle assembles every voxel model independently
+from the public <code>fmrihrf</code> regressors. It proves
+implementation identity; it does not remove shape-selection bias.</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">amplitude_display</span> <span class="op">&lt;-</span> <span class="va">amplitude_table</span></span>
+<span><span class="va">amplitude_display</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">amplitude_display</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span>, <span class="va">round</span>, <span class="fl">5</span><span class="op">)</span></span>
+<span><span class="va">amplitude_display</span><span class="op">$</span><span class="va">DirectGLMMaxError</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="cn">NA</span>, <span class="fu"><a href="https://rdrr.io/r/base/format.html" class="external-link">format</a></span><span class="op">(</span><span class="va">direct_error</span>, scientific <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>, <span class="cn">NA</span><span class="op">)</span></span>
+<span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span></span>
+<span>  <span class="va">amplitude_display</span>,</span>
+<span>  caption <span class="op">=</span> <span class="st">"Trial-coefficient recovery and the independent all-cell GLM identity check."</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<caption>Trial-coefficient recovery and the independent all-cell GLM
+identity check.</caption>
+<thead><tr class="header">
+<th align="left">Estimator</th>
+<th align="right">Bias</th>
+<th align="right">RMSE</th>
+<th align="left">DirectGLMMaxError</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">Known truth shape</td>
+<td align="right">0.00041</td>
+<td align="right">0.05007</td>
+<td align="left">NA</td>
+</tr>
+<tr class="even">
+<td align="left">SBHM hard-selected shape</td>
+<td align="right">-0.01927</td>
+<td align="right">0.06106</td>
+<td align="left">2.220446e-15</td>
+</tr>
+<tr class="odd">
+<td align="left">SBHM soft-selected shape</td>
+<td align="right">-0.00646</td>
+<td align="right">0.06817</td>
+<td align="left">NA</td>
+</tr>
+</tbody>
+</table>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">beta_true</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="va">fit_hard</span><span class="op">$</span><span class="va">amplitude</span><span class="op">)</span>,</span>
+<span>  pch <span class="op">=</span> <span class="fl">19</span>, col <span class="op">=</span> <span class="fu">grDevices</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/grDevices/adjustcolor.html" class="external-link">adjustcolor</a></span><span class="op">(</span><span class="st">"#2c7fb8"</span>, alpha.f <span class="op">=</span> <span class="fl">0.55</span><span class="op">)</span>,</span>
+<span>  xlim <span class="op">=</span> <span class="va">amp_range</span>, ylim <span class="op">=</span> <span class="va">amp_range</span>,</span>
+<span>  xlab <span class="op">=</span> <span class="st">"True event-design coefficient"</span>,</span>
+<span>  ylab <span class="op">=</span> <span class="st">"Estimated event-design coefficient"</span>,</span>
+<span>  main <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"Hard matching: bias %.3f, RMSE %.3f"</span>, <span class="va">amp_bias</span>, <span class="va">amp_rmse</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, col <span class="op">=</span> <span class="st">"#d7301f"</span>, lwd <span class="op">=</span> <span class="fl">2</span>, lty <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/grid.html" class="external-link">grid</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<div class="figure">
+<img src="sbhm_files/figure-html/amplitude-plot-1.png" class="r-plt" alt="Scatter of 96 true and hard-match event-design coefficients. Bias is -0.019 and RMSE is 0.061; a diagonal reference line is shown." width="1200"><p class="caption">
+Hard-match event-design coefficients against truth for all trials and
+voxels. The red dashed line is equality; the displayed bias and RMSE are
+conditional on this fixed simulation.
+</p>
+</div>
+</div>
+<div class="section level2">
+<h2 id="factorization-accelerates-only-the-prepass">Factorization accelerates only the prepass<a class="anchor" aria-label="anchor" href="#factorization-accelerates-only-the-prepass"></a>
+</h2>
+<p><code>data_fac</code> represents <code>Y</code> as
+<code>scores %*% loadings</code>, where scores are
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mo>×</mo><mi>q</mi></mrow><annotation encoding="application/x-tex">T \times q</annotation></semantics></math>
+and loadings are
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>q</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">q \times V</annotation></semantics></math>.
+The full <code>Y</code> is still required by <code><a href="../reference/lss_sbhm.html">lss_sbhm()</a></code> for
+OASIS and the amplitude stage. The shortcut therefore reduces only
+prepass multiplication; it does not make the full pipeline independent
+of
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>V</mi><annotation encoding="application/x-tex">V</annotation></semantics></math>.
+Named factor axes must agree between scores and loadings; when
+<code>Y</code> has voxel names, loadings must carry the same names and
+are aligned before use. Active prewhitening with <code>data_fac</code>
+fails explicitly because the supplied factorization is not a
+factorization of the estimated whitened data.</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">813</span><span class="op">)</span></span>
+<span><span class="va">q</span> <span class="op">&lt;-</span> <span class="fl">4L</span></span>
+<span><span class="va">scores</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_time</span> <span class="op">*</span> <span class="va">q</span><span class="op">)</span>, <span class="va">n_time</span>, <span class="va">q</span><span class="op">)</span></span>
+<span><span class="va">loadings</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">q</span> <span class="op">*</span> <span class="va">n_voxels</span><span class="op">)</span>, <span class="va">q</span>, <span class="va">n_voxels</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">scores</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="va">loadings</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"factor_"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">q</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">loadings</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="va">voxel_names</span></span>
+<span><span class="va">Y_factorized</span> <span class="op">&lt;-</span> <span class="va">scores</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">loadings</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">Y_factorized</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="va">voxel_names</span></span>
+<span></span>
+<span><span class="va">pre_dense</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sbhm_prepass.html">sbhm_prepass</a></span><span class="op">(</span></span>
+<span>  <span class="va">Y_factorized</span>, <span class="va">sbhm</span>, <span class="va">design_spec</span>,</span>
+<span>  ridge <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>mode <span class="op">=</span> <span class="st">"absolute"</span>, lambda <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">pre_factorized</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sbhm_prepass.html">sbhm_prepass</a></span><span class="op">(</span></span>
+<span>  <span class="va">Y_factorized</span>, <span class="va">sbhm</span>, <span class="va">design_spec</span>,</span>
+<span>  ridge <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>mode <span class="op">=</span> <span class="st">"absolute"</span>, lambda <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span>
+<span>  data_fac <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>scores <span class="op">=</span> <span class="va">scores</span>, loadings <span class="op">=</span> <span class="va">loadings</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">factorized_error</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">pre_dense</span><span class="op">$</span><span class="va">beta_bar</span> <span class="op">-</span> <span class="va">pre_factorized</span><span class="op">$</span><span class="va">beta_bar</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  Scores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">scores</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">" x "</span><span class="op">)</span>,</span>
+<span>  Loadings <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">loadings</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">" x "</span><span class="op">)</span>,</span>
+<span>  Voxels <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">Y_factorized</span><span class="op">)</span>,</span>
+<span>  DenseVsFactorizedMaxError <span class="op">=</span> <span class="va">factorized_error</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co">#&gt;    Scores Loadings Voxels DenseVsFactorizedMaxError</span></span>
+<span><span class="co">#&gt; 1 180 x 4   4 x 12     12              1.332268e-15</span></span></code></pre></div>
+<p>For a PCA factorization, <code>prcomp(Y)$x</code> supplies scores and
+<code>t(prcomp(Y)$rotation)</code> supplies the required
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>q</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">q \times V</annotation></semantics></math>
+loading orientation. The evaluated path below keeps <code>Y</code> as
+the response for OASIS and the amplitude stage while using a rank-four
+uncentered PCA approximation only for the prepass. This is a
+computational approximation, not an accuracy claim.</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">pca</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/prcomp.html" class="external-link">prcomp</a></span><span class="op">(</span><span class="va">Y</span>, center <span class="op">=</span> <span class="cn">FALSE</span>, scale. <span class="op">=</span> <span class="cn">FALSE</span>, rank. <span class="op">=</span> <span class="va">q</span><span class="op">)</span></span>
+<span><span class="va">pca_scores</span> <span class="op">&lt;-</span> <span class="va">pca</span><span class="op">$</span><span class="va">x</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">q</span><span class="op">)</span>, drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span><span class="va">pca_loadings</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="va">pca</span><span class="op">$</span><span class="va">rotation</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">q</span><span class="op">)</span>, drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">fit_pca_prepass</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_sbhm.html">lss_sbhm</a></span><span class="op">(</span></span>
+<span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
+<span>  sbhm <span class="op">=</span> <span class="va">sbhm</span>,</span>
+<span>  design_spec <span class="op">=</span> <span class="va">design_spec</span>,</span>
+<span>  Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
+<span>  prepass <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    ridge <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>mode <span class="op">=</span> <span class="st">"absolute"</span>, lambda <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span>
+<span>    data_fac <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>scores <span class="op">=</span> <span class="va">pca_scores</span>, loadings <span class="op">=</span> <span class="va">pca_loadings</span><span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  match <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>topK <span class="op">=</span> <span class="fl">1</span>, soft_blend <span class="op">=</span> <span class="cn">FALSE</span>, whiten <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span>,</span>
+<span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>ridge_mode <span class="op">=</span> <span class="st">"absolute"</span>, ridge_x <span class="op">=</span> <span class="fl">0</span>, ridge_b <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span>
+<span>  amplitude <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"global_ls"</span>, ridge <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span>
+<span>  return <span class="op">=</span> <span class="st">"amplitude"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  ScoreShape <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">pca_scores</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">" x "</span><span class="op">)</span>,</span>
+<span>  LoadingShape <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">pca_loadings</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">" x "</span><span class="op">)</span>,</span>
+<span>  FullResponseShape <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">Y</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">" x "</span><span class="op">)</span>,</span>
+<span>  OutputShape <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">fit_pca_prepass</span><span class="op">$</span><span class="va">amplitude</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">" x "</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co">#&gt;   ScoreShape LoadingShape FullResponseShape OutputShape</span></span>
+<span><span class="co">#&gt; 1    180 x 4       4 x 12          180 x 12      8 x 12</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="runs-conditions-and-whitening">Runs, conditions, and whitening<a class="anchor" aria-label="anchor" href="#runs-conditions-and-whitening"></a>
+</h2>
+<p>Raw multi-run <code>design_spec</code> inputs use run-relative onsets
+and an explicit <code>cond$run</code> vector. SBHM constructs every
+trial inside its own sampling-frame run and uses run-specific
+intercepts, so an HRF tail cannot cross a run boundary.
+<code><a href="../reference/lss_sbhm_design.html">lss_sbhm_design()</a></code> obtains those run identities and
+heterogeneous durations from the unique trialwise
+<code>fmridesign</code> term; non-trial event terms and baseline-model
+columns enter the fixed nuisance span. See
+<code><a href="../articles/lss_with_fmridesign.html">vignette("lss_with_fmridesign")</a></code> for the event-model
+identity contract.</p>
+<p>If estimated prewhitening is requested, SBHM applies the same
+transformation to the response, trial basis, other-condition span, and
+nuisance design in the prepass, diagnostics, and final amplitude
+estimator. The whitening plan is estimated once from the complete trial
+and common design, then reused at every stage. For a multi-run sampling
+frame, omitted <code>prewhiten$runs</code> are filled from the frame’s
+run boundaries; contradictory labels fail rather than allowing a
+temporal filter to bridge runs. This changes the conditional point
+estimator; it does not create calibrated post-selection standard errors.
+Factorized prepasses and active prewhitening cannot be combined.</p>
+</div>
+<div class="section level2">
+<h2 id="advanced-policies-are-explicit-heuristics">Advanced policies are explicit heuristics<a class="anchor" aria-label="anchor" href="#advanced-policies-are-explicit-heuristics"></a>
+</h2>
+<p><code>alpha_source = "trial_projection"</code> and
+<code>"oasis_rank1"</code>, low-score fallback, condition gates, ridge
+penalties, and adaptive ridge controls are available for specialized
+studies. They change the estimator. No rank, ridge fraction, margin
+threshold, ISI boundary, or TR cutoff is generally recommended here.
+Choose and validate such a policy against the design, signal scale,
+failure modes, and loss function of the intended analysis.</p>
+<p>The three scalar-coefficient engines also answer different model
+questions:</p>
 <ul>
-<li>Mumford et al. (2012). “Deconvolving BOLD activation in
-event-related designs for multivoxel pattern classification analyses.”
-<em>NeuroImage</em>.</li>
-<li>Lindquist et al. (2009). “Modeling the hemodynamic response function
-in fMRI.” <em>NeuroImage</em>.</li>
+<li>
+<code>global_ls</code> fits all trial columns jointly for each
+selected voxel shape;</li>
+<li>
+<code>lss1</code> fits one target and one aggregate-other column per
+trial;</li>
+<li>
+<code>oasis_voxel</code> applies the K=1 OASIS operator per
+voxel.</li>
 </ul>
+<p>Exactly coincident or otherwise unidentified trials cannot be
+recovered by any of these labels. Ridge may return symmetric finite
+coefficients, but it does not restore identification. None of the three
+engines returns calibrated SBHM standard errors.</p>
 </div>
 <div class="section level2">
-<h2 id="summary">Summary<a class="anchor" aria-label="anchor" href="#summary"></a>
+<h2 id="takeaways">Takeaways<a class="anchor" aria-label="anchor" href="#takeaways"></a>
 </h2>
-<p>SBHM provides efficient, interpretable voxel-specific HRF estimation
-by learning a shared basis from a plausible library and matching each
-voxel in a low-dimensional coefficient space. The
-<code><a href="../reference/lss_sbhm.html">lss_sbhm()</a></code> function runs the full pipeline in a single
-call, returning trial-wise amplitudes with per-voxel HRF assignments and
-confidence scores.</p>
-<p><strong>Next steps:</strong> see <code><a href="../reference/sbhm_build.html">?sbhm_build</a></code> for library
-construction, <code><a href="../reference/lss_sbhm.html">?lss_sbhm</a></code> for the end-to-end pipeline, and
-the “Voxel-wise HRF” vignette for unconstrained alternatives.</p>
+<p>SBHM is a constrained shape-selection and coefficient-estimation
+workflow. Its useful compression comes with visible assumptions: the
+library defines the shape space, rank truncation defines the
+approximation, matching or blending defines the voxel waveform, and the
+supplied event design defines coefficient units. Judge the waveform
+actually used (<code>alpha_coords</code>), retain the identity maps, and
+evaluate hard, soft, fallback, ridge, and whitening policies against
+truth or external calibration before using them in a scientific
+conclusion.</p>
+<p>This is the end of the vignette learning path. Continue with
+<code><a href="../reference/sbhm_build.html">?sbhm_build</a></code>, <code><a href="../reference/sbhm_match.html">?sbhm_match</a></code>,
+<code><a href="../reference/sbhm_prepass.html">?sbhm_prepass</a></code>, <code><a href="../reference/lss_sbhm.html">?lss_sbhm</a></code>, and
+<code><a href="../reference/lss_sbhm_design.html">?lss_sbhm_design</a></code> for the complete API contracts.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

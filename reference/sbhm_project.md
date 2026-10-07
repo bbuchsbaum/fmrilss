@@ -27,7 +27,10 @@ sbhm_project(beta_rt, alpha_hat)
 
 ## Value
 
-Numeric matrix ntrials x V of scalar amplitudes.
+Numeric matrix ntrials x V of scalar amplitudes. Zero-norm or non-finite
+coordinates are unidentified and fail explicitly. When basis or voxel
+names are present, both inputs must provide the same complete unique
+identities; `alpha_hat` is reordered to `beta_rt`.
 
 ## Examples
 

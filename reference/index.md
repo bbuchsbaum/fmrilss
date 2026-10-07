@@ -14,6 +14,9 @@
 - [`calculate_recovery_metrics()`](https://bbuchsbaum.github.io/fmrilss/reference/calculate_recovery_metrics.md)
   : Calculate HRF Recovery Metrics
 
+- [`coef(`*`<glmsingle_fit>`*`)`](https://bbuchsbaum.github.io/fmrilss/reference/coef.glmsingle_fit.md)
+  : Single-trial betas from a glmsingle fit
+
 - [`compare_hrf_recovery()`](https://bbuchsbaum.github.io/fmrilss/reference/compare_hrf_recovery.md)
   : Compare HRF Recovery Methods
 
@@ -34,6 +37,16 @@
 
 - [`generate_rapid_design()`](https://bbuchsbaum.github.io/fmrilss/reference/generate_rapid_design.md)
   : OASIS HRF Recovery Testing Functions
+
+- [`glmsingle()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle.md)
+  : GLMsingle single-trial response estimation
+
+- [`glmsingle_design()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_design.md)
+  : fmridesign front end for glmsingle()
+
+- [`glmsingle_hrf_library()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_hrf_library.md)
+  [`glmsingle_hrf()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_hrf_library.md)
+  : GLMsingle canonical HRF and HRF library
 
 - [`item_build_design()`](https://bbuchsbaum.github.io/fmrilss/reference/item_build_design.md)
   : Build ITEM design metadata
@@ -133,7 +146,7 @@
   : Match Voxels to Library HRFs in Shared Basis (SBHM)
 
 - [`sbhm_prepass()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_prepass.md)
-  : SBHM Prepass: Aggregate Fit in Shared Basis
+  : SBHM Prepass: Aggregate Fit in a Shared Basis
 
 - [`sbhm_project()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_project.md)
   : Project Trial-wise SBHM Coefficients to Scalar Amplitudes

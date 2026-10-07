@@ -15,7 +15,8 @@ lss_with_hrf_pure_r(
   Z = NULL,
   Nuisance = NULL,
   verbose = FALSE,
-  method = c("r", "cpp", "cpp_arma", "cpp_omp")
+  method = c("r", "cpp", "cpp_arma", "cpp_omp"),
+  basis_convolved = NULL
 )
 ```
 
@@ -61,6 +62,11 @@ lss_with_hrf_pure_r(
   (Armadillo backend), or "cpp_omp" (OpenMP parallel backend). Falls
   back automatically: cpp_omp -\> cpp_arma -\> cpp -\> r.
 
+- basis_convolved:
+
+  Optional precomputed list of K matrices, each n_time x n_trials. When
+  supplied, the onset-index construction is bypassed.
+
 ## Value
 
 numeric matrix (n_trials x n_vox) of trial-wise beta estimates
@@ -73,11 +79,9 @@ numeric matrix (n_trials x n_vox) of trial-wise beta estimates
 - The trial-of-interest (Xi) and the sum of all other trials (Xother)
   are included in each per-trial GLM.
 
-- If `Nuisance` is supplied, it is projected out of **Y** and the trial
-  regressors before LSS (standard residualization). Experimental
-  regressors `Z` are *not* residualized, matching
-  [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md)
-  documentation.
+- `Y` and the trial regressors are residualized against the complete
+  `cbind(Z, Nuisance)` span, matching the full-model/FWL contract in
+  [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md).
 
 - If `Z` is `NULL`, an intercept-only design is used.
 

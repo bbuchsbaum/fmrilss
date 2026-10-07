@@ -43,7 +43,10 @@ create_lwu_grid(
 
 ## Value
 
-List of HRF models and their parameters
+An object of class `"fmrilss_lwu_grid"`: a list containing the HRF
+functions in `hrfs` and their parameter data frame in `parameters`. The
+object can be supplied directly as `library_spec$pgrid` to
+[`sbhm_build()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_build.md).
 
 ## Examples
 

@@ -1,8 +1,8 @@
 # Construct OASIS options
 
 Convenience constructor for the `oasis=` list accepted by
-`lss(method="oasis")`. Unknown fields are allowed via `...` for forward
-compatibility.
+`lss(method="oasis")`. Unknown fields are rejected so misspelled
+scientific controls cannot be silently ignored.
 
 ## Usage
 
@@ -10,6 +10,8 @@ compatibility.
 oasis_options(
   design_spec = NULL,
   K = NULL,
+  ntrials = NULL,
+  trial_basis_map = NULL,
   ridge_mode = c("fractional", "absolute"),
   ridge_x = 0.05,
   ridge_b = 0.05,
@@ -31,6 +33,15 @@ oasis_options(
 - K:
 
   Optional basis dimension override.
+
+- ntrials:
+
+  Number of trials for a raw multi-basis design.
+
+- trial_basis_map:
+
+  For a raw multi-basis design, a data frame with one row per `X` column
+  and fields `column`, `trial`, and `basis`.
 
 - ridge_mode:
 
@@ -62,7 +73,9 @@ oasis_options(
 
 - ...:
 
-  Additional options.
+  Certified advanced options: `infer_K_from_X`, `lambda_shape`,
+  `mu_rough`, `ref_hrf`, `shrink_global`, `orient_ref`, and the
+  deprecated `whiten` compatibility field. Unknown names are rejected.
 
 ## Value
 
@@ -76,6 +89,12 @@ oasis_options(ridge_mode = "fractional", ridge_x = 0.1, ridge_b = 0.1)
 #> NULL
 #> 
 #> $K
+#> NULL
+#> 
+#> $ntrials
+#> NULL
+#> 
+#> $trial_basis_map
 #> NULL
 #> 
 #> $ridge_mode

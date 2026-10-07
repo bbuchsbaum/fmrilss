@@ -48,6 +48,6 @@ grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
 fit <- fit_oasis_grid(sim$Y, sim$onsets, sim$sframe, grid)
 fit$best_params
 #>   tau sigma rho
-#> 2   8   1.5 0.1
+#> 1   4   1.5 0.1
 # }
 ```

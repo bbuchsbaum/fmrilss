@@ -2,8 +2,9 @@
 
 Computes trial-wise beta estimates using the Least Squares Separate
 approach of Mumford et al. (2012). This method fits a separate GLM for
-each trial, with the trial of interest and all other trials as separate
-regressors.
+each trial, with the trial of interest plus a single regressor formed by
+summing all other trials in a one-basis design. A K-basis OASIS model
+uses one summed other-trial regressor per basis function.
 
 ## Usage
 
@@ -31,16 +32,21 @@ lss(
 
 - X:
 
-  A numeric matrix of size n × T where T is the number of trials. Each
-  column represents the design for one trial
+  A numeric matrix of size n × T for a one-basis design, with one column
+  per trial. A raw K-basis OASIS design has n × (T K) columns and
+  additionally requires `oasis$K`, `oasis$ntrials`, and an explicit
+  `oasis$trial_basis_map`. When `X` is an unmodified multi-basis
+  [`fmridesign::design_matrix()`](https://bbuchsbaum.github.io/fmridesign/reference/design_matrix.html)
+  with one event term, its column metadata is used to infer that
+  identity contract and canonicalize rows to trial-major,
+  basis-within-trial order.
 
 - Z:
 
-  A numeric matrix of size n × F representing experimental regressors to
-  include in all trial-wise models. These are regressors we want to
-  model and get beta estimates for, but not trial-wise (e.g., intercept,
-  condition effects, block effects). If NULL, an intercept-only design
-  is used. Defaults to NULL
+  A numeric matrix of size n × F representing common fixed regressors
+  included in every trial-wise model (e.g., intercept, condition
+  effects, block effects). Their coefficients are not returned. If NULL,
+  an intercept-only design is used. Defaults to NULL.
 
 - Nuisance:
 
@@ -77,8 +83,9 @@ lss(
   A list of options for the OASIS method (ridge, SE, design
   construction, etc.). See Details and
   [`oasis_options`](https://bbuchsbaum.github.io/fmrilss/reference/oasis_options.md)
-  for the full list. **Note:** `oasis$whiten` is deprecated and ignored.
-  Use the `prewhiten` parameter instead for all temporal whitening.
+  for the full list. **Note:** `oasis$whiten` is deprecated and ignored
+  with a warning. Use the `prewhiten` parameter instead for all temporal
+  whitening.
 
 - stglmnet:
 
@@ -96,10 +103,17 @@ lss(
 
 ## Value
 
-A numeric matrix of size T × V containing the trial-wise beta estimates.
-Note: Currently only returns estimates for the trial regressors (X).
-Beta estimates for the experimental regressors (Z) are computed but not
-returned.
+Normally, a numeric matrix of trial-wise beta estimates: T × V for a
+one-basis design or (T K) × V for OASIS with K basis functions. With
+OASIS `return_diag = TRUE` or `return_se = TRUE`, returns
+`list(beta, diag?, se?)`; `beta` and `se` have the same row-by-voxel
+shape. One-basis diagnostics contain length-T vectors `d`, `alpha`, and
+`s`; multi-basis diagnostics contain K × K × T arrays `D`, `C`, and `E`.
+Coefficients for common regressors `Z` are not returned. Multi-basis
+beta and SE matrices carry the canonical `trial_basis_map` attribute.
+When estimated prewhitening is active, the actual fitted `fmriAR_plan`
+is available as `attr(result, "whiten_plan")` (and on `result$beta` for
+structured returns).
 
 ## Details
 
@@ -108,13 +122,16 @@ includes:
 
 - The trial of interest (from column i of X)
 
-- All other trials combined (sum of all other columns of X)
+- For a one-basis design, all other trials combined into one summed
+  regressor. A K-basis OASIS model uses a K-column summed block.
 
-- Experimental regressors (Z matrix) - these are modeled to get beta
-  estimates but not trial-wise
+- Common fixed regressors (Z matrix), whose coefficients are not
+  returned
 
-If Nuisance regressors are provided, they are first projected out from
-both Y and X using standard linear regression residualization.
+If Nuisance regressors are provided, the rank-revealed combined span
+`cbind(Z, Nuisance)` is projected from both Y and X before fitting.
+Without a separate Nuisance matrix, Z remains explicitly in every
+trial-wise model.
 
 When using method="oasis", the following options are available in the
 oasis list (see also
@@ -128,8 +145,11 @@ for a validated constructor):
   provided, X can be NULL and will be constructed automatically.
 
 - `K`: Explicit basis dimension for multi-basis HRF models (e.g., 3 for
-  SPMG3). If not provided, it's auto-detected from X dimensions or
-  defaults to 1 for single-basis HRFs.
+  SPMG3). A raw multi-basis `X` also requires `ntrials` and
+  `trial_basis_map`. An unmodified multi-basis
+  [`fmridesign::design_matrix()`](https://bbuchsbaum.github.io/fmridesign/reference/design_matrix.html)
+  with one event term is recognized from its metadata; an ordinary raw
+  `X` is otherwise interpreted as K=1.
 
 - `ridge_mode`: Either "fractional" (default) or "absolute". In absolute
   mode, ridge_x and ridge_b are used directly as regularization
@@ -144,9 +164,9 @@ for a validated constructor):
   0.05). Controls regularization strength for the sum of all other
   trials.
 
-- `return_se`: Logical, whether to return standard errors (default
-  FALSE). When TRUE, returns a list with `beta` (trial estimates) and
-  `se` (standard errors) components.
+- `return_se`: Logical, whether to return model-based standard errors
+  (default FALSE). This is available only for unpenalized OASIS without
+  estimated prewhitening.
 
 - `return_diag`: Logical, whether to return design diagnostics (default
   FALSE). When TRUE, includes diagnostic information about the design
@@ -156,11 +176,15 @@ for a validated constructor):
   processing (default 4096). Larger values use more memory but may be
   faster for systems with sufficient RAM.
 
-- `ntrials`: Explicit number of trials (used when K \> 1 to determine
-  output dimensions). If not provided, calculated as ncol(X) / K.
+- `ntrials`: Required number of trials when a raw K \> 1 design is
+  supplied.
 
-- `hrf_grid`: Vector of HRF indices for grid-based HRF selection
-  (advanced use). Allows testing multiple HRF shapes simultaneously.
+- `trial_basis_map`: Required data frame for a raw K \> 1 design, with
+  one row per X column and fields `column`, `trial`, and `basis`.
+
+- `design_spec$hrf_grid`: Candidate HRFs for grid-based selection within
+  an event-built design. A top-level `oasis$hrf_grid` field is invalid
+  and rejected.
 
 **Prewhitening (temporal autocorrelation correction):**
 
@@ -206,8 +230,9 @@ for a validated constructor):
 
   - `"voxel"`:
 
-    Fit a separate AR model per voxel. Most accurate but slow; consider
-    `"parcel"` instead.
+    Fit a separate AR model per voxel. Shared-design `lss()` calls
+    reject this mode because each voxel would require its own matching
+    filtered design.
 
   - `"run"`:
 
@@ -216,8 +241,9 @@ for a validated constructor):
 
   - `"parcel"`:
 
-    Fit one AR model per parcel (requires `parcels`). Good compromise
-    between `"global"` and `"voxel"`.
+    Fit one AR model per parcel (requires `parcels`). Shared-design
+    `lss()` calls reject this mode until parcel-specific filtered
+    designs are fitted separately.
 
 - `runs`: Integer vector of length `nrow(Y)` giving run/block labels.
   Required for `pooling = "run"` and recommended whenever data span
@@ -235,6 +261,25 @@ for a validated constructor):
   from the full design are computed before fitting the noise model. Set
   to FALSE only if Y is already residualized.
 
+- `design`: Optional numeric design matrix whose projection produced
+  those residuals. Supplying it opts in to fmriAR's correction for
+  downward bias in residual autocovariance. When
+  `compute_residuals = TRUE`, it must span the same columns as the full
+  `X`/`Z`/`Nuisance` design, including the intercept that fmrilss adds
+  when none is already represented.
+
+- `acvf_correction`: Optional correction matrix or list of matrices from
+  [`fmriAR::acvf_bias_matrix()`](https://bbuchsbaum.github.io/fmriAR/reference/acvf_bias_matrix.html),
+  used instead of `design` when reusing a correction across datasets.
+  The two fields are mutually exclusive.
+
+- `correction_max_lag`: Positive integer lag budget used when `design`
+  is supplied (default 25). The correction is intended for
+  high-pass-filtered designs; without high-pass filtering, the required
+  lag budget can become impractically large. See
+  [`fmriAR::fit_noise()`](https://bbuchsbaum.github.io/fmriAR/reference/fit_noise.html)
+  for details.
+
 **Typical prewhiten recipes:**
 
 
@@ -247,10 +292,6 @@ for a validated constructor):
       # Per-run AR(1) for multi-run data
       prewhiten = list(method = "ar", p = 1, pooling = "run",
                        runs = blockids)
-
-      # Parcel-based AR with atlas labels
-      prewhiten = list(method = "ar", p = 1, pooling = "parcel",
-                       parcels = atlas_labels)
 
       # Or use the validated constructor:
       prewhiten = prewhiten_options(method = "ar", p = 1, pooling = "run",
@@ -311,7 +352,9 @@ beta_oasis <- lss(Y, X, method = "oasis",
                               ridge_mode = "fractional"))
 
 result_with_se <- lss(Y, X, method = "oasis",
-                     oasis = list(return_se = TRUE))
+                     oasis = list(return_se = TRUE,
+                                  ridge_mode = "absolute",
+                                  ridge_x = 0, ridge_b = 0))
 beta_estimates <- result_with_se$beta
 standard_errors <- result_with_se$se
 

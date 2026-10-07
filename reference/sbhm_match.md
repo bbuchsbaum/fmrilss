@@ -41,7 +41,8 @@ sbhm_match(
 
   List with optional shrinkage options:
 
-  - `tau` numeric \>=0: global strength (default 0, i.e., no shrinkage).
+  - `tau` numeric in `[0,1]`: global strength (default 0, i.e., no
+    shrinkage).
 
   - `ref` numeric length-r vector (alpha_ref) or NULL. If NULL, uses the
     mean of A columns. Shrinkage is: beta_bar \<- (1-lambda) beta_bar +
@@ -52,7 +53,8 @@ sbhm_match(
 
 - topK:
 
-  Integer, return top-K scores/weights if \>1 (default 1).
+  Positive integer no larger than the library size; return top-K
+  scores/weights if greater than one (default 1).
 
 - whiten:
 
@@ -80,14 +82,20 @@ A list with:
 
 - `idx` length-V integer indices of best-matching library HRF (1..K)
 
-- `margin` length-V numeric: score(top1) - score(top2)
+- `margin` named length-V numeric score difference: top1 - top2. It is
+  not a calibrated confidence measure.
 
 - `alpha_hat` r×V matrix: the selected library coordinates (unwhitened,
   unnormalized)
 
 - `scores` optional K×V cosine score matrix (returned when topK \> 1)
 
-- `weights` optional top-K weights per voxel (when topK \> 1)
+- `weights` optional cosine-softmax top-K weights per voxel (when topK
+  \> 1)
+
+Non-finite inputs, zero-norm voxel summaries or library candidates, and
+malformed matching controls fail explicitly. Named basis axes must
+identify the same complete set and are aligned before matching.
 
 ## Examples
 
@@ -103,6 +111,7 @@ A list with:
                     A[,10] + rnorm(r, sd = 0.1))
   m <- sbhm_match(beta_bar, S, A)
   m$idx
-#> [1] 10  7 10
+#> voxel_1 voxel_2 voxel_3 
+#>      10       7      10 
 # }
 ```

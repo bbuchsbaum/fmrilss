@@ -1,324 +1,406 @@
-# OASIS Theory: Algebra and Implementation Details
+# OASIS Theory: What Is Reused, Solved, and Returned
 
-## Motivation
+OASIS is an algebraic implementation of least-squares-separate (LSS). It
+does not define a different unpenalized estimator. It identifies the
+work that all trial-wise LSS models share, computes that work once, and
+solves the small trial-specific systems in batches. With ridge
+penalties, it instead computes a penalized LSS estimator.
 
-Optimized Analytic Single-pass Inverse Solution (OASIS) extends Least
-Squares Separate (LSS) estimation through algebraic reformulation that
-enables single-pass computation of all trial estimates. For a
-single-basis HRF (K = 1) without ridge, OASIS reduces exactly to the
-closed-form LSS solution; the per‑trial 2x2 normal equations are the
-same. The value of OASIS is in batching those solves efficiently and
-generalizing the same algebra to multi‑basis HRFs (2Kx2K) with optional
-ridge and diagnostics. This document provides the mathematical
-foundation and implementation details.
+This article establishes the estimand, derives the one- and multi-basis
+systems, and maps each mathematical object to the current
+implementation. Read it after
+[`vignette("fmrilss")`](https://bbuchsbaum.github.io/fmrilss/articles/fmrilss.md)
+and
+[`vignette("oasis_method")`](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md);
+those articles introduce the practical meaning of LSS and the
+user-facing OASIS API.
 
-Read this after
-[`vignette("oasis_method")`](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md)
-if you want the linear algebra behind the user-facing API. The code
-chunks below are there to make the main scaling claims executable rather
-than purely narrative.
+## Scope and notation
 
-### Prerequisites
+The dimensions below are used throughout.
 
-This vignette assumes familiarity with: - QR decomposition and
-orthogonal projection matrices - Ridge regression and regularization -
-Matrix calculus and linear algebra - The standard LSS formulation
+| Symbol | Meaning                                        |
+|:------:|:-----------------------------------------------|
+|   T    | time points                                    |
+|   V    | response columns or voxels                     |
+|   N    | trials in the condition being estimated        |
+|   K    | HRF basis columns per trial                    |
+|  K_z   | columns supplied in the common nuisance design |
+|   p    | rank of the common nuisance design; p \<= K_z  |
+|   B    | voxel block size used for data products        |
 
-### Computational Intuition
+Symbols and dimensions used in the OASIS derivation. {.table}
 
-Standard LSS requires N separate GLM fits for N trials, each
-involving: 1. Matrix assembly: O(T²) operations 2. QR decomposition:
-O(T³) operations 3. Back-substitution: O(T²) operations
-
-Total complexity: O(NT³) for N trials
-
-OASIS recognizes that these N models share substantial structure. By
-factoring out common computations, OASIS reduces complexity to: 1.
-Single QR decomposition: O(T³) 2. Shared projections: O(NT²) 3.
-Per-trial solutions: O(N)
-
-Total complexity: O(T³ + NT²), a significant reduction when N is large.
-
-### Visual Comparison of Computational Scaling
-
-``` r
-
-# Demonstrate computational scaling
-N_trials <- c(10, 50, 100, 200, 500, 1000)
-T_points <- 200  # Fixed number of timepoints
-
-# Simplified complexity models (arbitrary units)
-classical_ops <- N_trials * T_points^3 / 1e6  # O(NT³)
-oasis_ops <- (T_points^3 + N_trials * T_points^2) / 1e6  # O(T³ + NT²)
-
-# Create comparison plot
-plot(N_trials, classical_ops, type='l', col='red', lwd=2,
-     xlab='Number of Trials', ylab='Computational Operations (millions)',
-     main='Computational Complexity: Classical LSS vs OASIS',
-     ylim=c(0, max(classical_ops)))
-lines(N_trials, oasis_ops, col='blue', lwd=2)
-legend('topleft', c('Classical LSS', 'OASIS'),
-       col=c('red', 'blue'), lwd=2, bty='n')
-
-# Add shaded region showing computational savings
-polygon(c(N_trials, rev(N_trials)),
-        c(classical_ops, rev(oasis_ops)),
-        col=rgb(0.2, 0.8, 0.2, 0.3), border=NA)
-text(500, mean(c(classical_ops[4], oasis_ops[4])),
-     'Computational\nSavings', col='darkgreen')
-```
-
-![Line plot showing classical LSS scaling linearly with trials while
-OASIS remains nearly
-flat.](oasis_theory_files/figure-html/complexity-comparison-1.png)
-
-Computational complexity: Classical LSS vs OASIS
-
-``` r
-
-complexity_summary <- data.frame(
-  Trials = N_trials,
-  Classical = classical_ops,
-  OASIS = oasis_ops,
-  SpeedupRatio = classical_ops / oasis_ops
-)
-complexity_summary
-#>   Trials Classical OASIS SpeedupRatio
-#> 1     10        80   8.4      9.52381
-#> 2     50       400  10.0     40.00000
-#> 3    100       800  12.0     66.66667
-#> 4    200      1600  16.0    100.00000
-#> 5    500      4000  28.0    142.85714
-#> 6   1000      8000  48.0    166.66667
-```
-
-Code references point to `R/oasis_glue.R` and `src/oasis_core.cpp`
-implementations.
-
-Notation used throughout:
-
-- $`Y \in \mathbb{R}^{T \times V}`$: voxel data ($`T`$ time points,
-  $`V`$ voxels)
-- $`X = [x_1, \dots, x_N] \in \mathbb{R}^{T \times N}`$: trial
-  regressors for one condition
-- $`Z \in \mathbb{R}^{T \times K_z}`$: nuisance/experimental regressors
-  shared across trials
-- $`R = I - QQ^T`$: orthogonal projector removing nuisance effects
-  ($`Q`$ comes from QR factorisation of $`[Z,\text{others}]`$)
-- Inner products are denoted $`\langle a, b \rangle = a^T b`$
-
-We first treat the single-basis case (one regressor per trial) before
-generalizing to multi-basis HRFs.
-
-## Classical LSS Recap
-
-Classical LSS fits, for each trial $`j`$, a GLM with design
-$`[x_j, b_j, Z]`$, where $`b_j = \sum_{i \neq j} x_i`$. Solving each
-model independently costs $`\mathcal{O}(N)`$ QR factorizations.
-Algebraically, the trial-specific beta can be expressed as
+Let $`Y \in \mathbb{R}^{T \times V}`$ be the data and
+$`C \in \mathbb{R}^{T \times K_z}`$ the common design: intercepts,
+drifts, nuisance variables, and aggregates for conditions not being
+estimated. Only the column space of $`C`$ matters. If
+$`Q \in \mathbb{R}^{T \times p}`$ is an orthonormal basis for that
+space, then
 
 ``` math
-\hat{\beta}_j = \frac{\langle Rx_j, RY \rangle - \frac{\langle Rx_j, Rb_j \rangle}{\|Rb_j\|^2} \langle Rb_j, RY \rangle}{\|Rx_j\|^2 - \frac{\langle Rx_j, Rb_j \rangle^2}{\|Rb_j\|^2}}.
+R = I_T - QQ^\mathsf{T}
 ```
 
-OASIS extracts and reuses the common computational components
-(projections, norms, cross-products) across all trials, computing each
-only once.
+removes it. The implementation rank-reduces $`C`$ before passing it to
+the compiled kernels, so redundant nuisance columns do not add arbitrary
+projection directions.
 
-## Single-Basis OASIS Algebra
-
-After residualising against nuisance regressors we define:
-
-- $`a_j = Rx_j`$
-- $`s = \sum_{j=1}^N a_j`$
-- $`d_j = \|a_j\|^2`$
-- $`\alpha_j = \langle a_j, s - a_j \rangle`$
-- $`s_j = \|s - a_j\|^2`$
-
-Let $`n_{jv} = \langle a_j, RY_{\cdot v} \rangle`$ and
-$`m_v = \langle s, RY_{\cdot v} \rangle`$. The pair
-$`(\beta_j, \gamma_j)`$ solving the 2x2 system for trial $`j`$ and voxel
-$`v`$ is obtained from
+For trial $`j`$, let $`A_j \in \mathbb{R}^{T \times K}`$ contain its HRF
+basis columns and define
 
 ``` math
-G_j \begin{bmatrix} \beta_{jv} \\ \gamma_{jv} \end{bmatrix} = \begin{bmatrix} n_{jv} \\ m_v - n_{jv} \end{bmatrix},
-\quad
-G_j = \begin{bmatrix} d_j + \lambda_x & \alpha_j \\ \alpha_j & s_j + \lambda_b \end{bmatrix},
+B_j = \sum_{i \ne j} A_i.
 ```
 
-with ridge penalties $`\lambda_x, \lambda_b \ge 0`$. The inverse of
-$`G_j`$ is analytic, so  
-``` math
-\beta_{jv} = \frac{(s_j + \lambda_b) n_{jv} - \alpha_j (m_v - n_{jv})}{(d_j + \lambda_x)(s_j + \lambda_b) - \alpha_j^2}.
-```
-
-This is exactly what `oasis_betas_closed_form()` implements (C++ file
-`src/oasis_core.cpp`). The precomputation step
-`oasis_precompute_design()` produces $`a_j, s, d_j, \alpha_j, s_j`$
-once, while `oasis_AtY_SY_blocked()` streams through voxels to obtain
-$`n_{jv}`$ and $`m_v`$.
-
-### Fractional Ridge
-
-`oasis$ridge_mode = "fractional"` sets
-$`\lambda_x = \eta_x \cdot \bar{d}`$ and
-$`\lambda_b = \eta_b \cdot \bar{s}`$, where $`\bar{d}`$ and $`\bar{s}`$
-are means of $`d_j`$ and $`s_j`$. The helper `.oasis_resolve_ridge()`
-implements this scaling. Absolute ridge uses the supplied values
-directly.
-
-### Standard Errors
-
-Given $`G_j^{-1}`$ and residual norm $`\|RY\|^2`$, the variance of
-$`\beta_{jv}`$ is
+After applying the Frisch–Waugh–Lovell reduction, the trial-wise model
+is
 
 ``` math
-\operatorname{Var}(\hat{\beta}_{jv}) = \sigma_{jv}^2 \left( G_j^{-1} \right)_{11}, \quad \sigma_{jv}^2 = \frac{\text{SSE}_{jv}}{\text{dof}},
+RY = RA_j\,\boldsymbol{\beta}_j + RB_j\,\boldsymbol{\gamma}_j + R\varepsilon_j,
 ```
 
-with
+where
+$`\boldsymbol{\beta}_j,\boldsymbol{\gamma}_j \in \mathbb{R}^{K \times V}`$.
+OASIS returns $`\boldsymbol{\beta}_j`$. For $`K=1`$, each trial
+contributes one scalar coefficient per voxel. For $`K>1`$, the $`K`$
+returned rows are basis coefficients; they are not automatically a
+single response-amplitude estimate.
+
+## One-basis system
+
+Write $`a_j=Rx_j`$, $`b_j=\sum_{i\ne j}a_i`$, and $`s=\sum_i a_i`$. The
+reusable design scalars are
 
 ``` math
-\text{SSE}_{jv} = \|RY_{\cdot v}\|^2 - 2 (\beta_{jv} n_{jv} + \gamma_{jv} (m_v - n_{jv})) + d_j \beta_{jv}^2 + s_j \gamma_{jv}^2 + 2 \alpha_j \beta_{jv} \gamma_{jv}.
+d_j=a_j^\mathsf{T}a_j,\qquad
+c_j=a_j^\mathsf{T}b_j,\qquad
+e_j=b_j^\mathsf{T}b_j.
 ```
 
-`.oasis_se_from_norms()` realises this computation, reusing $`n_{jv}`$,
-$`m_v`$ and the cached design scalars.
-
-## Multi-Basis Extension
-
-When the HRF contributes $`K > 1`$ basis functions, each trial has
-columns $`A_j \in \mathbb{R}^{T \times K}`$. Define
-
-- $`S = \sum_j A_j`$
-- $`D_j = A_j^T A_j`$
-- $`C_j = A_j^T (S - A_j)`$
-- $`E_j = (S - A_j)^T (S - A_j)`$
-
-Per voxel we need $`N1 = A^T RY`$ (stacked $`N`$ blocks of size $`K`$)
-and $`SY = S^T RY`$. The block system is
+The source names these quantities `d`, `alpha`, and `s`, respectively.
+For all voxels at once, define $`n_{1j}=a_j^\mathsf{T}RY`$ and
+$`n_{2j}=b_j^\mathsf{T}RY=s^\mathsf{T}RY-n_{1j}`$. The penalized normal
+equations are
 
 ``` math
 \begin{bmatrix}
-D_j + \lambda_x I & C_j \\
-C_j^T & E_j + \lambda_b I
+d_j+\lambda_x & c_j \\
+c_j & e_j+\lambda_b
 \end{bmatrix}
-\begin{bmatrix}
-B_{jv} \\
-\Gamma_{jv}
-\end{bmatrix}
+\begin{bmatrix}\beta_j\\\gamma_j\end{bmatrix}
 =
-\begin{bmatrix}
-N1_{jv} \\
-SY_v - N1_{jv}
-\end{bmatrix},
+\begin{bmatrix}n_{1j}\\n_{2j}\end{bmatrix}.
 ```
 
-where $`B_{jv} \in \mathbb{R}^K`$. `oasisk_betas()` solves this 2Kx2K
-system via Cholesky factorisation. Ridge again adds $`\lambda_x I`$ and
-$`\lambda_b I`$ to the block diagonals. Compared to the single-basis
-path, only the shapes of the cached matrices differ; the solve is still
-analytic per trial/voxel block.
-
-The companion `oasisk_betas_se()` extends the SSE/variance calculation
-to the multi-basis case, using the same building blocks.
-
-## HRF-Aware Design Construction
-
-OASIS can construct $`X`$ on the fly from event specifications.
-`.oasis_build_X_from_events()` uses
-[`fmrihrf::regressor_set()`](https://bbuchsbaum.github.io/fmrihrf/reference/regressor_set.html)
-to generate trial-wise columns (and optional other-condition aggregates)
-given:
-
-- `cond$onsets`: per-trial onset times
-- `cond$hrf`: HRF object (canonical, FIR, multi-basis, user-defined)
-- `cond$span`, `precision`, `method`: convolution controls
-
-This design is then residualised against nuisance regressors and fed
-into the algebra above. Because the HRF definition enters directly,
-switching HRFs or running grid searches automatically regenerates a
-matching design. When you provide an explicit `X`, OASIS skips this step
-and assumes you have already encoded the HRF in the matrix.
-
-## AR(1) Whitening
-
-`oasis$whiten = "ar1"` estimates a common AR(1) coefficient from
-residualised data. `.oasis_ar1_whitener()` computes $`\rho`$ and applies
-Toeplitz-safe differencing:
+Here each right-hand-side row has length $`V`$. Inverting the
+$`2\times2`$ matrix gives
 
 ``` math
-\tilde{y}_t = \begin{cases}
-\sqrt{1 - \rho^2} y_1 & t = 1, \\
-y_t - \rho y_{t-1} & t > 1.
-\end{cases}
+\widehat\beta_j =
+\frac{(e_j+\lambda_b)n_{1j}-c_jn_{2j}}
+{(d_j+\lambda_x)(e_j+\lambda_b)-c_j^2}.
 ```
 
-The same transformation is applied to $`X`$ and nuisance regressors
-before the standard OASIS algebra runs. Whitening preserves the
-single-pass benefits because the transformed data are treated exactly
-like the original inputs.
+When both penalties are zero and the two-column trial model has full
+rank, this is exactly the ordinary LSS coefficient. A rank-deficient
+unpenalized model is not identifiable, and the public OASIS path fails
+rather than silently adding jitter. This $`2\times2`$ form assumes
+$`N>1`$; with one trial there is no “other trials” column, and OASIS
+solves the one-column target model instead.
 
-## Diagnostics Output
+## Multi-basis system
 
-When `oasis$return_diag = TRUE`, OASIS returns the precomputed design
-scalars:
+For $`K>1`$, define the residualized blocks $`\widetilde A_j=RA_j`$,
+$`\widetilde S=\sum_j\widetilde A_j`$, and
+$`\widetilde B_j=\widetilde S-\widetilde A_j`$. The cached $`K\times K`$
+blocks are
 
-- Single-basis: $`d_j, \alpha_j, s_j`$ (from
-  `oasis_precompute_design()`)
-- Multi-basis: $`D_j, C_j, E_j`$ (from `oasisk_precompute_design()`)
+``` math
+D_j=\widetilde A_j^\mathsf{T}\widetilde A_j,\qquad
+C_j=\widetilde A_j^\mathsf{T}\widetilde B_j,\qquad
+E_j=\widetilde B_j^\mathsf{T}\widetilde B_j.
+```
 
-These matrices are useful for checking trial collinearity, energy, and
-the effect of ridge scaling.
+With $`N_{1j}=\widetilde A_j^\mathsf{T}RY`$ and
+$`N_{2j}=\widetilde S^\mathsf{T}RY-N_{1j}`$, OASIS solves
 
-## Algorithm Summary
+``` math
+\begin{bmatrix}
+D_j+\lambda_xI_K & C_j \\
+C_j^\mathsf{T} & E_j+\lambda_bI_K
+\end{bmatrix}
+\begin{bmatrix}\boldsymbol{\beta}_j\\\boldsymbol{\gamma}_j\end{bmatrix}
+=
+\begin{bmatrix}N_{1j}\\N_{2j}\end{bmatrix}.
+```
 
-Putting everything together, the single-basis solver proceeds as
-follows:
+The implementation factorizes one $`2K\times2K`$ Gram matrix per trial
+and uses all $`V`$ voxel columns as right-hand sides. The unpenalized
+public path requires every such Gram matrix to have rank $`2K`$. For
+$`N=1`$, the corresponding target-only system is $`K\times K`$.
 
-1.  Residualise $`Y`$ and $`X`$ against nuisance regressors, optionally
-    with whitening.
-2.  Compute $`a_j, s, d_j, \alpha_j, s_j`$ (`oasis_precompute_design`).
-3.  Stream through voxels in blocks, forming $`N_Y = A^T RY`$ and
-    $`S_Y = s^T RY`$ (`oasis_AtY_SY_blocked`).
-4.  Apply ridge scaling (absolute or fractional) to obtain
-    $`\lambda_x, \lambda_b`$.
-5.  For each trial, evaluate the closed-form $`\beta_{jv}`$ (and
-    $`\gamma_{jv}`$ if SEs requested).
-6.  Optionally compute SEs and diagnostics.
+## An executable equality check
 
-The multi-basis path swaps steps 2–5 for their block equivalents. In
-both cases, the cost is dominated by the single projection of $`Y`$ and
-the matrix–vector multiplies in step 3, giving $`\mathcal{O}(T V)`$
-complexity with a small trial-dependent overhead.
+The strongest check of the algebra is not agreement between two OASIS
+helpers; it is agreement with independently assembled trial-wise GLMs.
+The following fixed example checks every trial, basis coefficient, and
+voxel for both $`K=1`$ and $`K=3`$.
 
-## Complexity and Memory
+The exact public call for ordinary, unpenalized LSS is short; the zeros
+are important because the OASIS default is fractionally penalized.
 
-- Projection / whitening: $`\mathcal{O}(T V K_z)`$ arithmetic,
-  $`\mathcal{O}(T K_z)`$ memory for confounds
-- Precomputation: $`\mathcal{O}(T N)`$
-- Products (blocked): $`\mathcal{O}(T V)`$ with block size tuning
-- Closed-form solves: $`\mathcal{O}(N V)`$ with negligible constants
-  (2x2 or 2Kx2K systems)
+``` r
 
-Compared to classical LSS ($`N`$ separate regressions), OASIS shaves off
-repeated projections and linear solves, yielding substantial speedups
-when $`N`$ or $`V`$ is large.
+unpenalized <- oasis_options(
+  ridge_mode = "absolute",
+  ridge_x = 0,
+  ridge_b = 0,
+  return_se = TRUE
+)
+fit1 <- lss(Y1, X1, Z = Z, method = "oasis", oasis = unpenalized)
+dim(fit1$beta)
+#> [1] 6 5
+```
 
-## Next Steps
+| Basis_dimension | Maximum_beta_error | Maximum_SE_error |
+|----------------:|-------------------:|-----------------:|
+|               1 |                  0 |                0 |
+|               3 |                  0 |                0 |
 
-- [`vignette("oasis_method")`](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md)
-  — practical OASIS usage with ridge, multi-basis HRFs, and standard
-  errors
-- [`vignette("fmrilss")`](https://bbuchsbaum.github.io/fmrilss/articles/fmrilss.md)
-  — foundational LSS concepts
-- [`vignette("sbhm")`](https://bbuchsbaum.github.io/fmrilss/articles/sbhm.md)
-  — library-constrained voxel-specific HRFs
+Maximum discrepancy from independently assembled trial-wise GLMs.
+{.table}
 
-## References
+These checks use a correctly specified fixed design with common
+coefficients for the summed trial signal and independent Gaussian
+errors. They establish implementation equality with the corresponding
+GLMs. They do not establish uncertainty for ridge, estimated whitening,
+or data-adaptive HRF selection.
 
-- Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
-  Deconvolving BOLD activation in event-related designs for multivoxel
-  pattern classification analyses. *NeuroImage*, 59(3), 2636–2643.
-- fmrilss source files `R/oasis_glue.R` and `src/oasis_core.cpp` (for
-  implementation alignment).
+## Ridge changes the estimator
+
+For each trial and voxel, ridge minimizes
+
+``` math
+\lVert RY-RA_j\boldsymbol{\beta}_j-RB_j\boldsymbol{\gamma}_j\rVert_F^2
++\lambda_x\lVert\boldsymbol{\beta}_j\rVert_F^2
++\lambda_b\lVert\boldsymbol{\gamma}_j\rVert_F^2.
+```
+
+With `ridge_mode = "absolute"`, `ridge_x` and `ridge_b` are the
+penalties in that expression. With `ridge_mode = "fractional"`, the
+implementation multiplies them by mean residualized design energies:
+
+- for $`K=1`$, the means of $`d_j`$ and $`e_j`$;
+- for $`K>1`$, the mean diagonal entries of $`D_j`$ and $`E_j`$,
+  averaged over trials.
+
+Fractional scaling preserves the intended relative penalty under a
+common rescaling of the whole trial design. It does not make arbitrary,
+separate rescalings of multi-basis columns equivalent. Ridge can
+stabilize a poorly conditioned system, but its coefficients are
+penalized estimates rather than ordinary LSS coefficients.
+
+The package default is fractional ridge with `ridge_x = ridge_b = 0.05`.
+Request zero penalties explicitly when exact unpenalized LSS is the
+target. The public path checks that each penalized multi-trial Gram
+matrix is positive definite before solving it. When $`N=1`$, there is no
+identifiable “other trials” coefficient, so OASIS solves only the target
+block; `ridge_b` is then irrelevant.
+
+## What the standard errors mean
+
+OASIS returns model-based standard errors only when all of the following
+hold:
+
+- `ridge_x = ridge_b = 0`;
+- for $`N>1`$, the trial-specific $`2K`$-column model is full rank; for
+  $`N=1`$, the target $`K`$-column model is full rank;
+- prewhitening is not estimated in the same call;
+- the chosen HRF design is treated as fixed;
+- conditional errors have spherical covariance,
+  $`\operatorname{Var}(\varepsilon_{\cdot v}\mid A_j,B_j,C)=\sigma_{jv}^2I_T`$
+  for each voxel $`v`$.
+
+For trial $`j`$, let $`G_j`$ be its identifiable unpenalized model Gram
+matrix: $`2K\times2K`$ when $`N>1`$ and $`K\times K`$ when $`N=1`$. The
+implementation computes
+
+``` math
+\widehat\sigma^2_{jv}=\frac{\operatorname{SSE}_{jv}}
+{T-p-\operatorname{rank}(G_j)}
+```
+
+and takes the relevant diagonal of $`\widehat\sigma^2_{jv}G_j^{-1}`$.
+Thus the reported values are the same conditional, homoskedastic-model
+standard errors as in the corresponding full GLM under uncorrelated,
+constant-variance temporal errors. Gaussianity is an additional
+requirement for exact finite-sample t inference. The values are not
+ridge standard errors, not heteroskedasticity- or autocorrelation-robust
+errors, and not calibrated for uncertainty introduced by estimating a
+whitening model or selecting an HRF from the same data.
+[`oasis_options()`](https://bbuchsbaum.github.io/fmrilss/reference/oasis_options.md)
+rejects ridge together with `return_se = TRUE`; the backend also rejects
+estimated prewhitening and voxel-adaptive HRF modes for this request.
+
+## Prewhitening belongs outside `oasis=`
+
+Temporal whitening is handled by the top-level `prewhiten` argument and
+the shared `fmriAR` integration. The same estimated linear
+transformation is applied to $`Y`$, the trial design, and the common
+design before the OASIS algebra runs.
+
+``` r
+
+fit_ar1 <- lss(
+  Y,
+  X,
+  Z = Z,
+  method = "oasis",
+  oasis = oasis_options(),
+  prewhiten = prewhiten_options(method = "ar", p = 1)
+)
+```
+
+For multiple runs, supply `pooling = "run"` and the run labels. The
+legacy `oasis$whiten` field is deprecated, ignored, and emits a note; it
+must not be used to describe the current algorithm. Coefficients remain
+available after estimated whitening, but `return_se = TRUE` fails closed
+because feasible-GLS uncertainty is not calibrated here.
+
+## Design construction and identity
+
+There are two supported routes into the same solver:
+
+1.  `X` supplies an already convolved trial design.
+2.  `oasis$design_spec` asks the backend to construct one with
+    `fmrihrf`.
+
+The event route preserves event duration and amplitude and adds
+aggregates for other conditions to the common nuisance span. In
+multi-run low-level design specifications, onsets are global seconds;
+[`lss_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_design.md)
+with a
+[`fmridesign::event_model()`](https://bbuchsbaum.github.io/fmridesign/reference/event_model.html)
+is the safer run-aware interface.
+
+A raw multi-basis `X` cannot reveal trial identity from dimensions
+alone. It therefore requires explicit `K`, `ntrials`, and a
+`trial_basis_map` identifying every uniquely named column. The output
+contains $`NK`$ rows in canonical trial-by-basis order. Supplying an
+incorrect grouping would change the estimand, so ambiguous inference is
+rejected.
+
+If `design_spec$hrf_grid` is supplied, the implementation chooses a
+candidate using the observed data before fitting. That is a
+model-selection step. Treat the resulting coefficients as conditional on
+the selected design. Because ordinary post-selection standard errors are
+not established by the fixed-design formula above, `return_se = TRUE`
+fails closed on this route.
+
+Hidden executable contracts also bind output shapes, diagnostic shapes,
+permutation-safe multi-basis identity, event-built multi-basis
+dimensions, scale equivariance, and the principal fail-closed inference
+boundaries.
+
+## Work and memory inventory
+
+The former shorthand “one $`T\times T`$ QR instead of $`N`$ such QRs” is
+not the relevant comparison. An LSS design has $`p+2K`$ effective
+columns, not $`T`$ columns. The table below exposes every leading term
+instead. It assumes $`K_z\le T`$, a dense design, and a nuisance rank
+$`p`$.
+
+| Stage                         |   K = 1    |     general K      |
+|:------------------------------|:----------:|:------------------:|
+| Rank-reveal common design     | O(T K_z^2) |     O(T K_z^2)     |
+| Residualize all trial columns |  O(T p N)  |     O(T p N K)     |
+| Build trial Gram terms        |   O(T N)   |     O(T N K^2)     |
+| Residualize all voxel data    |  O(T p V)  |      O(T p V)      |
+| Trial-data cross-products     |  O(T N V)  |     O(T N K V)     |
+| Solve all trial systems       |   O(N V)   | O(N K^3 + N K^2 V) |
+
+Leading arithmetic terms in the current dense OASIS implementation.
+{.table}
+
+The $`O(TNKV)`$ cross-product is usually the largest OASIS term when
+both the trial and voxel counts are large. `block_cols = B` limits the
+temporary voxel block to $`O(TB)`$, but it does not remove the
+$`NK\times V`$ products or the $`NK\times V`$ output. Other persistent
+storage includes $`O(Tp)`$ for the nuisance basis, $`O(TNK)`$ for the
+residualized trial design, and $`O(NK^2)`$ for multi-basis Gram blocks.
+
+A direct implementation that refits each trial model separately performs
+$`N`$ factorizations of $`T\times(p+2K)`$ designs and repeatedly forms
+trial-specific products with $`Y`$. OASIS reuses the nuisance
+projection, aggregate design, Gram terms, and batched products. That
+structural reuse is exact; a universal wall-clock speedup is not.
+Runtime depends on $`T,N,V,K,p`$, BLAS, memory bandwidth, block size,
+and the competing implementation, so this article makes no synthetic
+timing claim.
+
+## Implementation map
+
+These names are internal implementation landmarks, not additional public
+APIs.
+
+| Responsibility | Location |
+|:---|:---|
+| Validate options, assemble common span, dispatch | R/oasis_backend.R: .lss_oasis |
+| Build event-based trial and other-condition designs | R/oasis_design.R: .oasis_build_X_from_events |
+| Resolve absolute or fractional ridge | R/oasis_ridge_se.R: .oasis_resolve_ridge |
+| One-basis design cache and blocked products | src/oasis_core.cpp: oasis_precompute_design, oasis_AtY_SY_blocked |
+| One-basis coefficient solve | src/oasis_core.cpp: oasis_betas_closed_form |
+| Multi-basis design cache and blocked products | src/oasis_core.cpp: oasisk_precompute_design, oasisk_products |
+| Multi-basis coefficient and SE solves | src/oasis_core.cpp: oasisk_betas, oasisk_betas_se |
+
+Internal implementation landmarks for each algebraic stage. {.table}
+
+By default, the public result is an $`NK\times V`$ coefficient matrix
+(an $`N\times V`$ matrix when $`K=1`$). Setting `return_se = TRUE` or
+`return_diag = TRUE` changes the result to `list(beta, diag?, se?)`;
+`beta` and `se` have the same $`NK\times V`$ shape. For $`K=1`$, `d`,
+`alpha`, and `s` are length-$`N`$ diagnostic vectors. For $`K>1`$, `D`,
+`C`, and `E` are $`K\times K\times N`$ arrays. These are unpenalized
+cross-products on the residualized design scale, after any requested
+whitening. They can expose low energy or collinearity, but they are not
+a condition-number report and do not by themselves validate a chosen
+ridge.
+
+## Boundaries of the result
+
+- Exact equality with classical LSS requires zero ridge, a fixed design,
+  and full-rank trial models.
+- Multi-basis output is a vector of basis coefficients per trial and
+  voxel; any scalar amplitude needs an explicit, identified
+  normalization rule.
+- Estimated whitening changes the fitted space and adds uncertainty not
+  covered by the conditional standard-error formula.
+- HRF grid selection and voxel-adaptive HRFs are data-adaptive
+  procedures; fixed-design uncertainty does not automatically survive
+  selection.
+- Blocking controls temporary memory. It cannot make storage smaller
+  than the requested $`NK\times V`$ result.
+
+## Next steps
+
+- Continue to
+  [`vignette("lss_with_fmridesign")`](https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.md)
+  for run-aware event-table construction and trial/basis identity.
+- For a backward reference,
+  [`vignette("oasis_method")`](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md)
+  contains the practical fitting and diagnostics workflow, and
+  [`vignette("fmrilss")`](https://bbuchsbaum.github.io/fmrilss/articles/fmrilss.md)
+  contains the foundational LSS introduction.
+- Later articles cover explicitly normalized voxel-specific HRF shapes
+  in
+  [`vignette("voxel-wise-hrf")`](https://bbuchsbaum.github.io/fmrilss/articles/voxel-wise-hrf.md)
+  and library-constrained shapes and trial coefficients in
+  [`vignette("sbhm")`](https://bbuchsbaum.github.io/fmrilss/articles/sbhm.md).
+
+## Reference
+
+Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
+Deconvolving BOLD activation in event-related designs for multivoxel
+pattern classification analyses. *NeuroImage*, 59(3), 2636–2643.
+<https://doi.org/10.1016/j.neuroimage.2011.08.076>

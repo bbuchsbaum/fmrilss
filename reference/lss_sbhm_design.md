@@ -3,7 +3,8 @@
 Run the SBHM end-to-end pipeline using fmridesign's `event_model` and
 optional `baseline_model`, mirroring the convenience of
 [`lss_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_design.md)
-but producing SBHM coefficients and (optionally) scalar amplitudes.
+but producing SBHM shape coefficients and (optionally) scalar
+event-design trial coefficients in the component named `amplitude`.
 
 ## Usage
 
@@ -15,14 +16,9 @@ lss_sbhm_design(
   baseline_model = NULL,
   prewhiten = NULL,
   prepass = list(),
-  match = list(shrink = list(tau = 0, ref = NULL, snr = NULL), topK = 3, soft_blend =
-    TRUE, blend_margin = 0.08, whiten = FALSE, sv_floor_rel = 0.05, whiten_power = 0.5,
-    min_margin = NULL, min_beta_norm = NULL, fallback_ref = NULL, orient_ref = TRUE,
-    alpha_source = "prepass", rank1_min = 0),
+  match = list(),
   oasis = list(),
-  amplitude = list(method = "lss1", ridge = list(mode = "fractional", lambda = 0.02),
-    ridge_frac = list(x = 0.02, b = 0.02), cond_gate = NULL, adaptive = list(enable =
-    FALSE, base = 0.02, k0 = 1000, max = 0.08), return_se = FALSE),
+  amplitude = list(),
   return = c("amplitude", "coefficients", "both"),
   validate = TRUE,
   ...
@@ -70,8 +66,12 @@ lss_sbhm_design(
 
 - oasis:
 
-  Optional list forwarded to `lss(..., method = "oasis")`. `K` defaults
-  to `ncol(sbhm$B)`.
+  Optional SBHM OASIS override list. Supported fields are `ridge_mode`,
+  `ridge_x`, `ridge_b`, and `block_cols`; false-valued `return_se` and
+  `return_diag` are accepted, while true values fail because SBHM
+  uncertainty/design diagnostics are not exposed. The basis rank, trial
+  count, intercept policy, and trial/basis map are fixed internally from
+  `sbhm` and the event model.
 
 - amplitude:
 
@@ -101,9 +101,11 @@ Same return contract as
 
 This function wraps
 [`lss_sbhm()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm.md)
-by converting the `event_model` into an OASIS `design_spec` that uses
-the SBHM basis HRF, and by mapping `baseline_model` terms to nuisance
-regressors for projection.
+by locating the unique trialwise event term, rebuilding it with the SBHM
+basis, and retaining run identities and heterogeneous durations.
+Non-trial event terms and `baseline_model` columns enter the fixed
+nuisance span. Multi-run regressors are constructed within runs so HRF
+tails cannot cross run boundaries.
 
 ## Examples
 

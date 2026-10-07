@@ -1,16 +1,18 @@
 # Articles
 
-### All vignettes
+### Learning path
 
 - [Getting started with
   fmrilss](https://bbuchsbaum.github.io/fmrilss/articles/fmrilss.md):
-- [Using fmridesign with
-  fmrilss](https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.md):
-- [The OASIS Method: Optimized Analytic Single-pass Inverse
-  Solution](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md):
-- [OASIS Theory: Algebra and Implementation
-  Details](https://bbuchsbaum.github.io/fmrilss/articles/oasis_theory.md):
-- [Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF
-  Estimation](https://bbuchsbaum.github.io/fmrilss/articles/sbhm.md):
-- [Voxel-wise HRF Modeling with
-  fmrilss](https://bbuchsbaum.github.io/fmrilss/articles/voxel-wise-hrf.md):
+- [Practical OASIS: Design, Regularization, and
+  Diagnostics](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md):
+- [OASIS Theory: What Is Reused, Solved, and
+  Returned](https://bbuchsbaum.github.io/fmrilss/articles/oasis_theory.md):
+- [Run-aware LSS with
+  fmridesign](https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.md):
+- [Voxel-wise HRF shapes and trial
+  coefficients](https://bbuchsbaum.github.io/fmrilss/articles/voxel-wise-hrf.md):
+- [Shared-basis HRF matching: shapes, score margins, and trial
+  coefficients](https://bbuchsbaum.github.io/fmrilss/articles/sbhm.md):
+- [GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional
+  ridge](https://bbuchsbaum.github.io/fmrilss/articles/glmsingle.md):

@@ -5,12 +5,14 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>OASIS Theory: Algebra and Implementation Details • fmrilss</title>
+<title>OASIS Theory: What Is Reused, Solved, and Returned • fmrilss</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
 <script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="OASIS Theory: Algebra and Implementation Details">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="OASIS Theory: What Is Reused, Solved, and Returned">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -34,11 +36,14 @@
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Using fmridesign with fmrilss</a></li>
-    <li><a class="dropdown-item" href="../articles/oasis_method.html">The OASIS Method: Optimized Analytic Single-pass Inverse Solution</a></li>
-    <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: Algebra and Implementation Details</a></li>
-    <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF Estimation</a></li>
-    <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF Modeling with fmrilss</a></li>
+<li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Articles</h6></li>
+    <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
+    <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
+    <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -61,7 +66,7 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
 
-      <h1>OASIS Theory: Algebra and Implementation Details</h1>
+      <h1>OASIS Theory: What Is Reused, Solved, and Returned</h1>
             
       
       <small class="dont-index">Source: <a href="https://github.com/bbuchsbaum/fmrilss/blob/main/vignettes/oasis_theory.Rmd" class="external-link"><code>vignettes/oasis_theory.Rmd</code></a></small>
@@ -70,427 +75,600 @@
 
     
     
-<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><div class="section level2">
-<h2 id="motivation">Motivation<a class="anchor" aria-label="anchor" href="#motivation"></a>
-</h2>
-<p>Optimized Analytic Single-pass Inverse Solution (OASIS) extends Least
-Squares Separate (LSS) estimation through algebraic reformulation that
-enables single-pass computation of all trial estimates. For a
-single-basis HRF (K = 1) without ridge, OASIS reduces exactly to the
-closed-form LSS solution; the per‑trial 2x2 normal equations are the
-same. The value of OASIS is in batching those solves efficiently and
-generalizing the same algebra to multi‑basis HRFs (2Kx2K) with optional
-ridge and diagnostics. This document provides the mathematical
-foundation and implementation details.</p>
-<p>Read this after <code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code> if you want the
-linear algebra behind the user-facing API. The code chunks below are
-there to make the main scaling claims executable rather than purely
-narrative.</p>
-<div class="section level3">
-<h3 id="prerequisites">Prerequisites<a class="anchor" aria-label="anchor" href="#prerequisites"></a>
-</h3>
-<p>This vignette assumes familiarity with: - QR decomposition and
-orthogonal projection matrices - Ridge regression and regularization -
-Matrix calculus and linear algebra - The standard LSS formulation</p>
-</div>
-<div class="section level3">
-<h3 id="computational-intuition">Computational Intuition<a class="anchor" aria-label="anchor" href="#computational-intuition"></a>
-</h3>
-<p>Standard LSS requires N separate GLM fits for N trials, each
-involving: 1. Matrix assembly: O(T²) operations 2. QR decomposition:
-O(T³) operations 3. Back-substitution: O(T²) operations</p>
-<p>Total complexity: O(NT³) for N trials</p>
-<p>OASIS recognizes that these N models share substantial structure. By
-factoring out common computations, OASIS reduces complexity to: 1.
-Single QR decomposition: O(T³) 2. Shared projections: O(NT²) 3.
-Per-trial solutions: O(N)</p>
-<p>Total complexity: O(T³ + NT²), a significant reduction when N is
-large.</p>
-</div>
-<div class="section level3">
-<h3 id="visual-comparison-of-computational-scaling">Visual Comparison of Computational Scaling<a class="anchor" aria-label="anchor" href="#visual-comparison-of-computational-scaling"></a>
-</h3>
-<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Demonstrate computational scaling</span></span>
-<span><span class="va">N_trials</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">50</span>, <span class="fl">100</span>, <span class="fl">200</span>, <span class="fl">500</span>, <span class="fl">1000</span><span class="op">)</span></span>
-<span><span class="va">T_points</span> <span class="op">&lt;-</span> <span class="fl">200</span>  <span class="co"># Fixed number of timepoints</span></span>
-<span></span>
-<span><span class="co"># Simplified complexity models (arbitrary units)</span></span>
-<span><span class="va">classical_ops</span> <span class="op">&lt;-</span> <span class="va">N_trials</span> <span class="op">*</span> <span class="va">T_points</span><span class="op">^</span><span class="fl">3</span> <span class="op">/</span> <span class="fl">1e6</span>  <span class="co"># O(NT³)</span></span>
-<span><span class="va">oasis_ops</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="va">T_points</span><span class="op">^</span><span class="fl">3</span> <span class="op">+</span> <span class="va">N_trials</span> <span class="op">*</span> <span class="va">T_points</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span> <span class="op">/</span> <span class="fl">1e6</span>  <span class="co"># O(T³ + NT²)</span></span>
-<span></span>
-<span><span class="co"># Create comparison plot</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">N_trials</span>, <span class="va">classical_ops</span>, type<span class="op">=</span><span class="st">'l'</span>, col<span class="op">=</span><span class="st">'red'</span>, lwd<span class="op">=</span><span class="fl">2</span>,</span>
-<span>     xlab<span class="op">=</span><span class="st">'Number of Trials'</span>, ylab<span class="op">=</span><span class="st">'Computational Operations (millions)'</span>,</span>
-<span>     main<span class="op">=</span><span class="st">'Computational Complexity: Classical LSS vs OASIS'</span>,</span>
-<span>     ylim<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">classical_ops</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/lines.html" class="external-link">lines</a></span><span class="op">(</span><span class="va">N_trials</span>, <span class="va">oasis_ops</span>, col<span class="op">=</span><span class="st">'blue'</span>, lwd<span class="op">=</span><span class="fl">2</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">'topleft'</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">'Classical LSS'</span>, <span class="st">'OASIS'</span><span class="op">)</span>,</span>
-<span>       col<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">'red'</span>, <span class="st">'blue'</span><span class="op">)</span>, lwd<span class="op">=</span><span class="fl">2</span>, bty<span class="op">=</span><span class="st">'n'</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Add shaded region showing computational savings</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/polygon.html" class="external-link">polygon</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">N_trials</span>, <span class="fu"><a href="https://rdrr.io/r/base/rev.html" class="external-link">rev</a></span><span class="op">(</span><span class="va">N_trials</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>        <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">classical_ops</span>, <span class="fu"><a href="https://rdrr.io/r/base/rev.html" class="external-link">rev</a></span><span class="op">(</span><span class="va">oasis_ops</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>        col<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/grDevices/rgb.html" class="external-link">rgb</a></span><span class="op">(</span><span class="fl">0.2</span>, <span class="fl">0.8</span>, <span class="fl">0.2</span>, <span class="fl">0.3</span><span class="op">)</span>, border<span class="op">=</span><span class="cn">NA</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/text.html" class="external-link">text</a></span><span class="op">(</span><span class="fl">500</span>, <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">classical_ops</span><span class="op">[</span><span class="fl">4</span><span class="op">]</span>, <span class="va">oasis_ops</span><span class="op">[</span><span class="fl">4</span><span class="op">]</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>     <span class="st">'Computational\nSavings'</span>, col<span class="op">=</span><span class="st">'darkgreen'</span><span class="op">)</span></span></code></pre></div>
-<div class="figure">
-<img src="oasis_theory_files/figure-html/complexity-comparison-1.png" class="r-plt" alt="Line plot showing classical LSS scaling linearly with trials while OASIS remains nearly flat." width="1200"><p class="caption">
-Computational complexity: Classical LSS vs OASIS
-</p>
-</div>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">complexity_summary</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>  Trials <span class="op">=</span> <span class="va">N_trials</span>,</span>
-<span>  Classical <span class="op">=</span> <span class="va">classical_ops</span>,</span>
-<span>  OASIS <span class="op">=</span> <span class="va">oasis_ops</span>,</span>
-<span>  SpeedupRatio <span class="op">=</span> <span class="va">classical_ops</span> <span class="op">/</span> <span class="va">oasis_ops</span></span>
-<span><span class="op">)</span></span>
-<span><span class="va">complexity_summary</span></span>
-<span><span class="co">#&gt;   Trials Classical OASIS SpeedupRatio</span></span>
-<span><span class="co">#&gt; 1     10        80   8.4      9.52381</span></span>
-<span><span class="co">#&gt; 2     50       400  10.0     40.00000</span></span>
-<span><span class="co">#&gt; 3    100       800  12.0     66.66667</span></span>
-<span><span class="co">#&gt; 4    200      1600  16.0    100.00000</span></span>
-<span><span class="co">#&gt; 5    500      4000  28.0    142.85714</span></span>
-<span><span class="co">#&gt; 6   1000      8000  48.0    166.66667</span></span></code></pre></div>
-<p>Code references point to <code>R/oasis_glue.R</code> and
-<code>src/oasis_core.cpp</code> implementations.</p>
-<p>Notation used throughout:</p>
-<ul>
-<li>
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Y</mi><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>T</mi><mo>×</mo><mi>V</mi></mrow></msup></mrow><annotation encoding="application/x-tex">Y \in \mathbb{R}^{T \times V}</annotation></semantics></math>:
-voxel data
-(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>
-time points,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>V</mi><annotation encoding="application/x-tex">V</annotation></semantics></math>
-voxels)</li>
-<li>
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>X</mi><mo>=</mo><mo stretchy="false" form="prefix">[</mo><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><mi>…</mi><mo>,</mo><msub><mi>x</mi><mi>N</mi></msub><mo stretchy="false" form="postfix">]</mo><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>T</mi><mo>×</mo><mi>N</mi></mrow></msup></mrow><annotation encoding="application/x-tex">X = [x_1, \dots, x_N] \in \mathbb{R}^{T \times N}</annotation></semantics></math>:
-trial regressors for one condition</li>
-<li>
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Z</mi><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>T</mi><mo>×</mo><msub><mi>K</mi><mi>z</mi></msub></mrow></msup></mrow><annotation encoding="application/x-tex">Z \in \mathbb{R}^{T \times K_z}</annotation></semantics></math>:
-nuisance/experimental regressors shared across trials</li>
-<li>
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mo>=</mo><mi>I</mi><mo>−</mo><mi>Q</mi><msup><mi>Q</mi><mi>T</mi></msup></mrow><annotation encoding="application/x-tex">R = I - QQ^T</annotation></semantics></math>:
-orthogonal projector removing nuisance effects
-(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Q</mi><annotation encoding="application/x-tex">Q</annotation></semantics></math>
-comes from QR factorisation of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">[</mo><mi>Z</mi><mo>,</mo><mtext mathvariant="normal">others</mtext><mo stretchy="false" form="postfix">]</mo></mrow><annotation encoding="application/x-tex">[Z,\text{others}]</annotation></semantics></math>)</li>
-<li>Inner products are denoted
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">⟨</mo><mi>a</mi><mo>,</mo><mi>b</mi><mo stretchy="false" form="postfix">⟩</mo><mo>=</mo><msup><mi>a</mi><mi>T</mi></msup><mi>b</mi></mrow><annotation encoding="application/x-tex">\langle a, b \rangle = a^T b</annotation></semantics></math>
-</li>
-</ul>
-<p>We first treat the single-basis case (one regressor per trial) before
-generalizing to multi-basis HRFs.</p>
-</div>
-</div>
+<script>document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("palette-red","palette-lapis","palette-ochre","palette-teal","palette-green","palette-violet","preset-homage","preset-interaction","preset-study","preset-structural","preset-adobe","preset-midnight");document.body.classList.add("palette-red","preset-homage");});</script><p>OASIS is an algebraic implementation of least-squares-separate (LSS).
+It does not define a different unpenalized estimator. It identifies the
+work that all trial-wise LSS models share, computes that work once, and
+solves the small trial-specific systems in batches. With ridge
+penalties, it instead computes a penalized LSS estimator.</p>
+<p>This article establishes the estimand, derives the one- and
+multi-basis systems, and maps each mathematical object to the current
+implementation. Read it after <code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code> and
+<code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code>; those articles introduce the
+practical meaning of LSS and the user-facing OASIS API.</p>
 <div class="section level2">
-<h2 id="classical-lss-recap">Classical LSS Recap<a class="anchor" aria-label="anchor" href="#classical-lss-recap"></a>
+<h2 id="scope-and-notation">Scope and notation<a class="anchor" aria-label="anchor" href="#scope-and-notation"></a>
 </h2>
-<p>Classical LSS fits, for each trial
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math>,
-a GLM with design
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">[</mo><msub><mi>x</mi><mi>j</mi></msub><mo>,</mo><msub><mi>b</mi><mi>j</mi></msub><mo>,</mo><mi>Z</mi><mo stretchy="false" form="postfix">]</mo></mrow><annotation encoding="application/x-tex">[x_j, b_j, Z]</annotation></semantics></math>,
-where
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>b</mi><mi>j</mi></msub><mo>=</mo><msub><mo>∑</mo><mrow><mi>i</mi><mo>≠</mo><mi>j</mi></mrow></msub><msub><mi>x</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">b_j = \sum_{i \neq j} x_i</annotation></semantics></math>.
-Solving each model independently costs
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝒪</mi><mo stretchy="false" form="prefix">(</mo><mi>N</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\mathcal{O}(N)</annotation></semantics></math>
-QR factorizations. Algebraically, the trial-specific beta can be
-expressed as</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover><mi>β</mi><mo accent="true">̂</mo></mover><mi>j</mi></msub><mo>=</mo><mfrac><mrow><mo stretchy="false" form="prefix">⟨</mo><mi>R</mi><msub><mi>x</mi><mi>j</mi></msub><mo>,</mo><mi>R</mi><mi>Y</mi><mo stretchy="false" form="postfix">⟩</mo><mo>−</mo><mfrac><mrow><mo stretchy="false" form="prefix">⟨</mo><mi>R</mi><msub><mi>x</mi><mi>j</mi></msub><mo>,</mo><mi>R</mi><msub><mi>b</mi><mi>j</mi></msub><mo stretchy="false" form="postfix">⟩</mo></mrow><mrow><mo stretchy="false" form="postfix">∥</mo><mi>R</mi><msub><mi>b</mi><mi>j</mi></msub><msup><mo stretchy="false" form="postfix">∥</mo><mn>2</mn></msup></mrow></mfrac><mo stretchy="false" form="prefix">⟨</mo><mi>R</mi><msub><mi>b</mi><mi>j</mi></msub><mo>,</mo><mi>R</mi><mi>Y</mi><mo stretchy="false" form="postfix">⟩</mo></mrow><mrow><mo stretchy="false" form="postfix">∥</mo><mi>R</mi><msub><mi>x</mi><mi>j</mi></msub><msup><mo stretchy="false" form="postfix">∥</mo><mn>2</mn></msup><mo>−</mo><mfrac><mrow><mo stretchy="false" form="prefix">⟨</mo><mi>R</mi><msub><mi>x</mi><mi>j</mi></msub><mo>,</mo><mi>R</mi><msub><mi>b</mi><mi>j</mi></msub><msup><mo stretchy="false" form="postfix">⟩</mo><mn>2</mn></msup></mrow><mrow><mo stretchy="false" form="postfix">∥</mo><mi>R</mi><msub><mi>b</mi><mi>j</mi></msub><msup><mo stretchy="false" form="postfix">∥</mo><mn>2</mn></msup></mrow></mfrac></mrow></mfrac><mi>.</mi></mrow><annotation encoding="application/x-tex">
-\hat{\beta}_j = \frac{\langle Rx_j, RY \rangle - \frac{\langle Rx_j, Rb_j \rangle}{\|Rb_j\|^2} \langle Rb_j, RY \rangle}{\|Rx_j\|^2 - \frac{\langle Rx_j, Rb_j \rangle^2}{\|Rb_j\|^2}}.
-</annotation></semantics></math></p>
-<p>OASIS extracts and reuses the common computational components
-(projections, norms, cross-products) across all trials, computing each
-only once.</p>
-</div>
-<div class="section level2">
-<h2 id="single-basis-oasis-algebra">Single-Basis OASIS Algebra<a class="anchor" aria-label="anchor" href="#single-basis-oasis-algebra"></a>
-</h2>
-<p>After residualising against nuisance regressors we define:</p>
-<ul>
-<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>a</mi><mi>j</mi></msub><mo>=</mo><mi>R</mi><msub><mi>x</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">a_j = Rx_j</annotation></semantics></math></li>
-<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mo>=</mo><msubsup><mo>∑</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></msubsup><msub><mi>a</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">s = \sum_{j=1}^N a_j</annotation></semantics></math></li>
-<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>d</mi><mi>j</mi></msub><mo>=</mo><mo stretchy="false" form="postfix">∥</mo><msub><mi>a</mi><mi>j</mi></msub><msup><mo stretchy="false" form="postfix">∥</mo><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">d_j = \|a_j\|^2</annotation></semantics></math></li>
-<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>α</mi><mi>j</mi></msub><mo>=</mo><mo stretchy="false" form="prefix">⟨</mo><msub><mi>a</mi><mi>j</mi></msub><mo>,</mo><mi>s</mi><mo>−</mo><msub><mi>a</mi><mi>j</mi></msub><mo stretchy="false" form="postfix">⟩</mo></mrow><annotation encoding="application/x-tex">\alpha_j = \langle a_j, s - a_j \rangle</annotation></semantics></math></li>
-<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>s</mi><mi>j</mi></msub><mo>=</mo><mo stretchy="false" form="postfix">∥</mo><mi>s</mi><mo>−</mo><msub><mi>a</mi><mi>j</mi></msub><msup><mo stretchy="false" form="postfix">∥</mo><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">s_j = \|s - a_j\|^2</annotation></semantics></math></li>
-</ul>
+<p>The dimensions below are used throughout.</p>
+<table class="table">
+<caption>Symbols and dimensions used in the OASIS derivation.</caption>
+<thead><tr class="header">
+<th align="center">Symbol</th>
+<th align="left">Meaning</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="center">T</td>
+<td align="left">time points</td>
+</tr>
+<tr class="even">
+<td align="center">V</td>
+<td align="left">response columns or voxels</td>
+</tr>
+<tr class="odd">
+<td align="center">N</td>
+<td align="left">trials in the condition being estimated</td>
+</tr>
+<tr class="even">
+<td align="center">K</td>
+<td align="left">HRF basis columns per trial</td>
+</tr>
+<tr class="odd">
+<td align="center">K_z</td>
+<td align="left">columns supplied in the common nuisance design</td>
+</tr>
+<tr class="even">
+<td align="center">p</td>
+<td align="left">rank of the common nuisance design; p &lt;= K_z</td>
+</tr>
+<tr class="odd">
+<td align="center">B</td>
+<td align="left">voxel block size used for data products</td>
+</tr>
+</tbody>
+</table>
 <p>Let
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>n</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><mo>=</mo><mo stretchy="false" form="prefix">⟨</mo><msub><mi>a</mi><mi>j</mi></msub><mo>,</mo><mi>R</mi><msub><mi>Y</mi><mrow><mi>⋅</mi><mi>v</mi></mrow></msub><mo stretchy="false" form="postfix">⟩</mo></mrow><annotation encoding="application/x-tex">n_{jv} = \langle a_j, RY_{\cdot v} \rangle</annotation></semantics></math>
-and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>m</mi><mi>v</mi></msub><mo>=</mo><mo stretchy="false" form="prefix">⟨</mo><mi>s</mi><mo>,</mo><mi>R</mi><msub><mi>Y</mi><mrow><mi>⋅</mi><mi>v</mi></mrow></msub><mo stretchy="false" form="postfix">⟩</mo></mrow><annotation encoding="application/x-tex">m_v = \langle s, RY_{\cdot v} \rangle</annotation></semantics></math>.
-The pair
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">(</mo><msub><mi>β</mi><mi>j</mi></msub><mo>,</mo><msub><mi>γ</mi><mi>j</mi></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">(\beta_j, \gamma_j)</annotation></semantics></math>
-solving the 2x2 system for trial
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math>
-and voxel
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math>
-is obtained from</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>G</mi><mi>j</mi></msub><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>β</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>γ</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mo>=</mo><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>n</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>m</mi><mi>v</mi></msub><mo>−</mo><msub><mi>n</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mo>,</mo><mspace width="1.0em"></mspace><msub><mi>G</mi><mi>j</mi></msub><mo>=</mo><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>d</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>x</mi></msub></mtd><mtd columnalign="center" style="text-align: center"><msub><mi>α</mi><mi>j</mi></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>α</mi><mi>j</mi></msub></mtd><mtd columnalign="center" style="text-align: center"><msub><mi>s</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>b</mi></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">
-G_j \begin{bmatrix} \beta_{jv} \\ \gamma_{jv} \end{bmatrix} = \begin{bmatrix} n_{jv} \\ m_v - n_{jv} \end{bmatrix},
-\quad
-G_j = \begin{bmatrix} d_j + \lambda_x &amp; \alpha_j \\ \alpha_j &amp; s_j + \lambda_b \end{bmatrix},
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Y</mi><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>T</mi><mo>×</mo><mi>V</mi></mrow></msup></mrow><annotation encoding="application/x-tex">Y \in \mathbb{R}^{T \times V}</annotation></semantics></math>
+be the data and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>C</mi><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>T</mi><mo>×</mo><msub><mi>K</mi><mi>z</mi></msub></mrow></msup></mrow><annotation encoding="application/x-tex">C \in \mathbb{R}^{T \times K_z}</annotation></semantics></math>
+the common design: intercepts, drifts, nuisance variables, and
+aggregates for conditions not being estimated. Only the column space of
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math>
+matters. If
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Q</mi><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>T</mi><mo>×</mo><mi>p</mi></mrow></msup></mrow><annotation encoding="application/x-tex">Q \in \mathbb{R}^{T \times p}</annotation></semantics></math>
+is an orthonormal basis for that space, then</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mo>=</mo><msub><mi>I</mi><mi>T</mi></msub><mo>−</mo><mi>Q</mi><msup><mi>Q</mi><mi>𝖳</mi></msup></mrow><annotation encoding="application/x-tex">
+R = I_T - QQ^\mathsf{T}
 </annotation></semantics></math></p>
-<p>with ridge penalties
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>λ</mi><mi>x</mi></msub><mo>,</mo><msub><mi>λ</mi><mi>b</mi></msub><mo>≥</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\lambda_x, \lambda_b \ge 0</annotation></semantics></math>.
-The inverse of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>G</mi><mi>j</mi></msub><annotation encoding="application/x-tex">G_j</annotation></semantics></math>
-is analytic, so<br><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>β</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><mo>=</mo><mfrac><mrow><mo stretchy="false" form="prefix">(</mo><msub><mi>s</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>b</mi></msub><mo stretchy="false" form="postfix">)</mo><msub><mi>n</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><mo>−</mo><msub><mi>α</mi><mi>j</mi></msub><mo stretchy="false" form="prefix">(</mo><msub><mi>m</mi><mi>v</mi></msub><mo>−</mo><msub><mi>n</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><mo stretchy="false" form="postfix">)</mo></mrow><mrow><mo stretchy="false" form="prefix">(</mo><msub><mi>d</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>x</mi></msub><mo stretchy="false" form="postfix">)</mo><mo stretchy="false" form="prefix">(</mo><msub><mi>s</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>b</mi></msub><mo stretchy="false" form="postfix">)</mo><mo>−</mo><msubsup><mi>α</mi><mi>j</mi><mn>2</mn></msubsup></mrow></mfrac><mi>.</mi></mrow><annotation encoding="application/x-tex">
-\beta_{jv} = \frac{(s_j + \lambda_b) n_{jv} - \alpha_j (m_v - n_{jv})}{(d_j + \lambda_x)(s_j + \lambda_b) - \alpha_j^2}.
+<p>removes it. The implementation rank-reduces
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math>
+before passing it to the compiled kernels, so redundant nuisance columns
+do not add arbitrary projection directions.</p>
+<p>For trial
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math>,
+let
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>A</mi><mi>j</mi></msub><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>T</mi><mo>×</mo><mi>K</mi></mrow></msup></mrow><annotation encoding="application/x-tex">A_j \in \mathbb{R}^{T \times K}</annotation></semantics></math>
+contain its HRF basis columns and define</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>B</mi><mi>j</mi></msub><mo>=</mo><munder><mo>∑</mo><mrow><mi>i</mi><mo>≠</mo><mi>j</mi></mrow></munder><msub><mi>A</mi><mi>i</mi></msub><mi>.</mi></mrow><annotation encoding="application/x-tex">
+B_j = \sum_{i \ne j} A_i.
 </annotation></semantics></math></p>
-<p>This is exactly what <code>oasis_betas_closed_form()</code>
-implements (C++ file <code>src/oasis_core.cpp</code>). The
-precomputation step <code>oasis_precompute_design()</code> produces
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>a</mi><mi>j</mi></msub><mo>,</mo><mi>s</mi><mo>,</mo><msub><mi>d</mi><mi>j</mi></msub><mo>,</mo><msub><mi>α</mi><mi>j</mi></msub><mo>,</mo><msub><mi>s</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">a_j, s, d_j, \alpha_j, s_j</annotation></semantics></math>
-once, while <code>oasis_AtY_SY_blocked()</code> streams through voxels
-to obtain
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>n</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><annotation encoding="application/x-tex">n_{jv}</annotation></semantics></math>
-and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>m</mi><mi>v</mi></msub><annotation encoding="application/x-tex">m_v</annotation></semantics></math>.</p>
-<div class="section level3">
-<h3 id="fractional-ridge">Fractional Ridge<a class="anchor" aria-label="anchor" href="#fractional-ridge"></a>
-</h3>
-<p><code>oasis$ridge_mode = "fractional"</code> sets
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>λ</mi><mi>x</mi></msub><mo>=</mo><msub><mi>η</mi><mi>x</mi></msub><mo>⋅</mo><mover><mi>d</mi><mo accent="true">‾</mo></mover></mrow><annotation encoding="application/x-tex">\lambda_x = \eta_x \cdot \bar{d}</annotation></semantics></math>
-and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>λ</mi><mi>b</mi></msub><mo>=</mo><msub><mi>η</mi><mi>b</mi></msub><mo>⋅</mo><mover><mi>s</mi><mo accent="true">‾</mo></mover></mrow><annotation encoding="application/x-tex">\lambda_b = \eta_b \cdot \bar{s}</annotation></semantics></math>,
-where
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mover><mi>d</mi><mo accent="true">‾</mo></mover><annotation encoding="application/x-tex">\bar{d}</annotation></semantics></math>
-and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mover><mi>s</mi><mo accent="true">‾</mo></mover><annotation encoding="application/x-tex">\bar{s}</annotation></semantics></math>
-are means of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>d</mi><mi>j</mi></msub><annotation encoding="application/x-tex">d_j</annotation></semantics></math>
-and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>s</mi><mi>j</mi></msub><annotation encoding="application/x-tex">s_j</annotation></semantics></math>.
-The helper <code>.oasis_resolve_ridge()</code> implements this scaling.
-Absolute ridge uses the supplied values directly.</p>
-</div>
-<div class="section level3">
-<h3 id="standard-errors">Standard Errors<a class="anchor" aria-label="anchor" href="#standard-errors"></a>
-</h3>
-<p>Given
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msubsup><mi>G</mi><mi>j</mi><mrow><mi>−</mi><mn>1</mn></mrow></msubsup><annotation encoding="application/x-tex">G_j^{-1}</annotation></semantics></math>
-and residual norm
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="postfix">∥</mo><mi>R</mi><mi>Y</mi><msup><mo stretchy="false" form="postfix">∥</mo><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">\|RY\|^2</annotation></semantics></math>,
-the variance of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>β</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><annotation encoding="application/x-tex">\beta_{jv}</annotation></semantics></math>
-is</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mi mathvariant="normal">Var</mi><mo>⁡</mo></mrow><mo stretchy="false" form="prefix">(</mo><msub><mover><mi>β</mi><mo accent="true">̂</mo></mover><mrow><mi>j</mi><mi>v</mi></mrow></msub><mo stretchy="false" form="postfix">)</mo><mo>=</mo><msubsup><mi>σ</mi><mrow><mi>j</mi><mi>v</mi></mrow><mn>2</mn></msubsup><msub><mrow><mo stretchy="true" form="prefix">(</mo><msubsup><mi>G</mi><mi>j</mi><mrow><mi>−</mi><mn>1</mn></mrow></msubsup><mo stretchy="true" form="postfix">)</mo></mrow><mn>11</mn></msub><mo>,</mo><mspace width="1.0em"></mspace><msubsup><mi>σ</mi><mrow><mi>j</mi><mi>v</mi></mrow><mn>2</mn></msubsup><mo>=</mo><mfrac><msub><mtext mathvariant="normal">SSE</mtext><mrow><mi>j</mi><mi>v</mi></mrow></msub><mtext mathvariant="normal">dof</mtext></mfrac><mo>,</mo></mrow><annotation encoding="application/x-tex">
-\operatorname{Var}(\hat{\beta}_{jv}) = \sigma_{jv}^2 \left( G_j^{-1} \right)_{11}, \quad \sigma_{jv}^2 = \frac{\text{SSE}_{jv}}{\text{dof}},
-</annotation></semantics></math></p>
-<p>with</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mtext mathvariant="normal">SSE</mtext><mrow><mi>j</mi><mi>v</mi></mrow></msub><mo>=</mo><mo stretchy="false" form="postfix">∥</mo><mi>R</mi><msub><mi>Y</mi><mrow><mi>⋅</mi><mi>v</mi></mrow></msub><msup><mo stretchy="false" form="postfix">∥</mo><mn>2</mn></msup><mo>−</mo><mn>2</mn><mo stretchy="false" form="prefix">(</mo><msub><mi>β</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><msub><mi>n</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><mo>+</mo><msub><mi>γ</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><mo stretchy="false" form="prefix">(</mo><msub><mi>m</mi><mi>v</mi></msub><mo>−</mo><msub><mi>n</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><mo stretchy="false" form="postfix">)</mo><mo stretchy="false" form="postfix">)</mo><mo>+</mo><msub><mi>d</mi><mi>j</mi></msub><msubsup><mi>β</mi><mrow><mi>j</mi><mi>v</mi></mrow><mn>2</mn></msubsup><mo>+</mo><msub><mi>s</mi><mi>j</mi></msub><msubsup><mi>γ</mi><mrow><mi>j</mi><mi>v</mi></mrow><mn>2</mn></msubsup><mo>+</mo><mn>2</mn><msub><mi>α</mi><mi>j</mi></msub><msub><mi>β</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><msub><mi>γ</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><mi>.</mi></mrow><annotation encoding="application/x-tex">
-\text{SSE}_{jv} = \|RY_{\cdot v}\|^2 - 2 (\beta_{jv} n_{jv} + \gamma_{jv} (m_v - n_{jv})) + d_j \beta_{jv}^2 + s_j \gamma_{jv}^2 + 2 \alpha_j \beta_{jv} \gamma_{jv}.
-</annotation></semantics></math></p>
-<p><code>.oasis_se_from_norms()</code> realises this computation,
-reusing
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>n</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><annotation encoding="application/x-tex">n_{jv}</annotation></semantics></math>,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>m</mi><mi>v</mi></msub><annotation encoding="application/x-tex">m_v</annotation></semantics></math>
-and the cached design scalars.</p>
-</div>
-</div>
-<div class="section level2">
-<h2 id="multi-basis-extension">Multi-Basis Extension<a class="anchor" aria-label="anchor" href="#multi-basis-extension"></a>
-</h2>
-<p>When the HRF contributes
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>&gt;</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K &gt; 1</annotation></semantics></math>
-basis functions, each trial has columns
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>A</mi><mi>j</mi></msub><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>T</mi><mo>×</mo><mi>K</mi></mrow></msup></mrow><annotation encoding="application/x-tex">A_j \in \mathbb{R}^{T \times K}</annotation></semantics></math>.
-Define</p>
-<ul>
-<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>S</mi><mo>=</mo><msub><mo>∑</mo><mi>j</mi></msub><msub><mi>A</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">S = \sum_j A_j</annotation></semantics></math></li>
-<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>D</mi><mi>j</mi></msub><mo>=</mo><msubsup><mi>A</mi><mi>j</mi><mi>T</mi></msubsup><msub><mi>A</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">D_j = A_j^T A_j</annotation></semantics></math></li>
-<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>C</mi><mi>j</mi></msub><mo>=</mo><msubsup><mi>A</mi><mi>j</mi><mi>T</mi></msubsup><mo stretchy="false" form="prefix">(</mo><mi>S</mi><mo>−</mo><msub><mi>A</mi><mi>j</mi></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">C_j = A_j^T (S - A_j)</annotation></semantics></math></li>
-<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>E</mi><mi>j</mi></msub><mo>=</mo><mo stretchy="false" form="prefix">(</mo><mi>S</mi><mo>−</mo><msub><mi>A</mi><mi>j</mi></msub><msup><mo stretchy="false" form="postfix">)</mo><mi>T</mi></msup><mo stretchy="false" form="prefix">(</mo><mi>S</mi><mo>−</mo><msub><mi>A</mi><mi>j</mi></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">E_j = (S - A_j)^T (S - A_j)</annotation></semantics></math></li>
-</ul>
-<p>Per voxel we need
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mn>1</mn><mo>=</mo><msup><mi>A</mi><mi>T</mi></msup><mi>R</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">N1 = A^T RY</annotation></semantics></math>
-(stacked
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math>
-blocks of size
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math>)
-and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>S</mi><mi>Y</mi><mo>=</mo><msup><mi>S</mi><mi>T</mi></msup><mi>R</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">SY = S^T RY</annotation></semantics></math>.
-The block system is</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>D</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>x</mi></msub><mi>I</mi></mtd><mtd columnalign="center" style="text-align: center"><msub><mi>C</mi><mi>j</mi></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msubsup><mi>C</mi><mi>j</mi><mi>T</mi></msubsup></mtd><mtd columnalign="center" style="text-align: center"><msub><mi>E</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>b</mi></msub><mi>I</mi></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>B</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msub><mi mathvariant="normal">Γ</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mo>=</mo><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><mi>N</mi><msub><mn>1</mn><mrow><mi>j</mi><mi>v</mi></mrow></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><mi>S</mi><msub><mi>Y</mi><mi>v</mi></msub><mo>−</mo><mi>N</mi><msub><mn>1</mn><mrow><mi>j</mi><mi>v</mi></mrow></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">
-\begin{bmatrix}
-D_j + \lambda_x I &amp; C_j \\
-C_j^T &amp; E_j + \lambda_b I
-\end{bmatrix}
-\begin{bmatrix}
-B_{jv} \\
-\Gamma_{jv}
-\end{bmatrix}
-=
-\begin{bmatrix}
-N1_{jv} \\
-SY_v - N1_{jv}
-\end{bmatrix},
+<p>After applying the Frisch–Waugh–Lovell reduction, the trial-wise
+model is</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mi>Y</mi><mo>=</mo><mi>R</mi><msub><mi>A</mi><mi>j</mi></msub><mspace width="0.167em"></mspace><msub><mi>𝛃</mi><mi>j</mi></msub><mo>+</mo><mi>R</mi><msub><mi>B</mi><mi>j</mi></msub><mspace width="0.167em"></mspace><msub><mi>𝛄</mi><mi>j</mi></msub><mo>+</mo><mi>R</mi><msub><mi>ε</mi><mi>j</mi></msub><mo>,</mo></mrow><annotation encoding="application/x-tex">
+RY = RA_j\,\boldsymbol{\beta}_j + RB_j\,\boldsymbol{\gamma}_j + R\varepsilon_j,
 </annotation></semantics></math></p>
 <p>where
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>B</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><mo>∈</mo><msup><mi>ℝ</mi><mi>K</mi></msup></mrow><annotation encoding="application/x-tex">B_{jv} \in \mathbb{R}^K</annotation></semantics></math>.
-<code>oasisk_betas()</code> solves this 2Kx2K system via Cholesky
-factorisation. Ridge again adds
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>λ</mi><mi>x</mi></msub><mi>I</mi></mrow><annotation encoding="application/x-tex">\lambda_x I</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝛃</mi><mi>j</mi></msub><mo>,</mo><msub><mi>𝛄</mi><mi>j</mi></msub><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>K</mi><mo>×</mo><mi>V</mi></mrow></msup></mrow><annotation encoding="application/x-tex">\boldsymbol{\beta}_j,\boldsymbol{\gamma}_j \in \mathbb{R}^{K \times V}</annotation></semantics></math>.
+OASIS returns
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>𝛃</mi><mi>j</mi></msub><annotation encoding="application/x-tex">\boldsymbol{\beta}_j</annotation></semantics></math>.
+For
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K=1</annotation></semantics></math>,
+each trial contributes one scalar coefficient per voxel. For
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>&gt;</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K&gt;1</annotation></semantics></math>,
+the
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math>
+returned rows are basis coefficients; they are not automatically a
+single response-amplitude estimate.</p>
+</div>
+<div class="section level2">
+<h2 id="one-basis-system">One-basis system<a class="anchor" aria-label="anchor" href="#one-basis-system"></a>
+</h2>
+<p>Write
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>a</mi><mi>j</mi></msub><mo>=</mo><mi>R</mi><msub><mi>x</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">a_j=Rx_j</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>b</mi><mi>j</mi></msub><mo>=</mo><msub><mo>∑</mo><mrow><mi>i</mi><mo>≠</mo><mi>j</mi></mrow></msub><msub><mi>a</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">b_j=\sum_{i\ne j}a_i</annotation></semantics></math>,
 and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>λ</mi><mi>b</mi></msub><mi>I</mi></mrow><annotation encoding="application/x-tex">\lambda_b I</annotation></semantics></math>
-to the block diagonals. Compared to the single-basis path, only the
-shapes of the cached matrices differ; the solve is still analytic per
-trial/voxel block.</p>
-<p>The companion <code>oasisk_betas_se()</code> extends the SSE/variance
-calculation to the multi-basis case, using the same building blocks.</p>
-</div>
-<div class="section level2">
-<h2 id="hrf-aware-design-construction">HRF-Aware Design Construction<a class="anchor" aria-label="anchor" href="#hrf-aware-design-construction"></a>
-</h2>
-<p>OASIS can construct
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
-on the fly from event specifications.
-<code>.oasis_build_X_from_events()</code> uses
-<code><a href="https://bbuchsbaum.github.io/fmrihrf/reference/regressor_set.html" class="external-link">fmrihrf::regressor_set()</a></code> to generate trial-wise columns
-(and optional other-condition aggregates) given:</p>
-<ul>
-<li>
-<code>cond$onsets</code>: per-trial onset times</li>
-<li>
-<code>cond$hrf</code>: HRF object (canonical, FIR, multi-basis,
-user-defined)</li>
-<li>
-<code>cond$span</code>, <code>precision</code>, <code>method</code>:
-convolution controls</li>
-</ul>
-<p>This design is then residualised against nuisance regressors and fed
-into the algebra above. Because the HRF definition enters directly,
-switching HRFs or running grid searches automatically regenerates a
-matching design. When you provide an explicit <code>X</code>, OASIS
-skips this step and assumes you have already encoded the HRF in the
-matrix.</p>
-</div>
-<div class="section level2">
-<h2 id="ar1-whitening">AR(1) Whitening<a class="anchor" aria-label="anchor" href="#ar1-whitening"></a>
-</h2>
-<p><code>oasis$whiten = "ar1"</code> estimates a common AR(1)
-coefficient from residualised data. <code>.oasis_ar1_whitener()</code>
-computes
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>ρ</mi><annotation encoding="application/x-tex">\rho</annotation></semantics></math>
-and applies Toeplitz-safe differencing:</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover><mi>y</mi><mo accent="true">̃</mo></mover><mi>t</mi></msub><mo>=</mo><mrow><mo stretchy="true" form="prefix">{</mo><mtable><mtr><mtd columnalign="left" style="text-align: left"><msqrt><mrow><mn>1</mn><mo>−</mo><msup><mi>ρ</mi><mn>2</mn></msup></mrow></msqrt><msub><mi>y</mi><mn>1</mn></msub></mtd><mtd columnalign="left" style="text-align: left"><mi>t</mi><mo>=</mo><mn>1</mn><mo>,</mo></mtd></mtr><mtr><mtd columnalign="left" style="text-align: left"><msub><mi>y</mi><mi>t</mi></msub><mo>−</mo><mi>ρ</mi><msub><mi>y</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub></mtd><mtd columnalign="left" style="text-align: left"><mi>t</mi><mo>&gt;</mo><mn>1</mn><mi>.</mi></mtd></mtr></mtable></mrow></mrow><annotation encoding="application/x-tex">
-\tilde{y}_t = \begin{cases}
-\sqrt{1 - \rho^2} y_1 &amp; t = 1, \\
-y_t - \rho y_{t-1} &amp; t &gt; 1.
-\end{cases}
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mo>=</mo><msub><mo>∑</mo><mi>i</mi></msub><msub><mi>a</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">s=\sum_i a_i</annotation></semantics></math>.
+The reusable design scalars are</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>d</mi><mi>j</mi></msub><mo>=</mo><msubsup><mi>a</mi><mi>j</mi><mi>𝖳</mi></msubsup><msub><mi>a</mi><mi>j</mi></msub><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>c</mi><mi>j</mi></msub><mo>=</mo><msubsup><mi>a</mi><mi>j</mi><mi>𝖳</mi></msubsup><msub><mi>b</mi><mi>j</mi></msub><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>e</mi><mi>j</mi></msub><mo>=</mo><msubsup><mi>b</mi><mi>j</mi><mi>𝖳</mi></msubsup><msub><mi>b</mi><mi>j</mi></msub><mi>.</mi></mrow><annotation encoding="application/x-tex">
+d_j=a_j^\mathsf{T}a_j,\qquad
+c_j=a_j^\mathsf{T}b_j,\qquad
+e_j=b_j^\mathsf{T}b_j.
 </annotation></semantics></math></p>
-<p>The same transformation is applied to
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
-and nuisance regressors before the standard OASIS algebra runs.
-Whitening preserves the single-pass benefits because the transformed
-data are treated exactly like the original inputs.</p>
-</div>
-<div class="section level2">
-<h2 id="diagnostics-output">Diagnostics Output<a class="anchor" aria-label="anchor" href="#diagnostics-output"></a>
-</h2>
-<p>When <code>oasis$return_diag = TRUE</code>, OASIS returns the
-precomputed design scalars:</p>
-<ul>
-<li>Single-basis:
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>d</mi><mi>j</mi></msub><mo>,</mo><msub><mi>α</mi><mi>j</mi></msub><mo>,</mo><msub><mi>s</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">d_j, \alpha_j, s_j</annotation></semantics></math>
-(from <code>oasis_precompute_design()</code>)</li>
-<li>Multi-basis:
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>D</mi><mi>j</mi></msub><mo>,</mo><msub><mi>C</mi><mi>j</mi></msub><mo>,</mo><msub><mi>E</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">D_j, C_j, E_j</annotation></semantics></math>
-(from <code>oasisk_precompute_design()</code>)</li>
-</ul>
-<p>These matrices are useful for checking trial collinearity, energy,
-and the effect of ridge scaling.</p>
-</div>
-<div class="section level2">
-<h2 id="algorithm-summary">Algorithm Summary<a class="anchor" aria-label="anchor" href="#algorithm-summary"></a>
-</h2>
-<p>Putting everything together, the single-basis solver proceeds as
-follows:</p>
-<ol style="list-style-type: decimal">
-<li>Residualise
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>
+<p>The source names these quantities <code>d</code>, <code>alpha</code>,
+and <code>s</code>, respectively. For all voxels at once, define
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>n</mi><mrow><mn>1</mn><mi>j</mi></mrow></msub><mo>=</mo><msubsup><mi>a</mi><mi>j</mi><mi>𝖳</mi></msubsup><mi>R</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">n_{1j}=a_j^\mathsf{T}RY</annotation></semantics></math>
 and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
-against nuisance regressors, optionally with whitening.</li>
-<li>Compute
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>a</mi><mi>j</mi></msub><mo>,</mo><mi>s</mi><mo>,</mo><msub><mi>d</mi><mi>j</mi></msub><mo>,</mo><msub><mi>α</mi><mi>j</mi></msub><mo>,</mo><msub><mi>s</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">a_j, s, d_j, \alpha_j, s_j</annotation></semantics></math>
-(<code>oasis_precompute_design</code>).</li>
-<li>Stream through voxels in blocks, forming
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>N</mi><mi>Y</mi></msub><mo>=</mo><msup><mi>A</mi><mi>T</mi></msup><mi>R</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">N_Y = A^T RY</annotation></semantics></math>
-and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>S</mi><mi>Y</mi></msub><mo>=</mo><msup><mi>s</mi><mi>T</mi></msup><mi>R</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">S_Y = s^T RY</annotation></semantics></math>
-(<code>oasis_AtY_SY_blocked</code>).</li>
-<li>Apply ridge scaling (absolute or fractional) to obtain
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>λ</mi><mi>x</mi></msub><mo>,</mo><msub><mi>λ</mi><mi>b</mi></msub></mrow><annotation encoding="application/x-tex">\lambda_x, \lambda_b</annotation></semantics></math>.</li>
-<li>For each trial, evaluate the closed-form
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>β</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><annotation encoding="application/x-tex">\beta_{jv}</annotation></semantics></math>
-(and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>γ</mi><mrow><mi>j</mi><mi>v</mi></mrow></msub><annotation encoding="application/x-tex">\gamma_{jv}</annotation></semantics></math>
-if SEs requested).</li>
-<li>Optionally compute SEs and diagnostics.</li>
-</ol>
-<p>The multi-basis path swaps steps 2–5 for their block equivalents. In
-both cases, the cost is dominated by the single projection of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>
-and the matrix–vector multiplies in step 3, giving
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝒪</mi><mo stretchy="false" form="prefix">(</mo><mi>T</mi><mi>V</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\mathcal{O}(T V)</annotation></semantics></math>
-complexity with a small trial-dependent overhead.</p>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>n</mi><mrow><mn>2</mn><mi>j</mi></mrow></msub><mo>=</mo><msubsup><mi>b</mi><mi>j</mi><mi>𝖳</mi></msubsup><mi>R</mi><mi>Y</mi><mo>=</mo><msup><mi>s</mi><mi>𝖳</mi></msup><mi>R</mi><mi>Y</mi><mo>−</mo><msub><mi>n</mi><mrow><mn>1</mn><mi>j</mi></mrow></msub></mrow><annotation encoding="application/x-tex">n_{2j}=b_j^\mathsf{T}RY=s^\mathsf{T}RY-n_{1j}</annotation></semantics></math>.
+The penalized normal equations are</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>d</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>x</mi></msub></mtd><mtd columnalign="center" style="text-align: center"><msub><mi>c</mi><mi>j</mi></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>c</mi><mi>j</mi></msub></mtd><mtd columnalign="center" style="text-align: center"><msub><mi>e</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>b</mi></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>β</mi><mi>j</mi></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>γ</mi><mi>j</mi></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mo>=</mo><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>n</mi><mrow><mn>1</mn><mi>j</mi></mrow></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>n</mi><mrow><mn>2</mn><mi>j</mi></mrow></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mi>.</mi></mrow><annotation encoding="application/x-tex">
+\begin{bmatrix}
+d_j+\lambda_x &amp; c_j \\
+c_j &amp; e_j+\lambda_b
+\end{bmatrix}
+\begin{bmatrix}\beta_j\\\gamma_j\end{bmatrix}
+=
+\begin{bmatrix}n_{1j}\\n_{2j}\end{bmatrix}.
+</annotation></semantics></math></p>
+<p>Here each right-hand-side row has length
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>V</mi><annotation encoding="application/x-tex">V</annotation></semantics></math>.
+Inverting the
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mo>×</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">2\times2</annotation></semantics></math>
+matrix gives</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover><mi>β</mi><mo accent="true">̂</mo></mover><mi>j</mi></msub><mo>=</mo><mfrac><mrow><mo stretchy="false" form="prefix">(</mo><msub><mi>e</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>b</mi></msub><mo stretchy="false" form="postfix">)</mo><msub><mi>n</mi><mrow><mn>1</mn><mi>j</mi></mrow></msub><mo>−</mo><msub><mi>c</mi><mi>j</mi></msub><msub><mi>n</mi><mrow><mn>2</mn><mi>j</mi></mrow></msub></mrow><mrow><mo stretchy="false" form="prefix">(</mo><msub><mi>d</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>x</mi></msub><mo stretchy="false" form="postfix">)</mo><mo stretchy="false" form="prefix">(</mo><msub><mi>e</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>b</mi></msub><mo stretchy="false" form="postfix">)</mo><mo>−</mo><msubsup><mi>c</mi><mi>j</mi><mn>2</mn></msubsup></mrow></mfrac><mi>.</mi></mrow><annotation encoding="application/x-tex">
+\widehat\beta_j =
+\frac{(e_j+\lambda_b)n_{1j}-c_jn_{2j}}
+{(d_j+\lambda_x)(e_j+\lambda_b)-c_j^2}.
+</annotation></semantics></math></p>
+<p>When both penalties are zero and the two-column trial model has full
+rank, this is exactly the ordinary LSS coefficient. A rank-deficient
+unpenalized model is not identifiable, and the public OASIS path fails
+rather than silently adding jitter. This
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mo>×</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">2\times2</annotation></semantics></math>
+form assumes
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>&gt;</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">N&gt;1</annotation></semantics></math>;
+with one trial there is no “other trials” column, and OASIS solves the
+one-column target model instead.</p>
 </div>
 <div class="section level2">
-<h2 id="complexity-and-memory">Complexity and Memory<a class="anchor" aria-label="anchor" href="#complexity-and-memory"></a>
+<h2 id="multi-basis-system">Multi-basis system<a class="anchor" aria-label="anchor" href="#multi-basis-system"></a>
 </h2>
-<ul>
-<li>Projection / whitening:
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝒪</mi><mo stretchy="false" form="prefix">(</mo><mi>T</mi><mi>V</mi><msub><mi>K</mi><mi>z</mi></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\mathcal{O}(T V K_z)</annotation></semantics></math>
-arithmetic,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝒪</mi><mo stretchy="false" form="prefix">(</mo><mi>T</mi><msub><mi>K</mi><mi>z</mi></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\mathcal{O}(T K_z)</annotation></semantics></math>
-memory for confounds</li>
-<li>Precomputation:
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝒪</mi><mo stretchy="false" form="prefix">(</mo><mi>T</mi><mi>N</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\mathcal{O}(T N)</annotation></semantics></math>
-</li>
-<li>Products (blocked):
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝒪</mi><mo stretchy="false" form="prefix">(</mo><mi>T</mi><mi>V</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\mathcal{O}(T V)</annotation></semantics></math>
-with block size tuning</li>
-<li>Closed-form solves:
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝒪</mi><mo stretchy="false" form="prefix">(</mo><mi>N</mi><mi>V</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\mathcal{O}(N V)</annotation></semantics></math>
-with negligible constants (2x2 or 2Kx2K systems)</li>
-</ul>
-<p>Compared to classical LSS
-(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math>
-separate regressions), OASIS shaves off repeated projections and linear
-solves, yielding substantial speedups when
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math>
-or
+<p>For
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>&gt;</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K&gt;1</annotation></semantics></math>,
+define the residualized blocks
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover><mi>A</mi><mo accent="true">̃</mo></mover><mi>j</mi></msub><mo>=</mo><mi>R</mi><msub><mi>A</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">\widetilde A_j=RA_j</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover><mi>S</mi><mo accent="true">̃</mo></mover><mo>=</mo><msub><mo>∑</mo><mi>j</mi></msub><msub><mover><mi>A</mi><mo accent="true">̃</mo></mover><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">\widetilde S=\sum_j\widetilde A_j</annotation></semantics></math>,
+and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover><mi>B</mi><mo accent="true">̃</mo></mover><mi>j</mi></msub><mo>=</mo><mover><mi>S</mi><mo accent="true">̃</mo></mover><mo>−</mo><msub><mover><mi>A</mi><mo accent="true">̃</mo></mover><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">\widetilde B_j=\widetilde S-\widetilde A_j</annotation></semantics></math>.
+The cached
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>×</mo><mi>K</mi></mrow><annotation encoding="application/x-tex">K\times K</annotation></semantics></math>
+blocks are</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>D</mi><mi>j</mi></msub><mo>=</mo><msubsup><mover><mi>A</mi><mo accent="true">̃</mo></mover><mi>j</mi><mi>𝖳</mi></msubsup><msub><mover><mi>A</mi><mo accent="true">̃</mo></mover><mi>j</mi></msub><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>C</mi><mi>j</mi></msub><mo>=</mo><msubsup><mover><mi>A</mi><mo accent="true">̃</mo></mover><mi>j</mi><mi>𝖳</mi></msubsup><msub><mover><mi>B</mi><mo accent="true">̃</mo></mover><mi>j</mi></msub><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>E</mi><mi>j</mi></msub><mo>=</mo><msubsup><mover><mi>B</mi><mo accent="true">̃</mo></mover><mi>j</mi><mi>𝖳</mi></msubsup><msub><mover><mi>B</mi><mo accent="true">̃</mo></mover><mi>j</mi></msub><mi>.</mi></mrow><annotation encoding="application/x-tex">
+D_j=\widetilde A_j^\mathsf{T}\widetilde A_j,\qquad
+C_j=\widetilde A_j^\mathsf{T}\widetilde B_j,\qquad
+E_j=\widetilde B_j^\mathsf{T}\widetilde B_j.
+</annotation></semantics></math></p>
+<p>With
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>N</mi><mrow><mn>1</mn><mi>j</mi></mrow></msub><mo>=</mo><msubsup><mover><mi>A</mi><mo accent="true">̃</mo></mover><mi>j</mi><mi>𝖳</mi></msubsup><mi>R</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">N_{1j}=\widetilde A_j^\mathsf{T}RY</annotation></semantics></math>
+and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>N</mi><mrow><mn>2</mn><mi>j</mi></mrow></msub><mo>=</mo><msup><mover><mi>S</mi><mo accent="true">̃</mo></mover><mi>𝖳</mi></msup><mi>R</mi><mi>Y</mi><mo>−</mo><msub><mi>N</mi><mrow><mn>1</mn><mi>j</mi></mrow></msub></mrow><annotation encoding="application/x-tex">N_{2j}=\widetilde S^\mathsf{T}RY-N_{1j}</annotation></semantics></math>,
+OASIS solves</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>D</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>x</mi></msub><msub><mi>I</mi><mi>K</mi></msub></mtd><mtd columnalign="center" style="text-align: center"><msub><mi>C</mi><mi>j</mi></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msubsup><mi>C</mi><mi>j</mi><mi>𝖳</mi></msubsup></mtd><mtd columnalign="center" style="text-align: center"><msub><mi>E</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>b</mi></msub><msub><mi>I</mi><mi>K</mi></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>𝛃</mi><mi>j</mi></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>𝛄</mi><mi>j</mi></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mo>=</mo><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>N</mi><mrow><mn>1</mn><mi>j</mi></mrow></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>N</mi><mrow><mn>2</mn><mi>j</mi></mrow></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mi>.</mi></mrow><annotation encoding="application/x-tex">
+\begin{bmatrix}
+D_j+\lambda_xI_K &amp; C_j \\
+C_j^\mathsf{T} &amp; E_j+\lambda_bI_K
+\end{bmatrix}
+\begin{bmatrix}\boldsymbol{\beta}_j\\\boldsymbol{\gamma}_j\end{bmatrix}
+=
+\begin{bmatrix}N_{1j}\\N_{2j}\end{bmatrix}.
+</annotation></semantics></math></p>
+<p>The implementation factorizes one
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>K</mi><mo>×</mo><mn>2</mn><mi>K</mi></mrow><annotation encoding="application/x-tex">2K\times2K</annotation></semantics></math>
+Gram matrix per trial and uses all
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>V</mi><annotation encoding="application/x-tex">V</annotation></semantics></math>
-is large.</p>
+voxel columns as right-hand sides. The unpenalized public path requires
+every such Gram matrix to have rank
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>K</mi></mrow><annotation encoding="application/x-tex">2K</annotation></semantics></math>.
+For
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">N=1</annotation></semantics></math>,
+the corresponding target-only system is
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>×</mo><mi>K</mi></mrow><annotation encoding="application/x-tex">K\times K</annotation></semantics></math>.</p>
 </div>
 <div class="section level2">
-<h2 id="next-steps">Next Steps<a class="anchor" aria-label="anchor" href="#next-steps"></a>
+<h2 id="an-executable-equality-check">An executable equality check<a class="anchor" aria-label="anchor" href="#an-executable-equality-check"></a>
 </h2>
+<p>The strongest check of the algebra is not agreement between two OASIS
+helpers; it is agreement with independently assembled trial-wise GLMs.
+The following fixed example checks every trial, basis coefficient, and
+voxel for both
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K=1</annotation></semantics></math>
+and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>=</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">K=3</annotation></semantics></math>.</p>
+<p>The exact public call for ordinary, unpenalized LSS is short; the
+zeros are important because the OASIS default is fractionally
+penalized.</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">unpenalized</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/oasis_options.html">oasis_options</a></span><span class="op">(</span></span>
+<span>  ridge_mode <span class="op">=</span> <span class="st">"absolute"</span>,</span>
+<span>  ridge_x <span class="op">=</span> <span class="fl">0</span>,</span>
+<span>  ridge_b <span class="op">=</span> <span class="fl">0</span>,</span>
+<span>  return_se <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">fit1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y1</span>, <span class="va">X1</span>, Z <span class="op">=</span> <span class="va">Z</span>, method <span class="op">=</span> <span class="st">"oasis"</span>, oasis <span class="op">=</span> <span class="va">unpenalized</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">fit1</span><span class="op">$</span><span class="va">beta</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 6 5</span></span></code></pre></div>
+<table class="table">
+<caption>Maximum discrepancy from independently assembled trial-wise
+GLMs.</caption>
+<thead><tr class="header">
+<th align="right">Basis_dimension</th>
+<th align="right">Maximum_beta_error</th>
+<th align="right">Maximum_SE_error</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="right">3</td>
+<td align="right">0</td>
+<td align="right">0</td>
+</tr>
+</tbody>
+</table>
+<p>These checks use a correctly specified fixed design with common
+coefficients for the summed trial signal and independent Gaussian
+errors. They establish implementation equality with the corresponding
+GLMs. They do not establish uncertainty for ridge, estimated whitening,
+or data-adaptive HRF selection.</p>
+</div>
+<div class="section level2">
+<h2 id="ridge-changes-the-estimator">Ridge changes the estimator<a class="anchor" aria-label="anchor" href="#ridge-changes-the-estimator"></a>
+</h2>
+<p>For each trial and voxel, ridge minimizes</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mrow><mo stretchy="true" form="prefix">‖</mo><mi>R</mi><mi>Y</mi><mo>−</mo><mi>R</mi><msub><mi>A</mi><mi>j</mi></msub><msub><mi>𝛃</mi><mi>j</mi></msub><mo>−</mo><mi>R</mi><msub><mi>B</mi><mi>j</mi></msub><msub><mi>𝛄</mi><mi>j</mi></msub><mo stretchy="true" form="postfix">‖</mo></mrow><mi>F</mi><mn>2</mn></msubsup><mo>+</mo><msub><mi>λ</mi><mi>x</mi></msub><msubsup><mrow><mo stretchy="true" form="prefix">‖</mo><msub><mi>𝛃</mi><mi>j</mi></msub><mo stretchy="true" form="postfix">‖</mo></mrow><mi>F</mi><mn>2</mn></msubsup><mo>+</mo><msub><mi>λ</mi><mi>b</mi></msub><msubsup><mrow><mo stretchy="true" form="prefix">‖</mo><msub><mi>𝛄</mi><mi>j</mi></msub><mo stretchy="true" form="postfix">‖</mo></mrow><mi>F</mi><mn>2</mn></msubsup><mi>.</mi></mrow><annotation encoding="application/x-tex">
+\lVert RY-RA_j\boldsymbol{\beta}_j-RB_j\boldsymbol{\gamma}_j\rVert_F^2
++\lambda_x\lVert\boldsymbol{\beta}_j\rVert_F^2
++\lambda_b\lVert\boldsymbol{\gamma}_j\rVert_F^2.
+</annotation></semantics></math></p>
+<p>With <code>ridge_mode = "absolute"</code>, <code>ridge_x</code> and
+<code>ridge_b</code> are the penalties in that expression. With
+<code>ridge_mode = "fractional"</code>, the implementation multiplies
+them by mean residualized design energies:</p>
+<ul>
+<li>for
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K=1</annotation></semantics></math>,
+the means of
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>d</mi><mi>j</mi></msub><annotation encoding="application/x-tex">d_j</annotation></semantics></math>
+and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>e</mi><mi>j</mi></msub><annotation encoding="application/x-tex">e_j</annotation></semantics></math>;</li>
+<li>for
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>&gt;</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K&gt;1</annotation></semantics></math>,
+the mean diagonal entries of
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>D</mi><mi>j</mi></msub><annotation encoding="application/x-tex">D_j</annotation></semantics></math>
+and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>E</mi><mi>j</mi></msub><annotation encoding="application/x-tex">E_j</annotation></semantics></math>,
+averaged over trials.</li>
+</ul>
+<p>Fractional scaling preserves the intended relative penalty under a
+common rescaling of the whole trial design. It does not make arbitrary,
+separate rescalings of multi-basis columns equivalent. Ridge can
+stabilize a poorly conditioned system, but its coefficients are
+penalized estimates rather than ordinary LSS coefficients.</p>
+<p>The package default is fractional ridge with
+<code>ridge_x = ridge_b = 0.05</code>. Request zero penalties explicitly
+when exact unpenalized LSS is the target. The public path checks that
+each penalized multi-trial Gram matrix is positive definite before
+solving it. When
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">N=1</annotation></semantics></math>,
+there is no identifiable “other trials” coefficient, so OASIS solves
+only the target block; <code>ridge_b</code> is then irrelevant.</p>
+</div>
+<div class="section level2">
+<h2 id="what-the-standard-errors-mean">What the standard errors mean<a class="anchor" aria-label="anchor" href="#what-the-standard-errors-mean"></a>
+</h2>
+<p>OASIS returns model-based standard errors only when all of the
+following hold:</p>
 <ul>
 <li>
-<code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code> — practical OASIS usage with
-ridge, multi-basis HRFs, and standard errors</li>
+<code>ridge_x = ridge_b = 0</code>;</li>
+<li>for
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>&gt;</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">N&gt;1</annotation></semantics></math>,
+the trial-specific
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>K</mi></mrow><annotation encoding="application/x-tex">2K</annotation></semantics></math>-column
+model is full rank; for
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">N=1</annotation></semantics></math>,
+the target
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math>-column
+model is full rank;</li>
+<li>prewhitening is not estimated in the same call;</li>
+<li>the chosen HRF design is treated as fixed;</li>
+<li>conditional errors have spherical covariance,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mi mathvariant="normal">Var</mi><mo>⁡</mo></mrow><mo stretchy="false" form="prefix">(</mo><msub><mi>ε</mi><mrow><mi>⋅</mi><mi>v</mi></mrow></msub><mo>∣</mo><msub><mi>A</mi><mi>j</mi></msub><mo>,</mo><msub><mi>B</mi><mi>j</mi></msub><mo>,</mo><mi>C</mi><mo stretchy="false" form="postfix">)</mo><mo>=</mo><msubsup><mi>σ</mi><mrow><mi>j</mi><mi>v</mi></mrow><mn>2</mn></msubsup><msub><mi>I</mi><mi>T</mi></msub></mrow><annotation encoding="application/x-tex">\operatorname{Var}(\varepsilon_{\cdot v}\mid A_j,B_j,C)=\sigma_{jv}^2I_T</annotation></semantics></math>
+for each voxel
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math>.</li>
+</ul>
+<p>For trial
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math>,
+let
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>G</mi><mi>j</mi></msub><annotation encoding="application/x-tex">G_j</annotation></semantics></math>
+be its identifiable unpenalized model Gram matrix:
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>K</mi><mo>×</mo><mn>2</mn><mi>K</mi></mrow><annotation encoding="application/x-tex">2K\times2K</annotation></semantics></math>
+when
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>&gt;</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">N&gt;1</annotation></semantics></math>
+and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>×</mo><mi>K</mi></mrow><annotation encoding="application/x-tex">K\times K</annotation></semantics></math>
+when
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">N=1</annotation></semantics></math>.
+The implementation computes</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mover><mi>σ</mi><mo accent="true">̂</mo></mover><mrow><mi>j</mi><mi>v</mi></mrow><mn>2</mn></msubsup><mo>=</mo><mfrac><msub><mrow><mi mathvariant="normal">SSE</mi><mo>⁡</mo></mrow><mrow><mi>j</mi><mi>v</mi></mrow></msub><mrow><mi>T</mi><mo>−</mo><mi>p</mi><mo>−</mo><mrow><mi mathvariant="normal">rank</mi><mo>⁡</mo></mrow><mo stretchy="false" form="prefix">(</mo><msub><mi>G</mi><mi>j</mi></msub><mo stretchy="false" form="postfix">)</mo></mrow></mfrac></mrow><annotation encoding="application/x-tex">
+\widehat\sigma^2_{jv}=\frac{\operatorname{SSE}_{jv}}
+{T-p-\operatorname{rank}(G_j)}
+</annotation></semantics></math></p>
+<p>and takes the relevant diagonal of
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mover><mi>σ</mi><mo accent="true">̂</mo></mover><mrow><mi>j</mi><mi>v</mi></mrow><mn>2</mn></msubsup><msubsup><mi>G</mi><mi>j</mi><mrow><mi>−</mi><mn>1</mn></mrow></msubsup></mrow><annotation encoding="application/x-tex">\widehat\sigma^2_{jv}G_j^{-1}</annotation></semantics></math>.
+Thus the reported values are the same conditional, homoskedastic-model
+standard errors as in the corresponding full GLM under uncorrelated,
+constant-variance temporal errors. Gaussianity is an additional
+requirement for exact finite-sample t inference. The values are not
+ridge standard errors, not heteroskedasticity- or autocorrelation-robust
+errors, and not calibrated for uncertainty introduced by estimating a
+whitening model or selecting an HRF from the same data.
+<code><a href="../reference/oasis_options.html">oasis_options()</a></code> rejects ridge together with
+<code>return_se = TRUE</code>; the backend also rejects estimated
+prewhitening and voxel-adaptive HRF modes for this request.</p>
+</div>
+<div class="section level2">
+<h2 id="prewhitening-belongs-outside-oasis">Prewhitening belongs outside <code>oasis=</code><a class="anchor" aria-label="anchor" href="#prewhitening-belongs-outside-oasis"></a>
+</h2>
+<p>Temporal whitening is handled by the top-level <code>prewhiten</code>
+argument and the shared <code>fmriAR</code> integration. The same
+estimated linear transformation is applied to
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>,
+the trial design, and the common design before the OASIS algebra
+runs.</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fit_ar1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>  <span class="va">Y</span>,</span>
+<span>  <span class="va">X</span>,</span>
+<span>  Z <span class="op">=</span> <span class="va">Z</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"oasis"</span>,</span>
+<span>  oasis <span class="op">=</span> <span class="fu"><a href="../reference/oasis_options.html">oasis_options</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  prewhiten <span class="op">=</span> <span class="fu"><a href="../reference/prewhiten_options.html">prewhiten_options</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>For multiple runs, supply <code>pooling = "run"</code> and the run
+labels. The legacy <code>oasis$whiten</code> field is deprecated,
+ignored, and emits a note; it must not be used to describe the current
+algorithm. Coefficients remain available after estimated whitening, but
+<code>return_se = TRUE</code> fails closed because feasible-GLS
+uncertainty is not calibrated here.</p>
+</div>
+<div class="section level2">
+<h2 id="design-construction-and-identity">Design construction and identity<a class="anchor" aria-label="anchor" href="#design-construction-and-identity"></a>
+</h2>
+<p>There are two supported routes into the same solver:</p>
+<ol style="list-style-type: decimal">
 <li>
-<code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code> — foundational LSS concepts</li>
+<code>X</code> supplies an already convolved trial design.</li>
 <li>
-<code><a href="../articles/sbhm.html">vignette("sbhm")</a></code> — library-constrained voxel-specific
-HRFs</li>
+<code>oasis$design_spec</code> asks the backend to construct one
+with <code>fmrihrf</code>.</li>
+</ol>
+<p>The event route preserves event duration and amplitude and adds
+aggregates for other conditions to the common nuisance span. In
+multi-run low-level design specifications, onsets are global seconds;
+<code><a href="../reference/lss_design.html">lss_design()</a></code> with a <code><a href="https://bbuchsbaum.github.io/fmridesign/reference/event_model.html" class="external-link">fmridesign::event_model()</a></code>
+is the safer run-aware interface.</p>
+<p>A raw multi-basis <code>X</code> cannot reveal trial identity from
+dimensions alone. It therefore requires explicit <code>K</code>,
+<code>ntrials</code>, and a <code>trial_basis_map</code> identifying
+every uniquely named column. The output contains
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mi>K</mi></mrow><annotation encoding="application/x-tex">NK</annotation></semantics></math>
+rows in canonical trial-by-basis order. Supplying an incorrect grouping
+would change the estimand, so ambiguous inference is rejected.</p>
+<p>If <code>design_spec$hrf_grid</code> is supplied, the implementation
+chooses a candidate using the observed data before fitting. That is a
+model-selection step. Treat the resulting coefficients as conditional on
+the selected design. Because ordinary post-selection standard errors are
+not established by the fixed-design formula above,
+<code>return_se = TRUE</code> fails closed on this route.</p>
+<p>Hidden executable contracts also bind output shapes, diagnostic
+shapes, permutation-safe multi-basis identity, event-built multi-basis
+dimensions, scale equivariance, and the principal fail-closed inference
+boundaries.</p>
+</div>
+<div class="section level2">
+<h2 id="work-and-memory-inventory">Work and memory inventory<a class="anchor" aria-label="anchor" href="#work-and-memory-inventory"></a>
+</h2>
+<p>The former shorthand “one
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mo>×</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">T\times T</annotation></semantics></math>
+QR instead of
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math>
+such QRs” is not the relevant comparison. An LSS design has
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo>+</mo><mn>2</mn><mi>K</mi></mrow><annotation encoding="application/x-tex">p+2K</annotation></semantics></math>
+effective columns, not
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>
+columns. The table below exposes every leading term instead. It assumes
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>K</mi><mi>z</mi></msub><mo>≤</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">K_z\le T</annotation></semantics></math>,
+a dense design, and a nuisance rank
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>.</p>
+<table class="table">
+<caption>Leading arithmetic terms in the current dense OASIS
+implementation.</caption>
+<thead><tr class="header">
+<th align="left">Stage</th>
+<th align="center">K = 1</th>
+<th align="center">general K</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">Rank-reveal common design</td>
+<td align="center">O(T K_z^2)</td>
+<td align="center">O(T K_z^2)</td>
+</tr>
+<tr class="even">
+<td align="left">Residualize all trial columns</td>
+<td align="center">O(T p N)</td>
+<td align="center">O(T p N K)</td>
+</tr>
+<tr class="odd">
+<td align="left">Build trial Gram terms</td>
+<td align="center">O(T N)</td>
+<td align="center">O(T N K^2)</td>
+</tr>
+<tr class="even">
+<td align="left">Residualize all voxel data</td>
+<td align="center">O(T p V)</td>
+<td align="center">O(T p V)</td>
+</tr>
+<tr class="odd">
+<td align="left">Trial-data cross-products</td>
+<td align="center">O(T N V)</td>
+<td align="center">O(T N K V)</td>
+</tr>
+<tr class="even">
+<td align="left">Solve all trial systems</td>
+<td align="center">O(N V)</td>
+<td align="center">O(N K^3 + N K^2 V)</td>
+</tr>
+</tbody>
+</table>
+<p>The
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>T</mi><mi>N</mi><mi>K</mi><mi>V</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(TNKV)</annotation></semantics></math>
+cross-product is usually the largest OASIS term when both the trial and
+voxel counts are large. <code>block_cols = B</code> limits the temporary
+voxel block to
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>T</mi><mi>B</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(TB)</annotation></semantics></math>,
+but it does not remove the
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mi>K</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">NK\times V</annotation></semantics></math>
+products or the
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mi>K</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">NK\times V</annotation></semantics></math>
+output. Other persistent storage includes
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>T</mi><mi>p</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(Tp)</annotation></semantics></math>
+for the nuisance basis,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>T</mi><mi>N</mi><mi>K</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(TNK)</annotation></semantics></math>
+for the residualized trial design, and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>N</mi><msup><mi>K</mi><mn>2</mn></msup><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(NK^2)</annotation></semantics></math>
+for multi-basis Gram blocks.</p>
+<p>A direct implementation that refits each trial model separately
+performs
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math>
+factorizations of
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mo>×</mo><mo stretchy="false" form="prefix">(</mo><mi>p</mi><mo>+</mo><mn>2</mn><mi>K</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">T\times(p+2K)</annotation></semantics></math>
+designs and repeatedly forms trial-specific products with
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>.
+OASIS reuses the nuisance projection, aggregate design, Gram terms, and
+batched products. That structural reuse is exact; a universal wall-clock
+speedup is not. Runtime depends on
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mo>,</mo><mi>N</mi><mo>,</mo><mi>V</mi><mo>,</mo><mi>K</mi><mo>,</mo><mi>p</mi></mrow><annotation encoding="application/x-tex">T,N,V,K,p</annotation></semantics></math>,
+BLAS, memory bandwidth, block size, and the competing implementation, so
+this article makes no synthetic timing claim.</p>
+</div>
+<div class="section level2">
+<h2 id="implementation-map">Implementation map<a class="anchor" aria-label="anchor" href="#implementation-map"></a>
+</h2>
+<p>These names are internal implementation landmarks, not additional
+public APIs.</p>
+<table class="table">
+<caption>Internal implementation landmarks for each algebraic
+stage.</caption>
+<colgroup>
+<col width="44%">
+<col width="55%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">Responsibility</th>
+<th align="left">Location</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">Validate options, assemble common span, dispatch</td>
+<td align="left">R/oasis_backend.R: .lss_oasis</td>
+</tr>
+<tr class="even">
+<td align="left">Build event-based trial and other-condition
+designs</td>
+<td align="left">R/oasis_design.R: .oasis_build_X_from_events</td>
+</tr>
+<tr class="odd">
+<td align="left">Resolve absolute or fractional ridge</td>
+<td align="left">R/oasis_ridge_se.R: .oasis_resolve_ridge</td>
+</tr>
+<tr class="even">
+<td align="left">One-basis design cache and blocked products</td>
+<td align="left">src/oasis_core.cpp: oasis_precompute_design,
+oasis_AtY_SY_blocked</td>
+</tr>
+<tr class="odd">
+<td align="left">One-basis coefficient solve</td>
+<td align="left">src/oasis_core.cpp: oasis_betas_closed_form</td>
+</tr>
+<tr class="even">
+<td align="left">Multi-basis design cache and blocked products</td>
+<td align="left">src/oasis_core.cpp: oasisk_precompute_design,
+oasisk_products</td>
+</tr>
+<tr class="odd">
+<td align="left">Multi-basis coefficient and SE solves</td>
+<td align="left">src/oasis_core.cpp: oasisk_betas, oasisk_betas_se</td>
+</tr>
+</tbody>
+</table>
+<p>By default, the public result is an
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mi>K</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">NK\times V</annotation></semantics></math>
+coefficient matrix (an
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">N\times V</annotation></semantics></math>
+matrix when
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K=1</annotation></semantics></math>).
+Setting <code>return_se = TRUE</code> or <code>return_diag = TRUE</code>
+changes the result to <code>list(beta, diag?, se?)</code>;
+<code>beta</code> and <code>se</code> have the same
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mi>K</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">NK\times V</annotation></semantics></math>
+shape. For
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K=1</annotation></semantics></math>,
+<code>d</code>, <code>alpha</code>, and <code>s</code> are
+length-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math>
+diagnostic vectors. For
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>&gt;</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K&gt;1</annotation></semantics></math>,
+<code>D</code>, <code>C</code>, and <code>E</code> are
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>×</mo><mi>K</mi><mo>×</mo><mi>N</mi></mrow><annotation encoding="application/x-tex">K\times K\times N</annotation></semantics></math>
+arrays. These are unpenalized cross-products on the residualized design
+scale, after any requested whitening. They can expose low energy or
+collinearity, but they are not a condition-number report and do not by
+themselves validate a chosen ridge.</p>
+</div>
+<div class="section level2">
+<h2 id="boundaries-of-the-result">Boundaries of the result<a class="anchor" aria-label="anchor" href="#boundaries-of-the-result"></a>
+</h2>
+<ul>
+<li>Exact equality with classical LSS requires zero ridge, a fixed
+design, and full-rank trial models.</li>
+<li>Multi-basis output is a vector of basis coefficients per trial and
+voxel; any scalar amplitude needs an explicit, identified normalization
+rule.</li>
+<li>Estimated whitening changes the fitted space and adds uncertainty
+not covered by the conditional standard-error formula.</li>
+<li>HRF grid selection and voxel-adaptive HRFs are data-adaptive
+procedures; fixed-design uncertainty does not automatically survive
+selection.</li>
+<li>Blocking controls temporary memory. It cannot make storage smaller
+than the requested
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mi>K</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">NK\times V</annotation></semantics></math>
+result.</li>
 </ul>
 </div>
 <div class="section level2">
-<h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
+<h2 id="next-steps">Next steps<a class="anchor" aria-label="anchor" href="#next-steps"></a>
 </h2>
 <ul>
-<li>Mumford, J. A., Turner, B. O., Ashby, F. G., &amp; Poldrack, R. A.
+<li>Continue to <code><a href="../articles/lss_with_fmridesign.html">vignette("lss_with_fmridesign")</a></code> for
+run-aware event-table construction and trial/basis identity.</li>
+<li>For a backward reference, <code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code>
+contains the practical fitting and diagnostics workflow, and
+<code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code> contains the foundational LSS
+introduction.</li>
+<li>Later articles cover explicitly normalized voxel-specific HRF shapes
+in <code><a href="../articles/voxel-wise-hrf.html">vignette("voxel-wise-hrf")</a></code> and library-constrained
+shapes and trial coefficients in <code><a href="../articles/sbhm.html">vignette("sbhm")</a></code>.</li>
+</ul>
+</div>
+<div class="section level2">
+<h2 id="reference">Reference<a class="anchor" aria-label="anchor" href="#reference"></a>
+</h2>
+<p>Mumford, J. A., Turner, B. O., Ashby, F. G., &amp; Poldrack, R. A.
 (2012). Deconvolving BOLD activation in event-related designs for
 multivoxel pattern classification analyses. <em>NeuroImage</em>, 59(3),
-2636–2643.</li>
-<li>fmrilss source files <code>R/oasis_glue.R</code> and
-<code>src/oasis_core.cpp</code> (for implementation alignment).</li>
-</ul>
+2636–2643. <a href="https://doi.org/10.1016/j.neuroimage.2011.08.076" class="external-link">https://doi.org/10.1016/j.neuroimage.2011.08.076</a></p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

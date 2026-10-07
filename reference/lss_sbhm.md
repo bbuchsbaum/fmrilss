@@ -1,11 +1,9 @@
 # End-to-End LSS with Shared-Basis HRF Matching (SBHM)
 
-Orchestrates the SBHM pipeline: (1) prepass aggregate fit in the learned
-shared basis, (2) cosine matching to a library of HRFs represented in
-the same basis, (3) Least Squares Separate (OASIS) with the SBHM basis
-to obtain trial-wise r-dimensional coefficients, and (4) projection of
-those coefficients onto the matched coordinates to produce scalar
-amplitudes.
+Orchestrates the SBHM pipeline: (1) run-safe trial design and OASIS fit
+in the shared basis, (2) a voxel shape summary from the requested
+source, (3) hard library matching or explicit blending, and (4) a
+separate scalar-coefficient refit using the selected voxel shape.
 
 ## Usage
 
@@ -17,14 +15,9 @@ lss_sbhm(
   Nuisance = NULL,
   prewhiten = NULL,
   prepass = list(),
-  match = list(shrink = list(tau = 0, ref = NULL, snr = NULL), topK = 3, soft_blend =
-    TRUE, blend_margin = 0.08, whiten = FALSE, sv_floor_rel = 0.05, whiten_power = 0.5,
-    min_margin = NULL, min_beta_norm = NULL, fallback_ref = NULL, orient_ref = TRUE,
-    alpha_source = "prepass", rank1_min = 0),
+  match = list(),
   oasis = list(),
-  amplitude = list(method = "lss1", ridge = list(mode = "fractional", lambda = 0.02),
-    ridge_frac = list(x = 0.02, b = 0.02), cond_gate = NULL, adaptive = list(enable =
-    FALSE, base = 0.02, k0 = 1000, max = 0.08), return_se = FALSE),
+  amplitude = list(),
   return = c("amplitude", "coefficients", "both")
 )
 ```
@@ -42,9 +35,11 @@ lss_sbhm(
 
 - design_spec:
 
-  List for design construction (same as `oasis$design_spec`):
+  List for design construction:
   `list(sframe=..., cond=list(onsets=..., duration=0, span=...), others=list(...))`.
-  The HRF in `cond$hrf` is ignored and replaced with the SBHM basis HRF.
+  The target HRF is replaced by the SBHM basis. Multi-run inputs use
+  run-relative onsets and an explicit `cond$run` vector; other
+  conditions use the same event fields and may supply their own HRF.
 
 - Nuisance:
 
@@ -53,7 +48,9 @@ lss_sbhm(
 - prewhiten:
 
   Optional prewhitening options (see
-  [`?lss`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md)).
+  [`?lss`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md)). Run
+  labels are inferred from `design_spec$sframe` when omitted; supplied
+  labels must match those sampling-frame boundaries.
 
 - prepass:
 
@@ -100,9 +97,9 @@ lss_sbhm(
 
 - oasis:
 
-  Optional list forwarded to `lss(..., method="oasis")`. `K` is set to
-  `ncol(sbhm$B)` if not provided, and `design_spec` is injected
-  automatically.
+  Optional list forwarded to `lss(..., method="oasis")`. The basis
+  dimension, trial count, run-specific intercept span, and trial/basis
+  map are supplied from the run-safe SBHM design.
 
 - amplitude:
 
@@ -132,19 +129,36 @@ A list with components:
 - `coeffs_r` r×ntrials×V array of trial-wise coefficients (when
   requested)
 
-- `matched_idx` length-V integer indices into the library
+- `matched_name` and `matched_idx`: named top-scoring library identities
 
-- `margin` length-V confidence margins (top1 - top2 cosine)
+- `margin` named length-V score differences (top1 - top2 cosine); these
+  are not calibrated confidence measures
 
 - `alpha_coords` r×V matched coordinates per voxel
 
+- `shape_mode` and `fallback_low_conf`: named vectors recording the
+  shape policy actually used
+
+- `prepass_fallback`: named logical vector identifying voxels whose
+  requested shape source fell back to the aggregate prepass
+
+- `trial_basis_map`: complete trial/basis output identity
+
+- `event_amplitude`, `event_duration`, and `event_run`: named
+  event-design metadata
+
 - `diag` list with `r`, `ntrials`, and `times`
+
+Scalar amplitudes are coefficients on the supplied event design using
+the selected rank-truncated library shape. They are not automatically
+peak BOLD responses. SBHM standard errors are not calibrated and
+`return_se=TRUE` fails explicitly for every amplitude method.
 
 ## Details
 
 Most users should treat the `prepass`, `match`, `oasis`, and `amplitude`
-inputs as optional *override lists*: you can provide only the fields you
-want to change, and rely on defaults for everything else.
+inputs as optional nested *override lists*: you can provide only the
+fields you want to change. Unspecified nested defaults are preserved.
 
 If you already use `fmridesign`, prefer
 [`lss_sbhm_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm_design.md)
@@ -166,7 +180,7 @@ to avoid manually assembling an OASIS `design_spec`.
   sframe <- sampling_frame(blocklens = Tlen, TR = 1)
   H <- cbind(exp(-seq(0, 30, length.out = Tlen)/5),
              exp(-seq(0, 30, length.out = Tlen)/7))
-  sbhm <- sbhm_build(library_H = H, r = 4, sframe = sframe, normalize = TRUE)
+  sbhm <- sbhm_build(library_H = H, r = 2, sframe = sframe, normalize = TRUE)
   onsets <- seq(8, 140, by = 12)
   design_spec <- list(sframe = sframe, cond = list(onsets = onsets, duration = 0, span = 30))
   hrf_B <- sbhm_hrf(sbhm$B, sbhm$tgrid, sbhm$span)
@@ -177,10 +191,14 @@ to avoid manually assembling an OASIS `design_spec`.
   Y[,1] <- Y[,1] + Xr %*% alpha_true
   out <- lss_sbhm(Y, sbhm, design_spec)
   out2 <- lss_sbhm(Y, sbhm, design_spec,
-                  match = list(topK = 3, soft_blend = TRUE),
+                  match = list(topK = 2, soft_blend = TRUE),
                   return = "amplitude")
   names(out)
-#> [1] "matched_idx"  "margin"       "alpha_coords" "diag"         "topK_idx"    
-#> [6] "weights"      "alpha_mode"   "amplitude"   
+#>  [1] "matched_idx"       "matched_name"      "margin"           
+#>  [4] "alpha_coords"      "shape_mode"        "prepass_fallback" 
+#>  [7] "fallback_low_conf" "trial_basis_map"   "event_amplitude"  
+#> [10] "event_duration"    "event_run"         "diag"             
+#> [13] "topK_idx"          "weights"           "alpha_mode"       
+#> [16] "amplitude"        
 # }
 ```

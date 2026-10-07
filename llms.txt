@@ -165,6 +165,9 @@ linked and activated on site pages.
 - [`calculate_recovery_metrics()`](https://bbuchsbaum.github.io/fmrilss/reference/calculate_recovery_metrics.md)
   : Calculate HRF Recovery Metrics
 
+- [`coef(`*`<glmsingle_fit>`*`)`](https://bbuchsbaum.github.io/fmrilss/reference/coef.glmsingle_fit.md)
+  : Single-trial betas from a glmsingle fit
+
 - [`compare_hrf_recovery()`](https://bbuchsbaum.github.io/fmrilss/reference/compare_hrf_recovery.md)
   : Compare HRF Recovery Methods
 
@@ -185,6 +188,16 @@ linked and activated on site pages.
 
 - [`generate_rapid_design()`](https://bbuchsbaum.github.io/fmrilss/reference/generate_rapid_design.md)
   : OASIS HRF Recovery Testing Functions
+
+- [`glmsingle()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle.md)
+  : GLMsingle single-trial response estimation
+
+- [`glmsingle_design()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_design.md)
+  : fmridesign front end for glmsingle()
+
+- [`glmsingle_hrf_library()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_hrf_library.md)
+  [`glmsingle_hrf()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_hrf_library.md)
+  : GLMsingle canonical HRF and HRF library
 
 - [`item_build_design()`](https://bbuchsbaum.github.io/fmrilss/reference/item_build_design.md)
   : Build ITEM design metadata
@@ -284,7 +297,7 @@ linked and activated on site pages.
   : Match Voxels to Library HRFs in Shared Basis (SBHM)
 
 - [`sbhm_prepass()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_prepass.md)
-  : SBHM Prepass: Aggregate Fit in Shared Basis
+  : SBHM Prepass: Aggregate Fit in a Shared Basis
 
 - [`sbhm_project()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_project.md)
   : Project Trial-wise SBHM Coefficients to Scalar Amplitudes
@@ -294,17 +307,19 @@ linked and activated on site pages.
 
 # Articles
 
-### All vignettes
+### Learning path
 
 - [Getting started with
   fmrilss](https://bbuchsbaum.github.io/fmrilss/articles/fmrilss.md):
-- [Using fmridesign with
-  fmrilss](https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.md):
-- [The OASIS Method: Optimized Analytic Single-pass Inverse
-  Solution](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md):
-- [OASIS Theory: Algebra and Implementation
-  Details](https://bbuchsbaum.github.io/fmrilss/articles/oasis_theory.md):
-- [Shared-Basis HRF Matching (SBHM): Efficient Voxel-Specific HRF
-  Estimation](https://bbuchsbaum.github.io/fmrilss/articles/sbhm.md):
-- [Voxel-wise HRF Modeling with
-  fmrilss](https://bbuchsbaum.github.io/fmrilss/articles/voxel-wise-hrf.md):
+- [Practical OASIS: Design, Regularization, and
+  Diagnostics](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md):
+- [OASIS Theory: What Is Reused, Solved, and
+  Returned](https://bbuchsbaum.github.io/fmrilss/articles/oasis_theory.md):
+- [Run-aware LSS with
+  fmridesign](https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.md):
+- [Voxel-wise HRF shapes and trial
+  coefficients](https://bbuchsbaum.github.io/fmrilss/articles/voxel-wise-hrf.md):
+- [Shared-basis HRF matching: shapes, score margins, and trial
+  coefficients](https://bbuchsbaum.github.io/fmrilss/articles/sbhm.md):
+- [GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional
+  ridge](https://bbuchsbaum.github.io/fmrilss/articles/glmsingle.md):

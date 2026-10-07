@@ -13,7 +13,9 @@ lss_with_hrf(
   engine = "R",
   chunk_size = 5000,
   verbose = TRUE,
-  backing_dir = NULL
+  backing_dir = NULL,
+  sframe = NULL,
+  fixed_regs = NULL
 )
 ```
 
@@ -25,7 +27,9 @@ lss_with_hrf(
 
 - events:
 
-  Data frame with `onset`, `duration` and `condition` columns.
+  Data frame with `onset`, `duration` and `condition` columns. For a
+  multi-run sampling frame, a `run` column is required and onsets are
+  physical times relative to that run.
 
 - hrf_estimates:
 
@@ -35,12 +39,13 @@ lss_with_hrf(
 
 - nuisance_regs:
 
-  Optional numeric matrix of nuisance regressors.
+  Optional finite numeric matrix of nuisance regressors.
 
 - engine:
 
-  Computational engine: "R" for pure R implementation (default), "C++"
-  for optimized C++ (experimental).
+  Computational engine: "R" for the pure-R implementation (default), or
+  "C++" to request the compiled backend. The returned metadata records
+  the backend actually used after fallback.
 
 - chunk_size:
 
@@ -48,18 +53,34 @@ lss_with_hrf(
 
 - verbose:
 
-  Logical; display progress bar.
+  Logical; emit progress messages.
 
 - backing_dir:
 
   Directory for bigmemory backing files. If NULL, a temporary directory
   is used (C++ engine only).
 
+- sframe:
+
+  Explicit sampling frame. Defaults to the frame stored in
+  `hrf_estimates`; no unit-TR fallback is used.
+
+- fixed_regs:
+
+  Optional finite numeric matrix of fixed/common regressors. An
+  intercept is added when absent.
+
 ## Value
 
 An object of class
 [LSSBeta](https://bbuchsbaum.github.io/fmrilss/reference/LSSBeta.md) for
-C++ engine, or a numeric matrix (n_trials x n_vox) for R engine.
+the C++ request, or a numeric matrix (n_trials x n_vox) for the R
+engine. Matrix outputs carry sampling-frame, normalization,
+coefficient-unit, event-amplitude, event-duration, requested-engine,
+realized-engine, and chunk-size metadata. With a
+positive-peak-normalized shape, a zero-duration unit-amplitude event has
+a peak-response-amplitude coefficient. Otherwise the result is a
+coefficient on the supplied duration- and amplitude-coded event design.
 
 ## Examples
 
@@ -79,7 +100,7 @@ rset <- fmrihrf::regressor_set(onsets = events$onset,
 X <- fmrihrf::evaluate(rset, grid = times, precision = 0.1, method = "conv")
 coef <- matrix(rnorm(ncol(X) * ncol(Y)), ncol(X), ncol(Y))
 Y <- X %*% coef + Y * 0.1
-est <- estimate_voxel_hrf(Y, events, basis)
+est <- estimate_voxel_hrf(Y, events, basis, sframe = sframe)
 betas <- lss_with_hrf(Y, events, est, verbose = FALSE, engine = "R")
 dim(betas)
 #> [1] 2 2
