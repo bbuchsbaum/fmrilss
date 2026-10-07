@@ -48,31 +48,25 @@
     const <- const + colSums(w * zref[test, , drop = FALSE]^2)
   }
   used <- which(d > 0)
-  list(mu = mu[used, , drop = FALSE], sd = sdv[used, , drop = FALSE],
-       zero = zero[used, , drop = FALSE], d = d[used],
-       M = M[used, , drop = FALSE], const = const, used = used,
-       zero_sd = zero_sd)
+  sd_used <- sdv[used, , drop = FALSE]
+  zero_used <- zero[used, , drop = FALSE]
+  # 1/sd for the reference (zero-SD -> z = 0) and for candidates
+  isd_ref <- ifelse(zero_used, 0, 1 / sd_used)
+  isd <- if (identical(zero_sd, "python")) ifelse(zero_used, 1, 1 / sd_used) else isd_ref
+  list(mu = mu[used, , drop = FALSE], isd = isd, isd_ref = isd_ref,
+       d = d[used], M = M[used, , drop = FALSE], const = const, used = used)
 }
 
 # Cross-validation loss (one value per voxel) of candidate betas given only
 # on the used trial rows.
-.glms_cv_loss <- function(cv, cand_used) {
-  if (identical(cv$zero_sd, "python")) {
-    z <- (cand_used - cv$mu) / ifelse(cv$zero, 1, cv$sd)
-  } else {
-    z <- (cand_used - cv$mu) / ifelse(cv$zero, 1, cv$sd)
-    z[cv$zero] <- 0
-  }
+.glms_cv_loss <- function(cv, cand_used, ref = FALSE) {
+  z <- (cand_used - cv$mu) * (if (ref) cv$isd_ref else cv$isd)
   colSums(cv$d * z^2) - 2 * colSums(z * cv$M) + cv$const
 }
 
 # Loss of the reference fit itself. In GLMsingle the reference's own z-scores
 # are always zeroed where the session SD is zero.
-.glms_cv_loss_ref <- function(cv, ref_used) {
-  z <- (ref_used - cv$mu) / ifelse(cv$zero, 1, cv$sd)
-  z[cv$zero] <- 0
-  colSums(cv$d * z^2) - 2 * colSums(z * cv$M) + cv$const
-}
+.glms_cv_loss_ref <- function(cv, ref_used) .glms_cv_loss(cv, ref_used, ref = TRUE)
 
 # GLMsingle's select_noise_regressors(): first PC count whose improvement
 # over 0 PCs is within a factor pcstop of the best improvement.

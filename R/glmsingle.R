@@ -202,7 +202,7 @@ glmsingle <- function(Y, design, tr, stimdur,
   R <- length(Ylist)
   n_time <- vapply(Ylist, nrow, integer(1))
   n_vox <- ncol(Ylist[[1]])
-  if (any(vapply(Ylist, function(y) any(!is.finite(y)), logical(1)))) {
+  if (any(vapply(Ylist, function(y) !all(is.finite(range(y))), logical(1)))) {
     stop("Y contains non-finite values", call. = FALSE)
   }
   parsed <- .glms_parse_design(design, n_time, tr)
@@ -249,6 +249,10 @@ glmsingle <- function(Y, design, tr, stimdur,
 
   meanvol <- Reduce(`+`, lapply(Ylist, colSums)) / sum(n_time)
   pb <- if (want_percent_bold) 100 / abs(meanvol) else rep(1, n_vox)
+  beta_names <- list(paste0("trial", seq_len(geom$n_trials)), colnames(Ylist[[1]]))
+  scale_betas <- function(B) {
+    structure(B * rep(pb, each = nrow(B)), dim = dim(B), dimnames = beta_names)
+  }
   tick("setup")
 
   nuis_ab <- lapply(seq_len(R), function(r) {
@@ -257,27 +261,24 @@ glmsingle <- function(Y, design, tr, stimdur,
   })
   n_singular <- 0L
   withCallingHandlers({
-    say("Fitting type-A (ON-OFF) model")
-    a <- .glms_fit_type_a(Ylist, geom, hrf0, nuis_ab, tiles)
-    typea <- list(onoffR2 = a$onoffR2, meanvol = meanvol, betasmd = a$beta * pb)
-    tick("typea")
+    say("Fitting type-A (ON-OFF) and type-B (HRF library) models")
+    b <- .glms_fit_types_ab(Ylist, geom, hrf0, library, nuis_ab, tiles, singular)
+    typea <- list(onoffR2 = b$onoffR2, meanvol = meanvol, betasmd = b$beta_a * pb)
+    typeb <- c(b[c("FitHRFR2", "FitHRFR2run", "HRFindex", "HRFindexrun", "R2", "R2run")],
+               list(betasmd = scale_betas(b$beta), meanvol = meanvol))
+    b$beta <- NULL
+    tick("typeab")
 
     thresh <- NULL
-    if (is.null(brain_r2) || is.null(pc_r2_cutoff)) thresh <- .glms_tail_threshold(a$onoffR2)
+    if (is.null(brain_r2) || is.null(pc_r2_cutoff)) thresh <- .glms_tail_threshold(b$onoffR2)
     brain_r2 <- brain_r2 %||% thresh
     pc_r2_cutoff <- pc_r2_cutoff %||% thresh
-
-    say("Fitting type-B (HRF library) model")
-    b <- .glms_fit_type_b(Ylist, geom, library, nuis_ab, tiles, singular)
-    typeb <- c(b[c("FitHRFR2", "FitHRFR2run", "HRFindex", "HRFindexrun", "R2", "R2run")],
-               list(betasmd = sweep(b$beta, 2L, pb, "*"), meanvol = meanvol))
-    tick("typeb")
 
     dn <- list(pcregressors = NULL, noisepool = NULL, pcnum = 0L,
                xvaltrend = NULL, glmbadness = NULL, pcvoxels = NULL)
     if (want_glmdenoise) {
       say("Deriving GLMdenoise regressors")
-      dn <- .glms_denoise(Ylist, geom, library, b$HRFindex, a$onoffR2, meanvol,
+      dn <- .glms_denoise(Ylist, geom, library, b$HRFindex, b$onoffR2, meanvol,
                           nuis_ab, max_poly_deg, extras, n_pcs, pcstop,
                           brain_thresh, brain_r2, brain_exclude, pc_r2_cutoff,
                           pc_r2_cutoff_mask, full_glmbadness, extras_in_denoise,
@@ -298,11 +299,11 @@ glmsingle <- function(Y, design, tr, stimdur,
                        "noisepool", "pcregressors")],
                   list(meanvol = meanvol))
       if (want_glmdenoise) {
-        typec <- c(common, list(betasmd = sweep(cd$beta_c, 2L, pb, "*"),
+        typec <- c(common, list(betasmd = scale_betas(cd$beta_c),
                                 R2 = cd$r2_c, R2run = cd$r2run_c))
       }
       if (want_fracridge) {
-        typed <- c(common, list(betasmd = sweep(cd$beta_d, 2L, pb, "*"),
+        typed <- c(common, list(betasmd = scale_betas(cd$beta_d),
                                 R2 = cd$r2_d, R2run = cd$r2run_d,
                                 FRACvalue = cd$frac_value,
                                 scaleoffset = cd$scaleoffset,
@@ -317,15 +318,6 @@ glmsingle <- function(Y, design, tr, stimdur,
       "(pseudoinverse) solution."), n_singular), call. = FALSE)
   }
 
-  trial_names <- paste0("trial", seq_len(geom$n_trials))
-  voxel_names <- colnames(Ylist[[1]])
-  for (nm in c("typeb", "typec", "typed")) {
-    obj <- get(nm)
-    if (!is.null(obj)) {
-      dimnames(obj$betasmd) <- list(trial_names, voxel_names)
-      assign(nm, obj)
-    }
-  }
   structure(list(
     typea = typea, typeb = typeb, typec = typec, typed = typed,
     meanvol = meanvol, hrf_library = library, hrf_assumed = hrf0,

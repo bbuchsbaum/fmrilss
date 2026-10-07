@@ -74,21 +74,20 @@ test_that("autoscale reproduces olsmatrix, including constant candidates", {
 
 test_that("fracridge alpha mapping reproduces fracridge on a stacked design", {
   set.seed(9)
-  X1 <- matrix(rnorm(60 * 5), 60); X2 <- matrix(rnorm(50 * 4), 50)
-  y1 <- matrix(rnorm(60 * 3), 60); y2 <- matrix(rnorm(50 * 3), 50)
-  Xs <- rbind(cbind(X1, matrix(0, 60, 4)), cbind(matrix(0, 50, 5), X2))
-  ys <- rbind(y1, y2)
-  stats <- list(list(G = crossprod(X1), zero = rep(FALSE, 5)),
-                list(G = crossprod(X2), zero = rep(FALSE, 4)))
-  # supply b directly through a minimal data/design pair
-  sp <- local({
-    st <- lapply(1:2, function(r) list(G = stats[[r]]$G, zero = stats[[r]]$zero,
-                                        Ap = list(X1, X2)[[r]], ApE = NULL, k = "k0"))
-    dt <- list(list(Yc = y1, EY = list(k0 = NULL)), list(Yc = y2, EY = list(k0 = NULL)))
-    .glms_spectral(st, dt)
-  })
+  n1 <- 60; n2 <- 50
+  X1 <- matrix(rnorm(n1 * 5), n1); X2 <- matrix(rnorm(n2 * 4), n2)
+  y1 <- matrix(rnorm(n1 * 3), n1); y2 <- matrix(rnorm(n2 * 3), n2)
+  nuis <- function(n) list(Qp = matrix(1 / sqrt(n), n, 1), E = list(k0 = matrix(0, n, 0)))
+  ctr <- function(m) sweep(m, 2L, colMeans(m))
+  st <- list(.glms_design_stats_x(X1, nuis(n1), "k0", solver = FALSE, spectral = TRUE),
+             .glms_design_stats_x(X2, nuis(n2), "k0", solver = FALSE, spectral = TRUE))
+  dt <- list(.glms_data_stats(y1, nuis(n1)), .glms_data_stats(y2, nuis(n2)))
+  sp <- .glms_spectral(st, dt)
+  Xs <- rbind(cbind(ctr(X1), matrix(0, n1, 4)), cbind(matrix(0, n2, 5), ctr(X2)))
+  ys <- rbind(ctr(y1), ctr(y2))
   for (f in c(1, 0.7, 0.3, 0.05)) {
     a <- .glms_frac_alphas(sp, f)
-    expect_equal(.glms_ridge_coef(sp, a[1, ]), ref_fracridge(Xs, ys, f), tolerance = 1e-9)
+    expect_equal(.glms_ridge_coef(sp, .glms_shrink(sp, a[1, ])), ref_fracridge(Xs, ys, f),
+                 tolerance = 1e-9)
   }
 })

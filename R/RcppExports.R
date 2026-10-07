@@ -9,6 +9,10 @@ glms_frac_alpha_exact <- function(a2, s2, fracs) {
     .Call(`_fmrilss_glms_frac_alpha_exact`, a2, s2, fracs)
 }
 
+glms_frac_cv_loss <- function(Vu, s2, a, row_offset, alphas, mu, isd, d, M, cst) {
+    .Call(`_fmrilss_glms_frac_cv_loss`, Vu, s2, a, row_offset, alphas, mu, isd, d, M, cst)
+}
+
 compute_residuals_cpp <- function(X, Y, C) {
     .Call(`_fmrilss_compute_residuals_cpp`, X, Y, C)
 }

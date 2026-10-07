@@ -4,46 +4,60 @@
 # across runs, so every fit factorises per run. Fractional ridge keeps one
 # penalty per voxel, calibrated on the pooled spectrum of all runs, exactly as
 # fracridge() does on the stacked design.
+#
+# Notation for one run: X raw trial design, Qp orthonormal polynomial basis,
+# E orthonormal basis of the remaining nuisance (extras, PCs) orthogonal to
+# Qp, Ap = (I - Qp Qp') X, A = (I - E E') Ap, G = A'A, Gp = Ap'Ap
+# = G + (Ap'E)(Ap'E)'. Fits use A (all nuisance removed); reported R^2 uses
+# the poly-only residual of the raw-design prediction, as in GLMsingle:
+#   SSE = s - 2 beta'c + beta' Gp beta,  c = Ap'y = G beta_ols + (Ap'E)(E'y).
 
 # Voxel-independent statistics of one run's trial design for one HRF and one
-# nuisance model: poly-residualised design Ap, fully residualised Gram G,
-# poly-only Gram Gp, and Ap' E for the low-rank correction of the data.
-.glms_design_stats <- function(onsets, n_time, hrf, nuis_run, k_name) {
-  .glms_design_stats_x(.glms_trial_design(onsets, n_time, hrf), nuis_run, k_name)
+# nuisance model. `solver` precomputes the OLS operator; `spectral` the
+# eigendecomposition used by fractional ridge.
+.glms_design_stats <- function(onsets, n_time, hrf, nuis_run, k_name,
+                               singular = "error", solver = TRUE,
+                               spectral = FALSE) {
+  .glms_design_stats_x(.glms_trial_design(onsets, n_time, hrf), nuis_run,
+                       k_name, singular, solver, spectral)
 }
 
-.glms_design_stats_x <- function(X, nuis_run, k_name) {
+.glms_design_stats_x <- function(X, nuis_run, k_name, singular = "error",
+                                 solver = TRUE, spectral = FALSE) {
   Ap <- .glms_resid(X, nuis_run$Qp)
   E <- nuis_run$E[[k_name]]
+  ApE <- if (ncol(E)) crossprod(Ap, E) else NULL
   A <- .glms_resid(Ap, E)
-  list(
-    Ap = Ap,
-    ApE = if (ncol(E)) crossprod(Ap, E) else NULL,
-    G = crossprod(A),
-    Gp = crossprod(Ap),
-    zero = colSums(X != 0) == 0,
-    k = k_name
-  )
+  G <- crossprod(A)
+  out <- list(Ap = Ap, ApE = ApE, G = G, zero = colSums(X != 0) == 0,
+              k = k_name, n = ncol(X))
+  if (!out$n) return(out)
+  if (solver) {
+    Ginv <- .glms_solve(G, diag(out$n), out$zero, singular)
+    out$M <- Ginv %*% t(Ap)
+    out$K <- if (is.null(ApE)) NULL else Ginv %*% ApE
+  }
+  if (spectral) {
+    e <- eigen(G, symmetric = TRUE)
+    out$V <- e$vectors
+    out$s2 <- pmax(e$values, 0)
+    out$Wt <- crossprod(e$vectors, t(Ap))
+    out$VApE <- if (is.null(ApE)) NULL else crossprod(e$vectors, ApE)
+  }
+  out
 }
 
-# Data statistics of one run for a voxel tile: run-centred data, poly-residual
-# sum of squares s and the nuisance products E'Y for each nuisance model.
+# Data statistics of one run for a voxel tile: run-centred data (exact under
+# the polynomial projection, and it limits cancellation), the poly-residual
+# sum of squares s, and E'y for each nuisance model.
 .glms_data_stats <- function(Yr, nuis_run, k_names = names(nuis_run$E)) {
-  Yc <- sweep(Yr, 2L, colMeans(Yr), "-")
+  Yc <- Yr - rep(colMeans(Yr), each = nrow(Yr))
   QpY <- crossprod(nuis_run$Qp, Yc)
   EY <- lapply(nuis_run$E[k_names], function(E) if (ncol(E)) crossprod(E, Yc) else NULL)
   list(Yc = Yc, s = colSums(Yc^2) - colSums(QpY^2), EY = EY)
 }
 
-# Fit-side right-hand side b = A'y and report-side c = Ap'y.
-.glms_rhs <- function(ds, dat) {
-  c <- crossprod(ds$Ap, dat$Yc)
-  EY <- dat$EY[[ds$k]]
-  b <- if (is.null(ds$ApE)) c else c - ds$ApE %*% EY
-  list(b = b, c = c)
-}
-
-# Poly-only residual sum of squares of a fit (reported R^2 convention).
+# Poly-side SSE for explicit c = Ap'y (single-regressor type A fits).
 .glms_sse <- function(beta, c, Gp, s) {
   s - 2 * colSums(beta * c) + colSums(beta * (Gp %*% beta))
 }
@@ -54,47 +68,60 @@
   out
 }
 
-# OLS for all runs of a voxel tile. `stats` is a list (one per run) of design
-# statistics, `dats` the matching data statistics. Returns betas (trials x
-# voxels), per-run SSE and s, and the poly-side products for R^2.
-.glms_fit_ols <- function(stats, dats, singular) {
+# Right-hand side b = A'y for a single-regressor design (type A).
+.glms_rhs <- function(ds, dat) {
+  c <- crossprod(ds$Ap, dat$Yc)
+  EY <- dat$EY[[ds$k]]
+  b <- if (is.null(ds$ApE)) c else c - ds$ApE %*% EY
+  list(b = b, c = c)
+}
+
+# OLS for all runs of a voxel tile: beta = M y - K (E'y), and the poly-side
+# SSE = s - beta'G beta - 2 u'(E'y) + u'u with u = (Ap'E)' beta.
+.glms_fit_ols <- function(stats, dats) {
   R <- length(stats)
+  V <- ncol(dats[[1]]$Yc)
   betas <- vector("list", R)
-  sse <- s <- matrix(0, R, ncol(dats[[1]]$Yc))
+  sse <- s <- matrix(0, R, V)
   for (r in seq_len(R)) {
-    if (!length(stats[[r]]$zero)) {
-      sse[r, ] <- s[r, ] <- dats[[r]]$s
-      betas[[r]] <- matrix(0, 0L, ncol(sse))
-      next
+    st <- stats[[r]]; dt <- dats[[r]]
+    s[r, ] <- dt$s
+    if (!st$n) { sse[r, ] <- dt$s; next }
+    EY <- dt$EY[[st$k]]
+    b <- st$M %*% dt$Yc
+    if (!is.null(st$K)) b <- b - st$K %*% EY
+    q <- colSums(b * (st$G %*% b))
+    if (!is.null(st$ApE)) {
+      u <- crossprod(st$ApE, b)
+      q <- q + 2 * colSums(u * EY) - colSums(u^2)
     }
-    rhs <- .glms_rhs(stats[[r]], dats[[r]])
-    b <- .glms_solve(stats[[r]]$G, rhs$b, stats[[r]]$zero, singular)
+    sse[r, ] <- dt$s - q
     betas[[r]] <- b
-    sse[r, ] <- .glms_sse(b, rhs$c, stats[[r]]$Gp, dats[[r]]$s)
-    s[r, ] <- dats[[r]]$s
   }
   list(beta = do.call(rbind, betas), sse = sse, s = s)
 }
 
 # Spectral form of the stacked problem used by fracridge: per-run eigen
-# decompositions of G, the pooled singular values, and OLS coefficients in
-# eigen coordinates (components with singular value < 1e-10 are zeroed).
+# coordinates vb = V'b, OLS coefficients a = vb / s2 (components with
+# singular value < 1e-10 zeroed, as fracridge does) and the pooled spectrum.
 .glms_spectral <- function(stats, dats) {
   R <- length(stats)
-  vecs <- s2 <- a <- c_list <- vector("list", R)
+  vb <- a <- EYs <- vector("list", R)
   for (r in seq_len(R)) {
-    if (!length(stats[[r]]$zero)) next
-    e <- eigen(stats[[r]]$G, symmetric = TRUE)
-    vecs[[r]] <- e$vectors
-    s2[[r]] <- pmax(e$values, 0)
-    rhs <- .glms_rhs(stats[[r]], dats[[r]])
-    c_list[[r]] <- rhs$c
-    coef <- crossprod(e$vectors, rhs$b) / s2[[r]]
-    coef[sqrt(s2[[r]]) < 1e-10, ] <- 0
+    st <- stats[[r]]
+    if (!st$n) next
+    EYs[r] <- list(dats[[r]]$EY[[st$k]])
+    x <- st$Wt %*% dats[[r]]$Yc
+    if (!is.null(st$VApE)) x <- x - st$VApE %*% EYs[[r]]
+    vb[[r]] <- x
+    coef <- x / st$s2
+    coef[sqrt(st$s2) < 1e-10, ] <- 0
     a[[r]] <- coef
   }
-  list(vecs = vecs, s2 = s2, a = a, c = c_list,
-       s2_all = unlist(s2), a_all = do.call(rbind, a))
+  list(stats = stats, vb = vb, a = a, EY = EYs,
+       s = lapply(dats, `[[`, "s"),
+       s2_all = unlist(lapply(stats, `[[`, "s2")),
+       a_all = do.call(rbind, a))
 }
 
 # fracridge's alpha grid for the pooled spectrum.
@@ -122,43 +149,56 @@
   glms_frac_alpha_grid(newlen, grid, fracs)
 }
 
-# Coefficients (trials x voxels) for one alpha per voxel; optionally only the
-# trial rows in `rows`.
-.glms_ridge_coef <- function(sp, alpha, rows = NULL) {
-  R <- length(sp$vecs)
-  out <- vector("list", R)
+# Shrunk eigen coefficients for one alpha per voxel, per run.
+.glms_shrink <- function(sp, alpha) {
+  alpha[!is.finite(alpha)] <- 0
+  lapply(seq_along(sp$a), function(r) {
+    if (is.null(sp$a[[r]])) return(NULL)
+    s2 <- sp$stats[[r]]$s2
+    sh <- s2 / outer(s2, alpha, `+`)
+    if (any(s2 == 0)) sh[s2 == 0, ] <- 0
+    sh * sp$a[[r]]
+  })
+}
+
+# Ridge coefficients (trials x voxels) from shrunk eigen coefficients;
+# optionally only the trial rows in `rows`.
+.glms_ridge_coef <- function(sp, coef, rows = NULL) {
+  out <- vector("list", length(coef))
   off <- 0L
-  for (r in seq_len(R)) {
-    if (is.null(sp$vecs[[r]])) next
-    s2 <- sp$s2[[r]]
-    shrink <- outer(s2, alpha, function(s, al) s / (s + al))
-    coef <- shrink * sp$a[[r]]
-    coef[!is.finite(coef)] <- 0
-    V <- sp$vecs[[r]]
+  for (r in seq_along(coef)) {
+    if (is.null(coef[[r]])) next
+    V <- sp$stats[[r]]$V
     n <- nrow(V)
-    if (!is.null(rows)) {
-      keep <- rows[rows > off & rows <= off + n] - off
-      out[[r]] <- V[keep, , drop = FALSE] %*% coef
+    if (is.null(rows)) {
+      out[[r]] <- V %*% coef[[r]]
     } else {
-      out[[r]] <- V %*% coef
+      keep <- rows[rows > off & rows <= off + n] - off
+      if (length(keep)) out[[r]] <- V[keep, , drop = FALSE] %*% coef[[r]]
     }
     off <- off + n
   }
   do.call(rbind, out)
 }
 
-# Per-run SSE of ridge coefficients under the poly-only reporting convention.
-.glms_ridge_sse <- function(sp, beta, stats, dats) {
-  R <- length(stats)
-  sse <- s <- matrix(0, R, ncol(beta))
-  off <- 0L
+# Per-run poly-side SSE of ridge coefficients, computed in eigen
+# coordinates: with beta = V w and u = (Ap'E)' beta,
+#   SSE = s - 2 (w'vb + u'(E'y)) + w' diag(s2) w + u'u.
+.glms_ridge_sse <- function(sp, coef) {
+  R <- length(coef)
+  V <- length(sp$s[[1]])
+  sse <- s <- matrix(0, R, V)
   for (r in seq_len(R)) {
-    s[r, ] <- dats[[r]]$s
-    if (is.null(sp$vecs[[r]])) { sse[r, ] <- s[r, ]; next }
-    n <- nrow(sp$vecs[[r]])
-    b <- beta[off + seq_len(n), , drop = FALSE]
-    sse[r, ] <- .glms_sse(b, sp$c[[r]], stats[[r]]$Gp, dats[[r]]$s)
-    off <- off + n
+    s[r, ] <- sp$s[[r]]
+    w <- coef[[r]]
+    if (is.null(w)) { sse[r, ] <- s[r, ]; next }
+    st <- sp$stats[[r]]
+    q <- 2 * colSums(w * sp$vb[[r]]) - colSums(st$s2 * w^2)
+    if (!is.null(st$VApE)) {
+      u <- crossprod(st$VApE, w)
+      q <- q + 2 * colSums(u * sp$EY[[r]]) - colSums(u^2)
+    }
+    sse[r, ] <- s[r, ] - q
   }
   list(sse = sse, s = s)
 }

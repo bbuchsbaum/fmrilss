@@ -11,8 +11,12 @@ Description: Implements efficient least squares separate (LSS) analysis for
     (2012) <doi:10.1016/j.neuroimage.2011.08.076>. LSS estimates trial-by-trial
     activation patterns in event-related designs. The package provides reference
     R implementations, optimized C++ backends, prewhitening, and methods for
-    voxel-specific haemodynamic response functions.
+    voxel-specific haemodynamic response functions, including a fast
+    implementation of GLMsingle (Prince et al., 2022)
+    <doi:10.7554/eLife.77599>.
 License: GPL-3
+Copyright: The vendored GLMsingle HRF library and ported GLMsingle and
+    fracridge algorithms are by their authors; see inst/COPYRIGHTS.
 Encoding: UTF-8
 Depends: R (>= 4.0.0)
 Imports:
@@ -37,6 +41,7 @@ Suggests:
     pkgdown,
     progress,
     fmridesign,
+    jsonlite,
     Matrix,
     albersdown,
     ragg,

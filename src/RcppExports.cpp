@@ -37,6 +37,26 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// glms_frac_cv_loss
+arma::mat glms_frac_cv_loss(const Rcpp::List& Vu, const Rcpp::List& s2, const Rcpp::List& a, const arma::ivec& row_offset, const arma::mat& alphas, const arma::mat& mu, const arma::mat& isd, const arma::vec& d, const arma::mat& M, const arma::rowvec& cst);
+RcppExport SEXP _fmrilss_glms_frac_cv_loss(SEXP VuSEXP, SEXP s2SEXP, SEXP aSEXP, SEXP row_offsetSEXP, SEXP alphasSEXP, SEXP muSEXP, SEXP isdSEXP, SEXP dSEXP, SEXP MSEXP, SEXP cstSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type Vu(VuSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type s2(s2SEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type a(aSEXP);
+    Rcpp::traits::input_parameter< const arma::ivec& >::type row_offset(row_offsetSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type alphas(alphasSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type isd(isdSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type d(dSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type M(MSEXP);
+    Rcpp::traits::input_parameter< const arma::rowvec& >::type cst(cstSEXP);
+    rcpp_result_gen = Rcpp::wrap(glms_frac_cv_loss(Vu, s2, a, row_offset, alphas, mu, isd, d, M, cst));
+    return rcpp_result_gen;
+END_RCPP
+}
 // compute_residuals_cpp
 List compute_residuals_cpp(const arma::mat& X, const arma::mat& Y, const arma::mat& C);
 RcppExport SEXP _fmrilss_compute_residuals_cpp(SEXP XSEXP, SEXP YSEXP, SEXP CSEXP) {
@@ -351,6 +371,7 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_glms_frac_alpha_grid", (DL_FUNC) &_fmrilss_glms_frac_alpha_grid, 3},
     {"_fmrilss_glms_frac_alpha_exact", (DL_FUNC) &_fmrilss_glms_frac_alpha_exact, 3},
+    {"_fmrilss_glms_frac_cv_loss", (DL_FUNC) &_fmrilss_glms_frac_cv_loss, 10},
     {"_fmrilss_compute_residuals_cpp", (DL_FUNC) &_fmrilss_compute_residuals_cpp, 3},
     {"_fmrilss_lss_compute_cpp", (DL_FUNC) &_fmrilss_lss_compute_cpp, 2},
     {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 4},

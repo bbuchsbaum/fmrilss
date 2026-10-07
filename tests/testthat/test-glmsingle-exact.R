@@ -155,3 +155,25 @@ test_that("input validation catches malformed designs", {
   expect_error(glmsingle(sim$Y[1], ev, tr = 1, stimdur = 3, verbose = FALSE), "TR grid")
   expect_error(glmsingle(sim$Y, sim$design, tr = 1, stimdur = 3, fracs = 1.5, verbose = FALSE), "fracs")
 })
+
+test_that("fmridesign front end matches the matrix interface", {
+  skip_if_not_installed("fmridesign")
+  sim <- sim_glms(seed = 31, n_runs = 3, n_time = 80, n_vox = 10)
+  ev <- do.call(rbind, lapply(seq_along(sim$design), function(r) {
+    w <- which(sim$design[[r]] == 1, arr.ind = TRUE)
+    w <- w[order(w[, 1]), , drop = FALSE]
+    data.frame(run = r, onset = (w[, 1] - 1) * sim$tr, stim = factor(w[, 2], levels = 1:8),
+               duration = sim$stimdur)
+  }))
+  sf <- fmrihrf::sampling_frame(blocklens = vapply(sim$Y, nrow, integer(1)), TR = sim$tr)
+  em <- fmridesign::event_model(onset ~ fmridesign::hrf(stim), data = ev, block = ~run,
+                                sampling_frame = sf, durations = ev$duration)
+  a <- glmsingle_design(do.call(rbind, sim$Y), em, n_pcs = 2, verbose = FALSE,
+                        brain_r2 = 2, pc_r2_cutoff = 2)
+  b <- glmsingle(sim$Y, sim$design, tr = sim$tr, stimdur = sim$stimdur, n_pcs = 2,
+                 verbose = FALSE, brain_r2 = 2, pc_r2_cutoff = 2)
+  expect_equal(unname(coef(a)), unname(coef(b)), tolerance = 1e-10)
+  expect_output(print(a), "glmsingle_fit")
+  expect_s3_class(summary(a), "summary.glmsingle_fit")
+  expect_length(coef(a, "a"), 10L)
+})

@@ -1,9 +1,11 @@
 // Kernels for glmsingle(): per-voxel conversion of ridge fractions to
 // penalties (alpha), reproducing fracridge's grid interpolation or solving
 // the fraction equation exactly.
-#include <Rcpp.h>
+// [[Rcpp::depends(RcppArmadillo)]]
+#include <RcppArmadillo.h>
 #include <algorithm>
 #include <cmath>
+#include <vector>
 using namespace Rcpp;
 
 // numpy.interp(x, xp, fp) for increasing xp (ties resolved to the last match).
@@ -77,6 +79,68 @@ NumericMatrix glms_frac_alpha_exact(const NumericMatrix& a2,
       }
       out(f, v) = std::exp(0.5 * (lo + hi));
     }
+  }
+  return out;
+}
+
+// Cross-validation loss of fractional ridge candidates (fractions x voxels).
+//
+// For each fraction f and run r, the shrunk eigen coefficients are
+// W = s2 / (s2 + alpha_f) * a_r (components x voxels) and the candidate
+// betas on the cross-validated trial rows are B = V_r[used_r, ] W. With
+// z = (B - mu) * isd, the loss accumulates sum d z^2 - 2 sum z M (rows
+// split additively across runs) plus a constant. Runs with no used rows are
+// skipped. Inputs per run are lists; `row_offset` gives each run's first row
+// in the stacked used-row arrays mu, isd and M.
+// [[Rcpp::export]]
+arma::mat glms_frac_cv_loss(const Rcpp::List& Vu,
+                            const Rcpp::List& s2,
+                            const Rcpp::List& a,
+                            const arma::ivec& row_offset,
+                            const arma::mat& alphas,
+                            const arma::mat& mu,
+                            const arma::mat& isd,
+                            const arma::vec& d,
+                            const arma::mat& M,
+                            const arma::rowvec& cst) {
+  const arma::uword F = alphas.n_rows, V = alphas.n_cols;
+  const int R = Vu.size();
+  std::vector<arma::mat> Vs(R), As(R);
+  std::vector<arma::vec> Ss(R);
+  for (int r = 0; r < R; ++r) {
+    Vs[r] = Rcpp::as<arma::mat>(Vu[r]);
+    Ss[r] = Rcpp::as<arma::vec>(s2[r]);
+    As[r] = Rcpp::as<arma::mat>(a[r]);
+  }
+  arma::mat out(F, V);
+  for (arma::uword f = 0; f < F; ++f) {
+    arma::rowvec loss = cst;
+    arma::rowvec al = alphas.row(f);
+    al.replace(arma::datum::nan, 0.0);
+    for (int r = 0; r < R; ++r) {
+      const arma::mat& Vr = Vs[r];
+      if (Vr.n_rows == 0) continue;
+      const arma::vec& sr = Ss[r];
+      const arma::mat& ar = As[r];
+      arma::mat W(ar.n_rows, V);
+      for (arma::uword v = 0; v < V; ++v) {
+        for (arma::uword i = 0; i < ar.n_rows; ++i) {
+          const double den = sr[i] + al[v];
+          W(i, v) = den > 0.0 ? sr[i] / den * ar(i, v) : 0.0;
+        }
+      }
+      const arma::mat B = Vr * W;
+      const arma::uword off = row_offset[r];
+      for (arma::uword v = 0; v < V; ++v) {
+        double acc = 0.0;
+        for (arma::uword i = 0; i < B.n_rows; ++i) {
+          const double z = (B(i, v) - mu(off + i, v)) * isd(off + i, v);
+          acc += d[off + i] * z * z - 2.0 * z * M(off + i, v);
+        }
+        loss[v] += acc;
+      }
+    }
+    out.row(f) = loss;
   }
   return out;
 }
