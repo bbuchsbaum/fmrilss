@@ -1,0 +1,11 @@
+# Pinned reference environment for tools/glmsingle_ref/make_fixtures.py
+glmsingle @ git+https://github.com/cvnlab/GLMsingle@1ab54a65edd3ea41a6133d4b4ecb78a9c7296684
+fracridge==3.0
+numpy
+scipy
+scikit-learn
+matplotlib
+tqdm
+nibabel
+h5py
+pandas

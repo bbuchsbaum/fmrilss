@@ -11,6 +11,32 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// glms_frac_alpha_grid
+NumericMatrix glms_frac_alpha_grid(const NumericMatrix& newlen, const NumericVector& grid, const NumericVector& fracs);
+RcppExport SEXP _fmrilss_glms_frac_alpha_grid(SEXP newlenSEXP, SEXP gridSEXP, SEXP fracsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type newlen(newlenSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type grid(gridSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type fracs(fracsSEXP);
+    rcpp_result_gen = Rcpp::wrap(glms_frac_alpha_grid(newlen, grid, fracs));
+    return rcpp_result_gen;
+END_RCPP
+}
+// glms_frac_alpha_exact
+NumericMatrix glms_frac_alpha_exact(const NumericMatrix& a2, const NumericVector& s2, const NumericVector& fracs);
+RcppExport SEXP _fmrilss_glms_frac_alpha_exact(SEXP a2SEXP, SEXP s2SEXP, SEXP fracsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type a2(a2SEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type s2(s2SEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type fracs(fracsSEXP);
+    rcpp_result_gen = Rcpp::wrap(glms_frac_alpha_exact(a2, s2, fracs));
+    return rcpp_result_gen;
+END_RCPP
+}
 // compute_residuals_cpp
 List compute_residuals_cpp(const arma::mat& X, const arma::mat& Y, const arma::mat& C);
 RcppExport SEXP _fmrilss_compute_residuals_cpp(SEXP XSEXP, SEXP YSEXP, SEXP CSEXP) {
@@ -323,6 +349,8 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_fmrilss_glms_frac_alpha_grid", (DL_FUNC) &_fmrilss_glms_frac_alpha_grid, 3},
+    {"_fmrilss_glms_frac_alpha_exact", (DL_FUNC) &_fmrilss_glms_frac_alpha_exact, 3},
     {"_fmrilss_compute_residuals_cpp", (DL_FUNC) &_fmrilss_compute_residuals_cpp, 3},
     {"_fmrilss_lss_compute_cpp", (DL_FUNC) &_fmrilss_lss_compute_cpp, 2},
     {"_fmrilss_lss_fused_optim_cpp", (DL_FUNC) &_fmrilss_lss_fused_optim_cpp, 4},
