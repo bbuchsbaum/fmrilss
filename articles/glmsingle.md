@@ -94,7 +94,7 @@ fit
 #>   models: A (ON-OFF), B (HRF library), C (GLMdenoise), D (fractional ridge) 
 #>   noise PCs selected: 3
 #>   median ridge fraction: 0.70
-#>   elapsed: 0.4 s
+#>   elapsed: 0.5 s
 ```
 
 The result contains `typea`, `typeb`, `typec`, and `typed` lists using

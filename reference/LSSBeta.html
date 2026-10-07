@@ -30,7 +30,9 @@ normalization, and unit metadata."><link href="../albers.css" rel="stylesheet"><
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul></li>
@@ -69,7 +71,7 @@ normalization, and unit metadata.</p>
 
 
 <p><code>betas</code> is the file-backed trial-by-voxel matrix; <code>dimnames</code> preserves trial
-and voxel identity; <code>sframe</code>, <code>normalization</code>, <code>units</code>, and
+and voxel identity; <code>sframe</code>, <code>normalization</code>, <code>units</code>, <code>degenerate</code>, and
 <code>event_amplitude</code> and <code>event_duration</code> define timing and coefficient
 interpretation; and
 <code>engine_requested</code>, <code>engine_used</code>, and <code>chunk_size</code> record execution. Use

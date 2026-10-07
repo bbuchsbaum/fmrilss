@@ -41,7 +41,9 @@
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul>
@@ -76,9 +78,10 @@
     
     
 <script>(function(b){b.className=b.className.replace(/\b(palette|preset|style)-[a-z]+\b/g,"").trim();b.classList.add("palette-red","preset-homage","style-minimal");document.documentElement.setAttribute("data-albers-marks","");})(document.body);</script><p><code><a href="../reference/estimate_voxel_hrf.html">estimate_voxel_hrf()</a></code> estimates one HRF shape per voxel;
-<code><a href="../reference/lss_with_hrf.html">lss_with_hrf()</a></code> then estimates one LSS coefficient per trial
-and voxel. For unit-amplitude impulses, unit-peak HRF normalization
-makes that coefficient a peak-response amplitude. Read this after
+<code><a href="../reference/lss_with_hrf.html">lss_with_hrf()</a></code> then uses those shapes to estimate one LSS
+coefficient per trial and voxel. Because each shape is normalized to a
+peak of one, the coefficient for a unit-amplitude impulse event is the
+trial’s peak-response amplitude. Read this after
 <code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code>, <code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code>,
 and <code><a href="../articles/lss_with_fmridesign.html">vignette("lss_with_fmridesign")</a></code>.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
@@ -87,15 +90,16 @@ and <code><a href="../articles/lss_with_fmridesign.html">vignette("lss_with_fmri
 <span>  <span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/" class="external-link">fmrihrf</a></span><span class="op">)</span></span>
 <span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
 <div class="section level2">
-<h2 id="fix-the-scale-before-interpreting-a-beta">Fix the scale before interpreting a beta<a class="anchor" aria-label="anchor" href="#fix-the-scale-before-interpreting-a-beta"></a>
+<h2 id="fix-the-hrf-scale-before-interpreting-a-beta">Fix the HRF scale before interpreting a beta<a class="anchor" aria-label="anchor" href="#fix-the-hrf-scale-before-interpreting-a-beta"></a>
 </h2>
 <p>HRF shape and response amplitude are not jointly identified without a
 scale convention: multiplying an HRF by
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math>
 and dividing its beta by
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math>
-leaves the fitted signal unchanged. The public workflow resolves that
-ambiguity as follows.</p>
+leaves the fitted signal unchanged. <code><a href="../reference/estimate_voxel_hrf.html">estimate_voxel_hrf()</a></code>
+and <code><a href="../reference/lss_with_hrf.html">lss_with_hrf()</a></code> resolve that ambiguity with the
+conventions in this table.</p>
 <table class="table">
 <caption>HRF normalization and coefficient scale in the voxel-wise
 workflow.</caption>
@@ -135,10 +139,24 @@ amplitude-coded event design</td>
 </tr>
 </tbody>
 </table>
-<p><code>amplitude_scale</code> is useful for reconstructing the raw
-pooled-fit coefficients, but it is not a trial beta. With unit-amplitude
-impulses, the downstream beta is interpretable as a peak response
-because the supplied HRF shape has unit positive peak.</p>
+<p><code>amplitude_scale</code> lets you reconstruct the raw pooled-fit
+coefficients, but it is not a trial beta. With unit-amplitude impulses,
+the trial beta from <code><a href="../reference/lss_with_hrf.html">lss_with_hrf()</a></code> can be read as a peak
+response because the HRF shape it receives has a positive peak of
+one.</p>
+<p>Shapes are oriented to correlate positively with a reference HRF
+(<code>ref_hrf</code>, the canonical HRF by default). Some voxels cannot
+be meaningfully peak-normalized: those whose oriented shape has no
+positive peak, or a positive peak smaller than 5% of its largest
+absolute deflection. Such a voxel typically has no signal, and dividing
+by a noise-level peak would inflate its betas arbitrarily.
+<code><a href="../reference/estimate_voxel_hrf.html">estimate_voxel_hrf()</a></code> instead scales it by its largest
+absolute response, flags it in <code>degenerate</code>, and counts it in
+a warning; the rest of the fit is unaffected.
+<code><a href="../reference/lss_with_hrf.html">lss_with_hrf()</a></code> carries the flags as a
+<code>degenerate</code> attribute, because those voxels’ betas are not
+in peak-response units. <code><a href="../reference/lss_rank1.html">lss_rank1()</a></code> follows the same
+policy.</p>
 </div>
 <div class="section level2">
 <h2 id="separate-shape-calibration-from-trial-estimation">Separate shape calibration from trial estimation<a class="anchor" aria-label="anchor" href="#separate-shape-calibration-from-trial-estimation"></a>
@@ -171,11 +189,12 @@ participants or acquisitions.</p>
 <div class="section level3">
 <h3 id="simulate-latency-and-width-differences">Simulate latency and width differences<a class="anchor" aria-label="anchor" href="#simulate-latency-and-width-differences"></a>
 </h3>
-<p>Time dilation changes width; scalar multiplication does not. The
-helper below evaluates the canonical HRF at
-<code>(time - delay) / dilation</code>, then renormalizes the resulting
-waveform to unit peak. Dilation therefore changes duration without
-changing the amplitude estimand.</p>
+<p>Stretching an HRF’s time axis (dilation) changes its width;
+multiplying it by a scalar does not. The helper below evaluates the
+canonical HRF at <code>(time - delay) / dilation</code>, then
+renormalizes the resulting waveform to unit peak. Dilation therefore
+changes the response’s width without changing the amplitude being
+estimated.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">make_unit_peak_hrf</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">delay</span>, <span class="va">dilation</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">dense_time</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">30</span>, by <span class="op">=</span> <span class="fl">0.01</span><span class="op">)</span></span>
@@ -258,9 +277,10 @@ and wider responses.
 </h3>
 <p>The calibration events all have amplitude one, so the pooled-shape
 model is correctly specified. Analysis amplitudes are 2, 3, 4, and 5
-across voxels and constant across trials; this keeps every LSS
-target-plus-other-trials model correctly specified while testing scale
-far away from one.</p>
+across voxels and constant across trials. Constant amplitudes keep every
+LSS model (the target trial plus one regressor for all other trials)
+correctly specified, and values well above one test whether amplitudes
+far from one are recovered.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">trial_design</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">events</span>, <span class="va">hrf</span>, <span class="va">sframe</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">regressors</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/regressor_set.html" class="external-link">regressor_set</a></span><span class="op">(</span></span>
@@ -322,11 +342,25 @@ sampling frame. <code>HRF_SPMG3</code> supplies canonical,
 temporal-derivative, and dispersion-derivative basis functions; the
 returned weights define a reconstructed curve, not three directly
 interpretable physiological measurements.</p>
+<p>The basis must also cover the whole response. fmrilss evaluates a
+basis only over its declared span, and fmrihrf’s built-in
+<code>HRF_SPMG1</code> and <code>HRF_SPMG3</code> declare a 24-second
+span, so their post-stimulus undershoot is truncated at 24 seconds. A
+truncated basis cannot represent the late undershoot, and the missing
+tail biases trial amplitudes, most for the widest responses. The
+simulated responses here last 30 seconds, so the analysis rebuilds the
+same bases with a 30-second span.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">spmg3_30</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/gen_hrf.html" class="external-link">gen_hrf</a></span><span class="op">(</span><span class="va">HRF_SPMG3</span>, span <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
+<span><span class="va">spmg1_30</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/gen_hrf.html" class="external-link">gen_hrf</a></span><span class="op">(</span><span class="va">HRF_SPMG1</span>, span <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>builtin_span <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">HRF_SPMG3</span>, <span class="st">"span"</span><span class="op">)</span>, analysis_span <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">spmg3_30</span>, <span class="st">"span"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;  builtin_span analysis_span </span></span>
+<span><span class="co">#&gt;            24            30</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">estimated_hrf</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/estimate_voxel_hrf.html">estimate_voxel_hrf</a></span><span class="op">(</span></span>
 <span>  <span class="va">calibration_response</span>,</span>
 <span>  <span class="va">calibration_events</span>,</span>
-<span>  basis <span class="op">=</span> <span class="va">HRF_SPMG3</span>,</span>
+<span>  basis <span class="op">=</span> <span class="va">spmg3_30</span>,</span>
 <span>  nuisance_regs <span class="op">=</span> <span class="va">nuisance_regs</span>,</span>
 <span>  fixed_regs <span class="op">=</span> <span class="va">fixed_regs</span>,</span>
 <span>  sframe <span class="op">=</span> <span class="va">sframe</span></span>
@@ -337,7 +371,7 @@ interpretable physiological measurements.</p>
 <span><span class="va">relabeled_hrf</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/estimate_voxel_hrf.html">estimate_voxel_hrf</a></span><span class="op">(</span></span>
 <span>  <span class="va">calibration_response</span>,</span>
 <span>  <span class="va">relabeled_events</span>,</span>
-<span>  basis <span class="op">=</span> <span class="va">HRF_SPMG3</span>,</span>
+<span>  basis <span class="op">=</span> <span class="va">spmg3_30</span>,</span>
 <span>  nuisance_regs <span class="op">=</span> <span class="va">nuisance_regs</span>,</span>
 <span>  fixed_regs <span class="op">=</span> <span class="va">fixed_regs</span>,</span>
 <span>  sframe <span class="op">=</span> <span class="va">sframe</span></span>
@@ -379,7 +413,7 @@ simulation.</caption>
 <tr class="odd">
 <td align="left">voxel_1</td>
 <td align="right">1.000</td>
-<td align="right">0.00</td>
+<td align="right">0.05</td>
 <td align="right">-0.05</td>
 </tr>
 <tr class="even">
@@ -398,12 +432,12 @@ simulation.</caption>
 <td align="left">voxel_4</td>
 <td align="right">0.998</td>
 <td align="right">0.00</td>
-<td align="right">0.15</td>
+<td align="right">0.10</td>
 </tr>
 </tbody>
 </table>
 <div class="figure" style="text-align: center">
-<img src="voxel-wise-hrf_files/figure-html/estimated-shape-plot-1.png" class="r-plt" alt="Four panels compare solid true and dashed estimated unit-peak HRFs. Shape correlations range from 0.998 to 1.000; the largest width difference is 0.15 seconds." width="100%"><img class="albers-phone-twin" src="voxel-wise-hrf_files/figure-html/estimated-shape-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="515" hidden><p class="caption">
+<img src="voxel-wise-hrf_files/figure-html/estimated-shape-plot-1.png" class="r-plt" alt="Four panels compare solid true and dashed estimated unit-peak HRFs. Shape correlations range from 0.998 to 1.000; the largest width difference is 0.10 seconds." width="100%"><img class="albers-phone-twin" src="voxel-wise-hrf_files/figure-html/estimated-shape-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="515" hidden><p class="caption">
 Estimated SPMG3 curves closely follow the independently generated
 unit-peak HRFs.
 </p>
@@ -411,9 +445,9 @@ unit-peak HRFs.
 </div>
 </div>
 <div class="section level2">
-<h2 id="estimate-trial-amplitudes-with-the-public-api">Estimate trial amplitudes with the public API<a class="anchor" aria-label="anchor" href="#estimate-trial-amplitudes-with-the-public-api"></a>
+<h2 id="estimate-trial-amplitudes-with-lss_with_hrf">Estimate trial amplitudes with <code>lss_with_hrf()</code><a class="anchor" aria-label="anchor" href="#estimate-trial-amplitudes-with-lss_with_hrf"></a>
 </h2>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss_with_hrf.html">lss_with_hrf</a></span><span class="op">(</span></span>
 <span>  <span class="va">analysis_response</span>,</span>
 <span>  <span class="va">analysis_events</span>,</span>
@@ -437,12 +471,13 @@ unit-peak HRFs.
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span>
 <span><span class="va">dense_cpp</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">fit_cpp</span><span class="op">)</span></span></code></pre></div>
-<p>The R engine returns a dense matrix. The C++ request returns an
+<p>With <code>engine = "R"</code>, <code><a href="../reference/lss_with_hrf.html">lss_with_hrf()</a></code> returns a
+dense matrix. With <code>engine = "C++"</code>, it returns an
 <code>LSSBeta</code> object backed by <code>bigmemory</code>;
-<code><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix()</a></code> is its documented dense extraction path. Both
-paths report the engine actually used, so a backend fallback is not
-silent.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix()</a></code> is the documented way to extract a dense matrix
+from it. Both results record the engine actually used, so if the
+function falls back to a different backend, the output shows it.</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">engine_contract</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  Requested <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fit_r</span>, <span class="st">"engine_requested"</span><span class="op">)</span>, <span class="va">fit_cpp</span><span class="op">$</span><span class="va">engine_requested</span><span class="op">)</span>,</span>
 <span>  Used <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">fit_r</span>, <span class="st">"engine_used"</span><span class="op">)</span>, <span class="va">fit_cpp</span><span class="op">$</span><span class="va">engine_used</span><span class="op">)</span>,</span>
@@ -486,7 +521,7 @@ units.</caption>
 </table>
 </div>
 <div class="section level2">
-<h2 id="compare-only-estimators-of-the-same-amplitude">Compare only estimators of the same amplitude<a class="anchor" aria-label="anchor" href="#compare-only-estimators-of-the-same-amplitude"></a>
+<h2 id="compare-estimators-on-the-same-amplitude-scale">Compare estimators on the same amplitude scale<a class="anchor" aria-label="anchor" href="#compare-estimators-on-the-same-amplitude-scale"></a>
 </h2>
 <p>The reference below fits every trial and voxel with the known
 unit-peak HRF, the same fixed regressors, and the same nuisance span. A
@@ -494,8 +529,8 @@ canonical comparator also uses a unit-peak HRF. All rows therefore
 target peak-response amplitude; the comparison keeps HRF scale
 consistent across methods.</p>
 <table class="table">
-<caption>A fair comparison on the common peak-response-amplitude
-scale.</caption>
+<caption>Amplitude errors of the three estimators, all on the
+peak-response-amplitude scale.</caption>
 <colgroup>
 <col width="38%">
 <col width="29%">
@@ -514,8 +549,8 @@ scale.</caption>
 </tr>
 <tr class="even">
 <td align="left">estimated unit-peak voxel HRF</td>
-<td align="right">0.1672</td>
-<td align="right">0.1661</td>
+<td align="right">0.1565</td>
+<td align="right">0.1554</td>
 </tr>
 <tr class="odd">
 <td align="left">unit-peak canonical HRF</td>
@@ -536,32 +571,32 @@ scale.</caption>
 <tr class="odd">
 <td align="left">voxel_1</td>
 <td align="right">2</td>
-<td align="right">2.0172</td>
-<td align="right">0.0172</td>
+<td align="right">2.0154</td>
+<td align="right">0.0154</td>
 </tr>
 <tr class="even">
 <td align="left">voxel_2</td>
 <td align="right">3</td>
-<td align="right">3.0135</td>
-<td align="right">0.0135</td>
+<td align="right">3.0108</td>
+<td align="right">0.0108</td>
 </tr>
 <tr class="odd">
 <td align="left">voxel_3</td>
 <td align="right">4</td>
-<td align="right">3.9330</td>
-<td align="right">-0.0670</td>
+<td align="right">3.9370</td>
+<td align="right">-0.0630</td>
 </tr>
 <tr class="even">
 <td align="left">voxel_4</td>
 <td align="right">5</td>
-<td align="right">4.6770</td>
-<td align="right">-0.3230</td>
+<td align="right">4.6972</td>
+<td align="right">-0.3028</td>
 </tr>
 </tbody>
 </table>
 <p>In this deliberately constructed four-voxel example, the
 estimated-shape fit is closer to truth than the canonical fit. Its
-largest error is in voxel_4 (mean error -0.323). One possible
+largest error is in voxel_4 (mean error -0.303). One possible
 contributor is basis mismatch: the three SPMG3 functions need not
 exactly reproduce a time-dilated HRF, including its undershoot, and
 remaining shape errors can affect estimates when responses overlap. This
@@ -571,7 +606,7 @@ Performance also depends on calibration quality, event timing, noise,
 and nuisance modeling.</p>
 </div>
 <div class="section level2">
-<h2 id="check-physical-time-and-run-boundaries">Check physical time and run boundaries<a class="anchor" aria-label="anchor" href="#check-physical-time-and-run-boundaries"></a>
+<h2 id="check-other-trs-and-run-boundaries">Check other TRs and run boundaries<a class="anchor" aria-label="anchor" href="#check-other-trs-and-run-boundaries"></a>
 </h2>
 <p>The same public pipeline also runs at non-unit TR. The table below
 repeats a correctly specified one-basis coefficient experiment at TR 0.8
@@ -612,10 +647,11 @@ TRs.</caption>
 </tr>
 </tbody>
 </table>
-<p>For multiple runs, add an exact-integer <code>run</code> column and
-keep event onsets relative to their run. The design is built separately
-inside each run, so an HRF tail cannot leak across an acquisition
-boundary.</p>
+<p>For multiple runs, add a <code>run</code> column of exact integer run
+indices and give each event’s onset relative to the start of its run.
+The trial design is built separately within each run, so an HRF tail
+cannot leak across a run boundary. The table below checks this for two
+runs of unequal length.</p>
 <table class="table">
 <caption>HRF convolution stays within each run despite unequal run
 lengths.</caption>
@@ -636,7 +672,7 @@ lengths.</caption>
 </table>
 </div>
 <div class="section level2">
-<h2 id="know-the-boundaries-of-the-workflow">Know the boundaries of the workflow<a class="anchor" aria-label="anchor" href="#know-the-boundaries-of-the-workflow"></a>
+<h2 id="assumptions-and-limitations">Assumptions and limitations<a class="anchor" aria-label="anchor" href="#assumptions-and-limitations"></a>
 </h2>
 <ul>
 <li>
@@ -658,10 +694,11 @@ when they are absent. If that complete common span contains the pooled
 HRF basis, shape is not identifiable and estimation fails
 explicitly.</li>
 <li>Run-aware convolution prevents an HRF tail from crossing a run
-boundary, but a joint LSS fit still pools the other-trial aggregate
-across runs. Fit runs separately, then restore global event identities,
-when the estimand must be run-local.</li>
-<li>Event onsets and durations are finite physical times. Empty event
+boundary, but in a joint LSS fit the aggregate other-trials regressor
+still sums trials from all runs. When the estimand must be run-local,
+fit runs separately, then map each trial back to its original
+event.</li>
+<li>Event onsets and durations are finite times in seconds. Empty event
 tables, out-of-run onsets, malformed run indices, non-finite
 coefficients, and incomplete or duplicated voxel names fail
 explicitly.</li>
@@ -685,9 +722,13 @@ reduction.</li>
 <div class="section level2">
 <h2 id="next-step">Next step<a class="anchor" aria-label="anchor" href="#next-step"></a>
 </h2>
-<p><code><a href="../articles/sbhm.html">vignette("sbhm")</a></code> presents a library-constrained
-alternative for estimating voxel-specific shapes, score margins, and
-trial event-design coefficients.</p>
+<p><code><a href="../articles/rank1_hrf.html">vignette("rank1_hrf")</a></code> estimates each voxel’s HRF jointly
+with the trial amplitudes (the rank-1 GLM of Pedregosa et al., 2015)
+instead of from one pooled amplitude, which matters when conditions
+differ in their mean response. <code><a href="../articles/sbhm.html">vignette("sbhm")</a></code> presents a
+library-constrained alternative for estimating voxel-specific shapes,
+score margins (how far the best library shape scores above the
+runner-up), and trial event-design coefficients.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

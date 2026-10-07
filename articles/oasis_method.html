@@ -41,7 +41,9 @@
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul>
@@ -142,6 +144,9 @@ calculate the ridge bias–variance trade-off exactly for this design.</p>
 <span><span class="va">TR</span> <span class="op">&lt;-</span> <span class="fl">1</span></span>
 <span><span class="va">sframe</span> <span class="op">&lt;-</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/sampling_frame.html" class="external-link">sampling_frame</a></span><span class="op">(</span>blocklens <span class="op">=</span> <span class="va">n_time</span>, TR <span class="op">=</span> <span class="va">TR</span><span class="op">)</span></span>
 <span><span class="va">times</span> <span class="op">&lt;-</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/samples.html" class="external-link">samples</a></span><span class="op">(</span><span class="va">sframe</span>, global <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co"># Canonical HRF scaled to a unit peak over a 30 s window, so coefficients are</span></span>
+<span><span class="co"># on the peak-response scale.</span></span>
+<span><span class="va">hrf_unit</span> <span class="op">&lt;-</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/gen_hrf.html" class="external-link">gen_hrf</a></span><span class="op">(</span><span class="fu">fmrihrf</span><span class="fu">::</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/HRF_objects.html" class="external-link">HRF_SPMG1</a></span>, normalize <span class="op">=</span> <span class="cn">TRUE</span>, span <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">onsets_a</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">20</span>, <span class="fl">31</span>, <span class="fl">43</span>, <span class="fl">56</span>, <span class="fl">68</span>, <span class="fl">81</span>, <span class="fl">95</span>, <span class="fl">108</span>, <span class="fl">121</span>, <span class="fl">135</span>, <span class="fl">149</span><span class="op">)</span></span>
 <span><span class="va">onsets_b</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">15</span>, <span class="fl">37</span>, <span class="fl">61</span>, <span class="fl">86</span>, <span class="fl">112</span>, <span class="fl">141</span><span class="op">)</span></span>
@@ -237,10 +242,10 @@ to the regressors shared by every trial model.</p>
 <span><span class="co">#&gt; [1] 12  6</span></span>
 <span><span class="va">fit_default</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">4</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">3</span><span class="op">]</span></span>
 <span><span class="co">#&gt;           Voxel_1   Voxel_2    Voxel_3</span></span>
-<span><span class="co">#&gt; Trial_1 1.5641689 1.7579667  1.8345523</span></span>
-<span><span class="co">#&gt; Trial_2 1.4541214 0.3269049  1.8040081</span></span>
-<span><span class="co">#&gt; Trial_3 0.8812229 0.3447504 -0.1357292</span></span>
-<span><span class="co">#&gt; Trial_4 1.3235624 1.2075484 -0.9014281</span></span></code></pre></div>
+<span><span class="co">#&gt; Trial_1 1.5666116 1.7539879  1.8351202</span></span>
+<span><span class="co">#&gt; Trial_2 1.4523001 0.3131492  1.7992711</span></span>
+<span><span class="co">#&gt; Trial_3 0.8787142 0.3259330 -0.1388822</span></span>
+<span><span class="co">#&gt; Trial_4 1.3178542 1.1977657 -0.9049780</span></span></code></pre></div>
 <p>The default result is an <code>n_trials</code> by
 <code>n_voxels</code> matrix because this is a one-basis design. These
 are fractionally penalized coefficients. Including condition B in
@@ -248,12 +253,14 @@ are fractionally penalized coefficients. Including condition B in
 present in the simulation.</p>
 </div>
 <div class="section level2">
-<h2 id="match-ordinary-lss-exactly-when-that-is-the-target">Match ordinary LSS exactly when that is the target<a class="anchor" aria-label="anchor" href="#match-ordinary-lss-exactly-when-that-is-the-target"></a>
+<h2 id="reproduce-ordinary-lss-exactly">Reproduce ordinary LSS exactly<a class="anchor" aria-label="anchor" href="#reproduce-ordinary-lss-exactly"></a>
 </h2>
-<p>Use explicit zero ridge. The verification assembles every
-corresponding GLM independently as
-<code>[target trial, other target trials, Z, condition B]</code> and
-checks all trials and voxels.</p>
+<p>To match ordinary (unpenalized) LSS, set both ridge parameters to
+zero explicitly. To verify the fit, a hidden chunk builds each trial’s
+GLM independently as
+<code>[target trial, other target trials, Z, condition B]</code>, with
+the other target trials summed into one column, and compares the
+coefficients for all trials and voxels.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_unpenalized</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>  Y <span class="op">=</span> <span class="va">Y</span>,</span>
@@ -282,7 +289,7 @@ event and other-condition design can be constructed and checked in the
 same workflow.</p>
 </div>
 <div class="section level2">
-<h2 id="evaluate-ridge-on-the-scale-you-care-about">Evaluate ridge on the scale you care about<a class="anchor" aria-label="anchor" href="#evaluate-ridge-on-the-scale-you-care-about"></a>
+<h2 id="evaluate-ridge-by-bias-variance-and-error-against-the-truth">Evaluate ridge by bias, variance, and error against the truth<a class="anchor" aria-label="anchor" href="#evaluate-ridge-by-bias-variance-and-error-against-the-truth"></a>
 </h2>
 <p>Ridge reduces sampling variance by accepting bias. A smaller spread
 of fitted trials is not, by itself, evidence of improvement. For this
@@ -313,35 +320,35 @@ this design, truth, and noise scale.</caption>
 <tbody>
 <tr class="odd">
 <td align="right">0.00</td>
-<td align="right">0.0345</td>
+<td align="right">0.0342</td>
 <td align="right">0.0022</td>
-<td align="right">0.6371</td>
-<td align="right">0.6393</td>
-<td align="right">0.7996</td>
-<td align="right">0.6079</td>
+<td align="right">0.6362</td>
+<td align="right">0.6384</td>
+<td align="right">0.7990</td>
+<td align="right">0.6072</td>
 </tr>
 <tr class="even">
 <td align="right">0.01</td>
-<td align="right">0.0380</td>
+<td align="right">0.0377</td>
 <td align="right">0.0023</td>
-<td align="right">0.6231</td>
-<td align="right">0.6254</td>
-<td align="right">0.7908</td>
-<td align="right">0.6209</td>
+<td align="right">0.6223</td>
+<td align="right">0.6245</td>
+<td align="right">0.7903</td>
+<td align="right">0.6203</td>
 </tr>
 <tr class="odd">
 <td align="right">0.05</td>
-<td align="right">0.0747</td>
-<td align="right">0.0070</td>
-<td align="right">0.5717</td>
-<td align="right">0.5787</td>
-<td align="right">0.7607</td>
-<td align="right">0.5907</td>
+<td align="right">0.0742</td>
+<td align="right">0.0069</td>
+<td align="right">0.5710</td>
+<td align="right">0.5779</td>
+<td align="right">0.7602</td>
+<td align="right">0.5897</td>
 </tr>
 </tbody>
 </table>
 <div class="figure" style="text-align: center">
-<img src="oasis_method_files/figure-html/ridge-plot-1.png" class="r-plt" alt="Grouped bars show mean MSE of 0.639 at zero ridge and 0.579 at fractional ridge 0.05; variance falls and squared bias rises as the ridge grows." width="100%"><img class="albers-phone-twin" src="oasis_method_files/figure-html/ridge-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="515" hidden><p class="caption">
+<img src="oasis_method_files/figure-html/ridge-plot-1.png" class="r-plt" alt="Grouped bars show mean MSE of 0.638 at zero ridge and 0.578 at fractional ridge 0.05; variance falls and squared bias rises as the ridge grows." width="100%"><img class="albers-phone-twin" src="oasis_method_files/figure-html/ridge-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="515" hidden><p class="caption">
 Exact squared bias, variance, and MSE for three fractional-ridge
 settings in the fixed simulation; all bars use squared-beta units.
 </p>
@@ -349,9 +356,9 @@ settings in the fixed simulation; all bars use squared-beta units.
 <p>This is one scenario, not a universal ranking. Choose a ridge policy
 using a simulation that matches the planned timing, basis, nuisance
 structure, signal scale, and downstream loss. The package does not
-justify generic penalty cutoffs from inter-stimulus interval alone. Even
-the zero-penalty row has a small bias against the generating trial
-effects: ordinary LSS gives all other target trials one shared
+endorse generic penalty cutoffs based on the inter-stimulus interval
+alone. Even the zero-penalty row has a small bias against the generating
+trial effects: ordinary LSS gives all other target trials one shared
 coefficient, while this simulation gives them heterogeneous
 coefficients. The table therefore evaluates the full LSS estimator
 against the generating effects, not merely ridge against an unpenalized
@@ -360,10 +367,15 @@ LSS reference.</p>
 <div class="section level2">
 <h2 id="inspect-design-diagnostics">Inspect design diagnostics<a class="anchor" aria-label="anchor" href="#inspect-design-diagnostics"></a>
 </h2>
-<p><code>return_diag = TRUE</code> changes the return to a list. For a
-one-basis fit, <code>d</code>, <code>alpha</code>, and <code>s</code>
-are the target energy, target–other cross-product, and other-trial
-energy after projection.</p>
+<p>With <code>return_diag = TRUE</code>, <code><a href="../reference/lss.html">lss()</a></code> returns a
+list instead of a matrix, with the coefficients in <code>beta</code> and
+design diagnostics in <code>diag</code>. The diagnostics are computed
+after the common span has been projected out of the design. For a
+one-basis fit, <code>diag</code> holds one value per trial in each of
+three vectors: <code>d</code>, the energy (sum of squares) of the
+target-trial regressor; <code>s</code>, the energy of the summed
+other-trial regressor; and <code>alpha</code>, their cross-product. The
+code below converts <code>alpha</code> to a correlation.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_diag</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>  <span class="va">Y</span>,</span>
@@ -380,10 +392,10 @@ energy after projection.</p>
 <span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">diagnostics</span>, <span class="fl">4</span><span class="op">)</span></span>
 <span><span class="co">#&gt;          target_energy other_energy target_other_correlation</span></span>
-<span><span class="co">#&gt; trial_01      3.584692     20.70195               -0.2239838</span></span>
-<span><span class="co">#&gt; trial_02      3.650588     21.49016               -0.2660595</span></span>
-<span><span class="co">#&gt; trial_03      3.691278     21.65657               -0.2751521</span></span>
-<span><span class="co">#&gt; trial_04      3.754391     21.39954               -0.2636462</span></span></code></pre></div>
+<span><span class="co">#&gt; trial_01      3.589038     20.81987               -0.2240243</span></span>
+<span><span class="co">#&gt; trial_02      3.654168     21.58465               -0.2647735</span></span>
+<span><span class="co">#&gt; trial_03      3.694451     21.78454               -0.2755007</span></span>
+<span><span class="co">#&gt; trial_04      3.756407     21.50997               -0.2631312</span></span></code></pre></div>
 <p>These are unpenalized cross-products on the residualized design
 scale. They are useful for finding low-energy or highly correlated
 trials, but they are not a condition number, a ridge calibration, or an
@@ -392,9 +404,11 @@ inferential test.</p>
 <div class="section level2">
 <h2 id="interpret-multi-basis-coefficients">Interpret multi-basis coefficients<a class="anchor" aria-label="anchor" href="#interpret-multi-basis-coefficients"></a>
 </h2>
-<p>An event-built SPMG3 design has three rows per trial: canonical,
-temporal derivative, and dispersion-derivative coefficients in that
-basis. Their scale depends on the basis definition.</p>
+<p>The SPMG3 basis (<code><a href="https://bbuchsbaum.github.io/fmrihrf/reference/HRF_objects.html" class="external-link">fmrihrf::HRF_SPMG3</a></code>) is the SPM
+canonical HRF plus its temporal and dispersion derivatives. When OASIS
+builds the design from events with this basis, the output has three rows
+per trial: the canonical, temporal-derivative, and dispersion-derivative
+coefficients. Their scale depends on the basis definition.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">spec_spmg3</span> <span class="op">&lt;-</span> <span class="va">design_spec</span></span>
 <span><span class="va">spec_spmg3</span><span class="op">$</span><span class="va">cond</span><span class="op">$</span><span class="va">hrf</span> <span class="op">&lt;-</span> <span class="fu">fmrihrf</span><span class="fu">::</span><span class="va"><a href="https://bbuchsbaum.github.io/fmrihrf/reference/HRF_objects.html" class="external-link">HRF_SPMG3</a></span></span>
@@ -481,10 +495,18 @@ whitened-and-residualized design when whitening is active.</p>
 <div class="section level2">
 <h2 id="standard-errors-require-the-unpenalized-fixed-design-model">Standard errors require the unpenalized fixed-design model<a class="anchor" aria-label="anchor" href="#standard-errors-require-the-unpenalized-fixed-design-model"></a>
 </h2>
-<p>To check the standard errors (SEs), generate data that satisfy each
-LSS model: all target trials share a common coefficient vector,
-condition B and <code>Z</code> are in the fitted common span, and the
-temporal errors are iid Gaussian.</p>
+<p><code>return_se = TRUE</code> is available only for an unpenalized
+fit (<code>ridge_x = ridge_b = 0</code>) with a full-rank trial model
+and a fixed design. It raises an error instead of returning SEs when the
+fit uses ridge, estimated prewhitening, HRF-grid selection, or
+voxel-adaptive HRFs, because none of these has calibrated model-based
+uncertainty in OASIS.</p>
+<p>To check the SEs against a known answer, the example generates data
+that exactly satisfy each trial’s LSS model: all target trials share a
+common coefficient vector, condition B and <code>Z</code> are in the
+fitted common span, and the temporal errors are iid Gaussian. A hidden
+chunk compares the OASIS betas and SEs with those from separately fitted
+full GLMs.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit_se</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
 <span>  <span class="va">Y_se</span>,</span>
@@ -575,13 +597,15 @@ report model SEs for penalized FIR coefficients.</p>
 <div class="section level2">
 <h2 id="hrf-grid-selection-is-exploratory">HRF-grid selection is exploratory<a class="anchor" aria-label="anchor" href="#hrf-grid-selection-is-exploratory"></a>
 </h2>
-<p><code>hrf_grid</code> chooses one candidate from the observed
-<code>Y</code> using a matched-filter score after residualizing both the
-response and candidate against the full common span (<code>Z</code>,
-<code>Nuisance</code>, and modeled <code>others</code>), then fits that
-design. The call shown returns the beta matrix. Even when design
-diagnostics are requested, the public <code><a href="../reference/lss.html">lss()</a></code> route does not
-expose the winning candidate or candidate scores, and it does not return
+<p>When <code>design_spec$hrf_grid</code> lists candidate HRFs, OASIS
+chooses one of them for the target condition from the observed
+<code>Y</code>. It residualizes both the response and each candidate
+regressor against the full common span (<code>Z</code>,
+<code>Nuisance</code>, and modeled <code>others</code>), scores each
+candidate with a matched filter, and fits the design with the winner.
+The call shown returns the beta matrix. Even when design diagnostics are
+requested, the public <code><a href="../reference/lss.html">lss()</a></code> route does not expose the
+winning candidate or candidate scores, and it does not return
 selection-adjusted uncertainty.</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">grid_spec</span> <span class="op">&lt;-</span> <span class="va">design_spec</span></span>
@@ -624,9 +648,11 @@ to <code><a href="../articles/voxel-wise-hrf.html">vignette("voxel-wise-hrf")</a
 <div class="section level2">
 <h2 id="prewhitening-changes-the-fitted-space">Prewhitening changes the fitted space<a class="anchor" aria-label="anchor" href="#prewhitening-changes-the-fitted-space"></a>
 </h2>
-<p>Use the top-level <code>prewhiten</code> argument. The same estimated
-operator is applied to the response, target design, and common design
-before OASIS fits coefficients.</p>
+<p>To model temporally autocorrelated noise, pass
+<code><a href="../reference/prewhiten_options.html">prewhiten_options()</a></code> to the top-level <code>prewhiten</code>
+argument of <code><a href="../reference/lss.html">lss()</a></code>. The same estimated whitening operator is
+applied to the response, target design, and common design before OASIS
+fits coefficients.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">20260814</span><span class="op">)</span></span>
 <span><span class="va">ar_error</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n_time</span> <span class="op">*</span> <span class="va">n_voxels</span><span class="op">)</span>, <span class="va">n_time</span><span class="op">)</span>, <span class="fl">2</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span></span>
@@ -682,12 +708,12 @@ one shared design matrix.</p>
 does not cross run boundaries. <code>pooling = "global"</code> with
 <code>runs</code> uses one shared set of noise coefficients while still
 respecting those boundaries; <code>pooling = "run"</code> estimates a
-separate set for each run. Estimated-prewhitening uncertainty is not
-calibrated, so this coefficient route cannot also request OASIS model
-SEs.</p>
+separate set for each run. A whitened fit returns coefficients only; see
+<a href="#standard-errors-require-the-unpenalized-fixed-design-model">Standard
+errors</a>.</p>
 </div>
 <div class="section level2">
-<h2 id="a-compact-decision-guide">A compact decision guide<a class="anchor" aria-label="anchor" href="#a-compact-decision-guide"></a>
+<h2 id="when-to-use-oasis">When to use OASIS<a class="anchor" aria-label="anchor" href="#when-to-use-oasis"></a>
 </h2>
 <ul>
 <li>Use a standard LSS backend for a fixed one-basis <code>X</code> when

@@ -6,9 +6,9 @@ trial-specific systems in batches. With zero ridge penalties, it gives
 the ordinary LSS estimator. Nonzero penalties give a regularized LSS
 estimator.
 
-This article establishes the estimand, derives the one- and multi-basis
-systems, and maps each mathematical object to the current
-implementation. Read it after
+This article defines what OASIS estimates, derives the linear systems it
+solves for one and for several HRF basis functions per trial, and maps
+each mathematical object to the current implementation. Read it after
 [`vignette("fmrilss")`](https://bbuchsbaum.github.io/fmrilss/articles/fmrilss.md)
 and
 [`vignette("oasis_method")`](https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.md);
@@ -36,15 +36,15 @@ $`C \in \mathbb{R}^{T \times K_z}`$ the common design: intercepts,
 drifts, nuisance variables, and aggregates for conditions not being
 estimated. Only the column space of $`C`$ matters. If
 $`Q \in \mathbb{R}^{T \times p}`$ is an orthonormal basis for that
-space, then
+space, then the residualizing projection
 
 ``` math
 R = I_T - QQ^\mathsf{T}
 ```
 
-removes it. The implementation rank-reduces $`C`$ before passing it to
-the compiled kernels, so redundant nuisance columns do not add arbitrary
-projection directions.
+removes from any vector its component in that space. The implementation
+rank-reduces $`C`$ before passing it to the compiled kernels, so
+redundant nuisance columns do not add arbitrary projection directions.
 
 For trial $`j`$, let $`A_j \in \mathbb{R}^{T \times K}`$ contain its HRF
 basis columns and define
@@ -53,8 +53,11 @@ basis columns and define
 B_j = \sum_{i \ne j} A_i.
 ```
 
-After applying the Frisch–Waugh–Lovell reduction, the trial-wise model
-is
+so $`B_j`$ is the sum of the basis columns of all other trials. The
+Frisch–Waugh–Lovell theorem says that the coefficients on $`A_j`$ and
+$`B_j`$ are unchanged if $`C`$ is dropped from the model and $`Y`$,
+$`A_j`$, and $`B_j`$ are residualized by $`R`$ instead. After this
+reduction, the trial-wise model is
 
 ``` math
 RY = RA_j\,\boldsymbol{\beta}_j + RB_j\,\boldsymbol{\gamma}_j + R\varepsilon_j,
@@ -70,8 +73,10 @@ definition and normalization.
 
 ## One-basis system
 
-Write $`a_j=Rx_j`$, $`b_j=\sum_{i\ne j}a_i`$, and $`s=\sum_i a_i`$. The
-reusable design scalars are
+For $`K=1`$, $`A_j`$ is a single column $`x_j`$. Write $`a_j=Rx_j`$,
+$`b_j=\sum_{i\ne j}a_i`$, and $`s=\sum_i a_i`$. The design scalars,
+which depend on the design but not on $`Y`$ and are therefore computed
+once for all voxels, are
 
 ``` math
 d_j=a_j^\mathsf{T}a_j,\qquad
@@ -79,9 +84,14 @@ c_j=a_j^\mathsf{T}b_j,\qquad
 e_j=b_j^\mathsf{T}b_j.
 ```
 
-The source names these quantities `d`, `alpha`, and `s`, respectively.
-For all voxels at once, define $`n_{1j}=a_j^\mathsf{T}RY`$ and
-$`n_{2j}=b_j^\mathsf{T}RY=s^\mathsf{T}RY-n_{1j}`$. The penalized normal
+The C++ source, and the diagnostics returned with `return_diag = TRUE`,
+name these quantities `d`, `alpha`, and `s`, respectively; note that the
+code’s `s` is $`e_j`$, not the summed column $`s`$. For all voxels at
+once, define $`n_{1j}=a_j^\mathsf{T}RY`$ and
+$`n_{2j}=b_j^\mathsf{T}RY=s^\mathsf{T}RY-n_{1j}`$. With ridge penalties
+$`\lambda_x`$ on the trial coefficient and $`\lambda_b`$ on the
+other-trials coefficient (both zero for ordinary LSS; see [Ridge changes
+the estimator](#ridge-changes-the-estimator)), the penalized normal
 equations are
 
 ``` math
@@ -105,10 +115,11 @@ $`2\times2`$ matrix gives
 
 When both penalties are zero and the two-column trial model has full
 rank, this is exactly the ordinary LSS coefficient. A rank-deficient
-unpenalized model is not identifiable, and the public OASIS path fails
-rather than silently adding jitter. This $`2\times2`$ form assumes
-$`N>1`$; with one trial there is no “other trials” column, and OASIS
-solves the one-column target model instead.
+unpenalized model is not identifiable, and the public OASIS path,
+`lss(..., method = "oasis")`, stops with an error rather than silently
+adding a small diagonal jitter. This $`2\times2`$ form assumes $`N>1`$;
+with one trial there is no “other trials” column, and OASIS solves the
+one-column target model instead.
 
 ## Multi-basis system
 
@@ -171,15 +182,16 @@ dim(fit1$beta)
 Maximum discrepancy from independently assembled trial-wise GLMs.
 {.table}
 
-These checks use a correctly specified fixed design with common
-coefficients for the summed trial signal and independent Gaussian
+The vignette build stops if either maximum discrepancy reaches
+$`10^{-10}`$. These checks use a correctly specified fixed design with
+common coefficients for the summed trial signal and independent Gaussian
 errors. They verify numerical agreement with the corresponding GLMs in
 these examples. Uncertainty for ridge, estimated whitening, and
 data-adaptive HRF selection requires additional methods.
 
 ## Ridge changes the estimator
 
-For each trial and voxel, ridge minimizes
+For each trial and voxel, the ridge estimate minimizes
 
 ``` math
 \lVert RY-RA_j\boldsymbol{\beta}_j-RB_j\boldsymbol{\gamma}_j\rVert_F^2
@@ -189,17 +201,19 @@ For each trial and voxel, ridge minimizes
 
 With `ridge_mode = "absolute"`, `ridge_x` and `ridge_b` are the
 penalties in that expression. With `ridge_mode = "fractional"`, the
-implementation multiplies them by mean residualized design energies:
+implementation multiplies them by mean residualized design energies,
+where a column’s energy is its squared norm after residualization:
 
 - for $`K=1`$, the means of $`d_j`$ and $`e_j`$;
 - for $`K>1`$, the mean diagonal entries of $`D_j`$ and $`E_j`$,
   averaged over trials.
 
-Fractional scaling preserves the intended relative penalty under a
-common rescaling of the whole trial design. It does not make arbitrary,
-separate rescalings of multi-basis columns equivalent. Ridge can
-stabilize a poorly conditioned system, but its coefficients are
-penalized estimates rather than ordinary LSS coefficients.
+Because of this scaling, multiplying the whole trial design by a common
+constant leaves the intended relative penalty unchanged. Fractional
+scaling does not make arbitrary, separate rescalings of individual
+multi-basis columns equivalent. Ridge can stabilize a poorly conditioned
+system, but its coefficients are penalized estimates rather than
+ordinary LSS coefficients.
 
 The package default is fractional ridge with `ridge_x = ridge_b = 0.05`.
 Request zero penalties explicitly when exact unpenalized LSS is the
@@ -249,7 +263,7 @@ an HRF from the same data.
 rejects ridge together with `return_se = TRUE`; the backend also rejects
 estimated prewhitening and voxel-adaptive HRF modes for this request.
 
-## Prewhitening belongs outside `oasis=`
+## Prewhitening is set by `prewhiten`, not `oasis`
 
 Temporal whitening is handled by the top-level `prewhiten` argument and
 the shared `fmriAR` integration. The same estimated linear
@@ -269,23 +283,25 @@ fit_ar1 <- lss(
 ```
 
 For multiple runs, supply `pooling = "run"` and the run labels. The
-legacy `oasis$whiten` field is deprecated, ignored, and emits a note; it
-must not be used to describe the current algorithm. Coefficients remain
-available after estimated whitening, but `return_se = TRUE` is rejected
-because these SEs do not account for uncertainty in the estimated
-whitening model.
+legacy `oasis$whiten` field is deprecated and ignored with a warning;
+use `prewhiten` instead. Coefficients remain available after estimated
+whitening, but `return_se = TRUE` fails closed: the call stops with an
+error instead of returning standard errors, because uncertainty for
+feasible GLS (GLS with an estimated noise covariance) is not calibrated
+here.
 
-## Design construction and identity
+## Design construction and trial/basis identity
 
 There are two supported routes into the same solver:
 
 1.  `X` supplies an already convolved trial design.
-2.  `oasis$design_spec` asks the backend to construct one with
-    `fmrihrf`.
+2.  `oasis$design_spec` asks the backend to construct one from event
+    onsets with `fmrihrf`.
 
-The event route preserves event duration and amplitude and adds
-aggregates for other conditions to the common nuisance span. In
-multi-run low-level design specifications, onsets are global seconds;
+The event route (2) preserves event duration and amplitude and adds
+aggregate regressors for other conditions to the common nuisance span.
+In multi-run low-level design specifications, onsets are global seconds
+rather than within-run times;
 [`lss_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_design.md)
 with a
 [`fmridesign::event_model()`](https://bbuchsbaum.github.io/fmridesign/reference/event_model.html)
@@ -298,12 +314,12 @@ contains $`NK`$ rows in canonical trial-by-basis order. Supplying an
 incorrect grouping would change the model being fitted, so ambiguous
 trial/basis mappings are rejected.
 
-If `design_spec$hrf_grid` is supplied, the implementation chooses a
-candidate using the observed data before fitting. That is a
-model-selection step. Treat the resulting coefficients as conditional on
-the selected design. Because ordinary post-selection standard errors are
-not established by the fixed-design formula above, this route rejects
-`return_se = TRUE`.
+If `design_spec$hrf_grid` is supplied, the implementation uses the
+observed data to choose a candidate HRF from the grid before fitting.
+That is a model-selection step. Treat the resulting coefficients as
+conditional on the selected design. Because ordinary post-selection
+standard errors are not established by the fixed-design formula above,
+this route rejects `return_se = TRUE`.
 
 The vignette also checks output and diagnostic dimensions, preservation
 of trial/basis identity after column permutations, and the expected
@@ -344,7 +360,7 @@ saved depends on $`T,N,V,K,p`$, BLAS, memory bandwidth, block size, and
 the implementation used for comparison; the operation counts do not
 imply a fixed speedup.
 
-## Implementation map
+## Implementation map and return values
 
 These names are internal implementation landmarks, not additional public
 APIs.

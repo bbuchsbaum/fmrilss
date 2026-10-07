@@ -41,7 +41,9 @@
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul>
@@ -80,9 +82,10 @@ calculations shared across trial models, then solving the small
 trial-specific systems in batches. With zero ridge penalties, it gives
 the ordinary LSS estimator. Nonzero penalties give a regularized LSS
 estimator.</p>
-<p>This article establishes the estimand, derives the one- and
-multi-basis systems, and maps each mathematical object to the current
-implementation. Read it after <code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code> and
+<p>This article defines what OASIS estimates, derives the linear systems
+it solves for one and for several HRF basis functions per trial, and
+maps each mathematical object to the current implementation. Read it
+after <code><a href="../articles/fmrilss.html">vignette("fmrilss")</a></code> and
 <code><a href="../articles/oasis_method.html">vignette("oasis_method")</a></code>; those articles introduce the
 practical meaning of LSS and the user-facing OASIS API.</p>
 <div class="section level2">
@@ -135,11 +138,13 @@ aggregates for conditions not being estimated. Only the column space of
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math>
 matters. If
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Q</mi><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>T</mi><mo>×</mo><mi>p</mi></mrow></msup></mrow><annotation encoding="application/x-tex">Q \in \mathbb{R}^{T \times p}</annotation></semantics></math>
-is an orthonormal basis for that space, then</p>
+is an orthonormal basis for that space, then the residualizing
+projection</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mo>=</mo><msub><mi>I</mi><mi>T</mi></msub><mo>−</mo><mi>Q</mi><msup><mi>Q</mi><mi>𝖳</mi></msup></mrow><annotation encoding="application/x-tex">
 R = I_T - QQ^\mathsf{T}
 </annotation></semantics></math></p>
-<p>removes it. The implementation rank-reduces
+<p>removes from any vector its component in that space. The
+implementation rank-reduces
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math>
 before passing it to the compiled kernels, so redundant nuisance columns
 do not add arbitrary projection directions.</p>
@@ -151,8 +156,23 @@ contain its HRF basis columns and define</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>B</mi><mi>j</mi></msub><mo>=</mo><munder><mo>∑</mo><mrow><mi>i</mi><mo>≠</mo><mi>j</mi></mrow></munder><msub><mi>A</mi><mi>i</mi></msub><mi>.</mi></mrow><annotation encoding="application/x-tex">
 B_j = \sum_{i \ne j} A_i.
 </annotation></semantics></math></p>
-<p>After applying the Frisch–Waugh–Lovell reduction, the trial-wise
-model is</p>
+<p>so
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>B</mi><mi>j</mi></msub><annotation encoding="application/x-tex">B_j</annotation></semantics></math>
+is the sum of the basis columns of all other trials. The
+Frisch–Waugh–Lovell theorem says that the coefficients on
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>A</mi><mi>j</mi></msub><annotation encoding="application/x-tex">A_j</annotation></semantics></math>
+and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>B</mi><mi>j</mi></msub><annotation encoding="application/x-tex">B_j</annotation></semantics></math>
+are unchanged if
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math>
+is dropped from the model and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>A</mi><mi>j</mi></msub><annotation encoding="application/x-tex">A_j</annotation></semantics></math>,
+and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>B</mi><mi>j</mi></msub><annotation encoding="application/x-tex">B_j</annotation></semantics></math>
+are residualized by
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>R</mi><annotation encoding="application/x-tex">R</annotation></semantics></math>
+instead. After this reduction, the trial-wise model is</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mi>Y</mi><mo>=</mo><mi>R</mi><msub><mi>A</mi><mi>j</mi></msub><mspace width="0.167em"></mspace><msub><mi>𝛃</mi><mi>j</mi></msub><mo>+</mo><mi>R</mi><msub><mi>B</mi><mi>j</mi></msub><mspace width="0.167em"></mspace><msub><mi>𝛄</mi><mi>j</mi></msub><mo>+</mo><mi>R</mi><msub><mi>ε</mi><mi>j</mi></msub><mo>,</mo></mrow><annotation encoding="application/x-tex">
 RY = RA_j\,\boldsymbol{\beta}_j + RB_j\,\boldsymbol{\gamma}_j + R\varepsilon_j,
 </annotation></semantics></math></p>
@@ -172,23 +192,41 @@ response amplitude requires a separate definition and normalization.</p>
 <div class="section level2">
 <h2 id="one-basis-system">One-basis system<a class="anchor" aria-label="anchor" href="#one-basis-system"></a>
 </h2>
-<p>Write
+<p>For
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K=1</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>A</mi><mi>j</mi></msub><annotation encoding="application/x-tex">A_j</annotation></semantics></math>
+is a single column
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>x</mi><mi>j</mi></msub><annotation encoding="application/x-tex">x_j</annotation></semantics></math>.
+Write
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>a</mi><mi>j</mi></msub><mo>=</mo><mi>R</mi><msub><mi>x</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">a_j=Rx_j</annotation></semantics></math>,
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>b</mi><mi>j</mi></msub><mo>=</mo><msub><mo>∑</mo><mrow><mi>i</mi><mo>≠</mo><mi>j</mi></mrow></msub><msub><mi>a</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">b_j=\sum_{i\ne j}a_i</annotation></semantics></math>,
 and
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mo>=</mo><msub><mo>∑</mo><mi>i</mi></msub><msub><mi>a</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">s=\sum_i a_i</annotation></semantics></math>.
-The reusable design scalars are</p>
+The design scalars, which depend on the design but not on
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>
+and are therefore computed once for all voxels, are</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>d</mi><mi>j</mi></msub><mo>=</mo><msubsup><mi>a</mi><mi>j</mi><mi>𝖳</mi></msubsup><msub><mi>a</mi><mi>j</mi></msub><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>c</mi><mi>j</mi></msub><mo>=</mo><msubsup><mi>a</mi><mi>j</mi><mi>𝖳</mi></msubsup><msub><mi>b</mi><mi>j</mi></msub><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>e</mi><mi>j</mi></msub><mo>=</mo><msubsup><mi>b</mi><mi>j</mi><mi>𝖳</mi></msubsup><msub><mi>b</mi><mi>j</mi></msub><mi>.</mi></mrow><annotation encoding="application/x-tex">
 d_j=a_j^\mathsf{T}a_j,\qquad
 c_j=a_j^\mathsf{T}b_j,\qquad
 e_j=b_j^\mathsf{T}b_j.
 </annotation></semantics></math></p>
-<p>The source names these quantities <code>d</code>, <code>alpha</code>,
-and <code>s</code>, respectively. For all voxels at once, define
+<p>The C++ source, and the diagnostics returned with
+<code>return_diag = TRUE</code>, name these quantities <code>d</code>,
+<code>alpha</code>, and <code>s</code>, respectively; note that the
+code’s <code>s</code> is
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>e</mi><mi>j</mi></msub><annotation encoding="application/x-tex">e_j</annotation></semantics></math>,
+not the summed column
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math>.
+For all voxels at once, define
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>n</mi><mrow><mn>1</mn><mi>j</mi></mrow></msub><mo>=</mo><msubsup><mi>a</mi><mi>j</mi><mi>𝖳</mi></msubsup><mi>R</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">n_{1j}=a_j^\mathsf{T}RY</annotation></semantics></math>
 and
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>n</mi><mrow><mn>2</mn><mi>j</mi></mrow></msub><mo>=</mo><msubsup><mi>b</mi><mi>j</mi><mi>𝖳</mi></msubsup><mi>R</mi><mi>Y</mi><mo>=</mo><msup><mi>s</mi><mi>𝖳</mi></msup><mi>R</mi><mi>Y</mi><mo>−</mo><msub><mi>n</mi><mrow><mn>1</mn><mi>j</mi></mrow></msub></mrow><annotation encoding="application/x-tex">n_{2j}=b_j^\mathsf{T}RY=s^\mathsf{T}RY-n_{1j}</annotation></semantics></math>.
-The penalized normal equations are</p>
+With ridge penalties
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>λ</mi><mi>x</mi></msub><annotation encoding="application/x-tex">\lambda_x</annotation></semantics></math>
+on the trial coefficient and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>λ</mi><mi>b</mi></msub><annotation encoding="application/x-tex">\lambda_b</annotation></semantics></math>
+on the other-trials coefficient (both zero for ordinary LSS; see <a href="#ridge-changes-the-estimator">Ridge changes the estimator</a>),
+the penalized normal equations are</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>d</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>x</mi></msub></mtd><mtd columnalign="center" style="text-align: center"><msub><mi>c</mi><mi>j</mi></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>c</mi><mi>j</mi></msub></mtd><mtd columnalign="center" style="text-align: center"><msub><mi>e</mi><mi>j</mi></msub><mo>+</mo><msub><mi>λ</mi><mi>b</mi></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>β</mi><mi>j</mi></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>γ</mi><mi>j</mi></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mo>=</mo><mrow><mo stretchy="true" form="prefix">[</mo><mtable><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>n</mi><mrow><mn>1</mn><mi>j</mi></mrow></msub></mtd></mtr><mtr><mtd columnalign="center" style="text-align: center"><msub><mi>n</mi><mrow><mn>2</mn><mi>j</mi></mrow></msub></mtd></mtr></mtable><mo stretchy="true" form="postfix">]</mo></mrow><mi>.</mi></mrow><annotation encoding="application/x-tex">
 \begin{bmatrix}
 d_j+\lambda_x &amp; c_j \\
@@ -210,8 +248,9 @@ matrix gives</p>
 </annotation></semantics></math></p>
 <p>When both penalties are zero and the two-column trial model has full
 rank, this is exactly the ordinary LSS coefficient. A rank-deficient
-unpenalized model is not identifiable, and the public OASIS path fails
-rather than silently adding jitter. This
+unpenalized model is not identifiable, and the public OASIS path,
+<code>lss(..., method = "oasis")</code>, stops with an error rather than
+silently adding a small diagonal jitter. This
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mo>×</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">2\times2</annotation></semantics></math>
 form assumes
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>&gt;</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">N&gt;1</annotation></semantics></math>;
@@ -304,7 +343,9 @@ GLMs.</caption>
 </tr>
 </tbody>
 </table>
-<p>These checks use a correctly specified fixed design with common
+<p>The vignette build stops if either maximum discrepancy reaches
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>10</mn><mrow><mi>−</mi><mn>10</mn></mrow></msup><annotation encoding="application/x-tex">10^{-10}</annotation></semantics></math>.
+These checks use a correctly specified fixed design with common
 coefficients for the summed trial signal and independent Gaussian
 errors. They verify numerical agreement with the corresponding GLMs in
 these examples. Uncertainty for ridge, estimated whitening, and
@@ -313,7 +354,7 @@ data-adaptive HRF selection requires additional methods.</p>
 <div class="section level2">
 <h2 id="ridge-changes-the-estimator">Ridge changes the estimator<a class="anchor" aria-label="anchor" href="#ridge-changes-the-estimator"></a>
 </h2>
-<p>For each trial and voxel, ridge minimizes</p>
+<p>For each trial and voxel, the ridge estimate minimizes</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mrow><mo stretchy="true" form="prefix">‖</mo><mi>R</mi><mi>Y</mi><mo>−</mo><mi>R</mi><msub><mi>A</mi><mi>j</mi></msub><msub><mi>𝛃</mi><mi>j</mi></msub><mo>−</mo><mi>R</mi><msub><mi>B</mi><mi>j</mi></msub><msub><mi>𝛄</mi><mi>j</mi></msub><mo stretchy="true" form="postfix">‖</mo></mrow><mi>F</mi><mn>2</mn></msubsup><mo>+</mo><msub><mi>λ</mi><mi>x</mi></msub><msubsup><mrow><mo stretchy="true" form="prefix">‖</mo><msub><mi>𝛃</mi><mi>j</mi></msub><mo stretchy="true" form="postfix">‖</mo></mrow><mi>F</mi><mn>2</mn></msubsup><mo>+</mo><msub><mi>λ</mi><mi>b</mi></msub><msubsup><mrow><mo stretchy="true" form="prefix">‖</mo><msub><mi>𝛄</mi><mi>j</mi></msub><mo stretchy="true" form="postfix">‖</mo></mrow><mi>F</mi><mn>2</mn></msubsup><mi>.</mi></mrow><annotation encoding="application/x-tex">
 \lVert RY-RA_j\boldsymbol{\beta}_j-RB_j\boldsymbol{\gamma}_j\rVert_F^2
 +\lambda_x\lVert\boldsymbol{\beta}_j\rVert_F^2
@@ -322,7 +363,8 @@ data-adaptive HRF selection requires additional methods.</p>
 <p>With <code>ridge_mode = "absolute"</code>, <code>ridge_x</code> and
 <code>ridge_b</code> are the penalties in that expression. With
 <code>ridge_mode = "fractional"</code>, the implementation multiplies
-them by mean residualized design energies:</p>
+them by mean residualized design energies, where a column’s energy is
+its squared norm after residualization:</p>
 <ul>
 <li>for
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K=1</annotation></semantics></math>,
@@ -338,11 +380,12 @@ and
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>E</mi><mi>j</mi></msub><annotation encoding="application/x-tex">E_j</annotation></semantics></math>,
 averaged over trials.</li>
 </ul>
-<p>Fractional scaling preserves the intended relative penalty under a
-common rescaling of the whole trial design. It does not make arbitrary,
-separate rescalings of multi-basis columns equivalent. Ridge can
-stabilize a poorly conditioned system, but its coefficients are
-penalized estimates rather than ordinary LSS coefficients.</p>
+<p>Because of this scaling, multiplying the whole trial design by a
+common constant leaves the intended relative penalty unchanged.
+Fractional scaling does not make arbitrary, separate rescalings of
+individual multi-basis columns equivalent. Ridge can stabilize a poorly
+conditioned system, but its coefficients are penalized estimates rather
+than ordinary LSS coefficients.</p>
 <p>The package default is fractional ridge with
 <code>ridge_x = ridge_b = 0.05</code>. Request zero penalties explicitly
 when exact unpenalized LSS is the target. The public path checks that
@@ -411,7 +454,8 @@ whitening model or selecting an HRF from the same data.
 prewhitening and voxel-adaptive HRF modes for this request.</p>
 </div>
 <div class="section level2">
-<h2 id="prewhitening-belongs-outside-oasis">Prewhitening belongs outside <code>oasis=</code><a class="anchor" aria-label="anchor" href="#prewhitening-belongs-outside-oasis"></a>
+<h2 id="prewhitening-is-set-by-prewhiten-not-oasis">Prewhitening is set by <code>prewhiten</code>, not
+<code>oasis</code><a class="anchor" aria-label="anchor" href="#prewhitening-is-set-by-prewhiten-not-oasis"></a>
 </h2>
 <p>Temporal whitening is handled by the top-level <code>prewhiten</code>
 argument and the shared <code>fmriAR</code> integration. The same
@@ -429,14 +473,15 @@ runs.</p>
 <span>  prewhiten <span class="op">=</span> <span class="fu"><a href="../reference/prewhiten_options.html">prewhiten_options</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <p>For multiple runs, supply <code>pooling = "run"</code> and the run
-labels. The legacy <code>oasis$whiten</code> field is deprecated,
-ignored, and emits a note; it must not be used to describe the current
-algorithm. Coefficients remain available after estimated whitening, but
-<code>return_se = TRUE</code> is rejected because these SEs do not
-account for uncertainty in the estimated whitening model.</p>
+labels. The legacy <code>oasis$whiten</code> field is deprecated and
+ignored with a warning; use <code>prewhiten</code> instead. Coefficients
+remain available after estimated whitening, but
+<code>return_se = TRUE</code> fails closed: the call stops with an error
+instead of returning standard errors, because uncertainty for feasible
+GLS (GLS with an estimated noise covariance) is not calibrated here.</p>
 </div>
 <div class="section level2">
-<h2 id="design-construction-and-identity">Design construction and identity<a class="anchor" aria-label="anchor" href="#design-construction-and-identity"></a>
+<h2 id="design-construction-and-trialbasis-identity">Design construction and trial/basis identity<a class="anchor" aria-label="anchor" href="#design-construction-and-trialbasis-identity"></a>
 </h2>
 <p>There are two supported routes into the same solver:</p>
 <ol style="list-style-type: decimal">
@@ -444,13 +489,14 @@ account for uncertainty in the estimated whitening model.</p>
 <code>X</code> supplies an already convolved trial design.</li>
 <li>
 <code>oasis$design_spec</code> asks the backend to construct one
-with <code>fmrihrf</code>.</li>
+from event onsets with <code>fmrihrf</code>.</li>
 </ol>
-<p>The event route preserves event duration and amplitude and adds
-aggregates for other conditions to the common nuisance span. In
-multi-run low-level design specifications, onsets are global seconds;
-<code><a href="../reference/lss_design.html">lss_design()</a></code> with a <code><a href="https://bbuchsbaum.github.io/fmridesign/reference/event_model.html" class="external-link">fmridesign::event_model()</a></code>
-is the safer run-aware interface.</p>
+<p>The event route (2) preserves event duration and amplitude and adds
+aggregate regressors for other conditions to the common nuisance span.
+In multi-run low-level design specifications, onsets are global seconds
+rather than within-run times; <code><a href="../reference/lss_design.html">lss_design()</a></code> with a
+<code><a href="https://bbuchsbaum.github.io/fmridesign/reference/event_model.html" class="external-link">fmridesign::event_model()</a></code> is the safer run-aware
+interface.</p>
 <p>A raw multi-basis <code>X</code> cannot reveal trial identity from
 dimensions alone. It therefore requires explicit <code>K</code>,
 <code>ntrials</code>, and a <code>trial_basis_map</code> identifying
@@ -460,11 +506,11 @@ rows in canonical trial-by-basis order. Supplying an incorrect grouping
 would change the model being fitted, so ambiguous trial/basis mappings
 are rejected.</p>
 <p>If <code>design_spec$hrf_grid</code> is supplied, the implementation
-chooses a candidate using the observed data before fitting. That is a
-model-selection step. Treat the resulting coefficients as conditional on
-the selected design. Because ordinary post-selection standard errors are
-not established by the fixed-design formula above, this route rejects
-<code>return_se = TRUE</code>.</p>
+uses the observed data to choose a candidate HRF from the grid before
+fitting. That is a model-selection step. Treat the resulting
+coefficients as conditional on the selected design. Because ordinary
+post-selection standard errors are not established by the fixed-design
+formula above, this route rejects <code>return_se = TRUE</code>.</p>
 <p>The vignette also checks output and diagnostic dimensions,
 preservation of trial/basis identity after column permutations, and the
 expected response to rescaling. It checks that unsupported
@@ -558,7 +604,7 @@ BLAS, memory bandwidth, block size, and the implementation used for
 comparison; the operation counts do not imply a fixed speedup.</p>
 </div>
 <div class="section level2">
-<h2 id="implementation-map">Implementation map<a class="anchor" aria-label="anchor" href="#implementation-map"></a>
+<h2 id="implementation-map-and-return-values">Implementation map and return values<a class="anchor" aria-label="anchor" href="#implementation-map-and-return-values"></a>
 </h2>
 <p>These names are internal implementation landmarks, not additional
 public APIs.</p>

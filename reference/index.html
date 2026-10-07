@@ -24,7 +24,9 @@
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul></li>
@@ -44,7 +46,7 @@
     </div>
 
     <div class="section level2">
-      <h2 id="all-functions">All functions<a class="anchor" aria-label="anchor" href="#all-functions"></a></h2>
+      <h2 id="single-trial-estimation">Single-trial estimation<a class="anchor" aria-label="anchor" href="#single-trial-estimation"></a></h2>
 
 
 
@@ -62,6 +64,120 @@
 
         <dt>
 
+          <code><a href="coef.glmsingle_fit.html">coef(<i>&lt;glmsingle_fit&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Single-trial betas from a glmsingle fit</dd>
+
+        <dt>
+
+          <code><a href="glmsingle.html">glmsingle()</a></code>
+
+        </dt>
+        <dd>GLMsingle single-trial response estimation</dd>
+
+        <dt>
+
+          <code><a href="glmsingle_design.html">glmsingle_design()</a></code>
+
+        </dt>
+        <dd>fmridesign front end for glmsingle()</dd>
+
+        <dt>
+
+          <code><a href="lsa.html">lsa()</a></code>
+
+        </dt>
+        <dd>Least Squares All (LSA) Analysis</dd>
+
+        <dt>
+
+          <code><a href="lss.html">lss()</a></code>
+
+        </dt>
+        <dd>Least Squares Separate (LSS) Analysis</dd>
+
+        <dt>
+
+          <code><a href="lss_beta_cpp.html">lss_beta_cpp()</a></code>
+
+        </dt>
+        <dd>Vectorized LSS Beta Computation Using C++</dd>
+
+        <dt>
+
+          <code><a href="lss_cpp_optimized.html">lss_cpp_optimized()</a></code>
+
+        </dt>
+        <dd>A wrapper for the optimized C++ LSS implementation</dd>
+
+        <dt>
+
+          <code><a href="lss_design.html">lss_design()</a></code>
+
+        </dt>
+        <dd>LSS Analysis with fmridesign Objects</dd>
+
+        <dt>
+
+          <code><a href="lss_fit_wrappers.html">lss_fit_wrappers</a></code>
+
+        </dt>
+        <dd>Convenience wrappers for modern <code><a href="../reference/lss.html">lss()</a></code> usage</dd>
+
+        <dt>
+
+          <code><a href="lss_fused_optim_cpp.html">lss_fused_optim_cpp()</a></code>
+
+        </dt>
+        <dd>Fused Single-Pass LSS Solver (C++)</dd>
+
+        <dt>
+
+          <code><a href="lss_naive.html">lss_naive()</a></code>
+
+        </dt>
+        <dd>Naive Least Squares Separate (LSS) Analysis</dd>
+
+        <dt>
+
+          <code><a href="lss_naive_fit.html">lss_naive_fit()</a></code>
+
+        </dt>
+        <dd>Naive LSS with modern signature</dd>
+
+        <dt>
+
+          <code><a href="lss_optimized.html">lss_optimized()</a></code>
+
+        </dt>
+        <dd>Optimized LSS Analysis (Pure R)</dd>
+
+        <dt>
+
+          <code><a href="lss_optimized_fit.html">lss_optimized_fit()</a></code>
+
+        </dt>
+        <dd>Optimized LSS with modern signature</dd>
+
+        <dt>
+
+          <code><a href="lss_rank1.html">lss_rank1()</a></code>
+
+        </dt>
+        <dd>Rank-1 GLM: joint voxel-wise HRF and trial amplitude estimation</dd>
+      </dl></div><div class="section level2">
+      <h2 id="hrf-modeling-and-recovery">HRF modeling and recovery<a class="anchor" aria-label="anchor" href="#hrf-modeling-and-recovery"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
           <code><a href="VoxelHRF.html">VoxelHRF</a></code>
 
         </dt>
@@ -69,24 +185,10 @@
 
         <dt>
 
-          <code><a href="benchmark_mixed_solve.html">benchmark_mixed_solve()</a></code>
-
-        </dt>
-        <dd>Benchmark Mixed Model Implementations</dd>
-
-        <dt>
-
           <code><a href="calculate_recovery_metrics.html">calculate_recovery_metrics()</a></code>
 
         </dt>
         <dd>Calculate HRF Recovery Metrics</dd>
-
-        <dt>
-
-          <code><a href="coef.glmsingle_fit.html">coef(<i>&lt;glmsingle_fit&gt;</i>)</a></code>
-
-        </dt>
-        <dd>Single-trial betas from a glmsingle fit</dd>
 
         <dt>
 
@@ -111,20 +213,6 @@
 
         <dt>
 
-          <code><a href="fit_oasis_grid.html">fit_oasis_grid()</a></code>
-
-        </dt>
-        <dd>Fit OASIS with HRF Grid Search</dd>
-
-        <dt>
-
-          <code><a href="fmrilss_options.html">fmrilss_options</a></code>
-
-        </dt>
-        <dd>Option constructors for nested interfaces</dd>
-
-        <dt>
-
           <code><a href="generate_lwu_data.html">generate_lwu_data()</a></code>
 
         </dt>
@@ -139,26 +227,170 @@
 
         <dt>
 
-          <code><a href="glmsingle.html">glmsingle()</a></code>
-
-        </dt>
-        <dd>GLMsingle single-trial response estimation</dd>
-
-        <dt>
-
-          <code><a href="glmsingle_design.html">glmsingle_design()</a></code>
-
-        </dt>
-        <dd>fmridesign front end for glmsingle()</dd>
-
-        <dt>
-
           <code><a href="glmsingle_hrf_library.html">glmsingle_hrf_library()</a></code> <code><a href="glmsingle_hrf_library.html">glmsingle_hrf()</a></code>
 
         </dt>
         <dd>GLMsingle canonical HRF and HRF library</dd>
 
         <dt>
+
+          <code><a href="lss_with_hrf.html">lss_with_hrf()</a></code>
+
+        </dt>
+        <dd>Perform LSS using Voxel-wise HRFs</dd>
+
+        <dt>
+
+          <code><a href="lss_with_hrf_pure_r.html">lss_with_hrf_pure_r()</a></code>
+
+        </dt>
+        <dd>Least Squares Separate with voxel-wise HRF (basis-weighted)</dd>
+
+        <dt>
+
+          <code><a href="plot_hrf_comparison.html">plot_hrf_comparison()</a></code>
+
+        </dt>
+        <dd>Plot HRF Recovery Comparison</dd>
+      </dl></div><div class="section level2">
+      <h2 id="shared-basis-hrf-matching">Shared-basis HRF matching<a class="anchor" aria-label="anchor" href="#shared-basis-hrf-matching"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="dot-sbhm_adaptive_ridge_gls.html">.sbhm_adaptive_ridge_gls()</a></code>
+
+        </dt>
+        <dd>Adaptive fractional ridge per voxel from conditioning</dd>
+
+        <dt>
+
+          <code><a href="dot-sbhm_auto_gate_threshold.html">.sbhm_auto_gate_threshold()</a></code>
+
+        </dt>
+        <dd>Auto-set cond_gate threshold from observed diagnostics</dd>
+
+        <dt>
+
+          <code><a href="dot-sbhm_build_trial_regs.html">.sbhm_build_trial_regs()</a></code>
+
+        </dt>
+        <dd>Build per-trial basis regressors (each T x r) from SBHM basis + design_spec</dd>
+
+        <dt>
+
+          <code><a href="dot-sbhm_prewhiten.html">.sbhm_prewhiten()</a></code>
+
+        </dt>
+        <dd>Optionally prewhiten Y, regs (stacked), intercept and nuisance</dd>
+
+        <dt>
+
+          <code><a href="dot-sbhm_resid.html">.sbhm_resid()</a></code>
+
+        </dt>
+        <dd>Residualize columns of M against Z (FWL)</dd>
+
+        <dt>
+
+          <code><a href="dot-sbhm_resolve_ridge.html">.sbhm_resolve_ridge()</a></code>
+
+        </dt>
+        <dd>Resolve ridge value from spec (absolute or fractional)</dd>
+
+        <dt>
+
+          <code><a href="dot-sbhm_solve.html">.sbhm_solve()</a></code>
+
+        </dt>
+        <dd>Stable linear solve for multiple RHS with tiny ridge</dd>
+
+        <dt>
+
+          <code><a href="lss_sbhm.html">lss_sbhm()</a></code>
+
+        </dt>
+        <dd>End-to-End LSS with Shared-Basis HRF Matching (SBHM)</dd>
+
+        <dt>
+
+          <code><a href="lss_sbhm_design.html">lss_sbhm_design()</a></code>
+
+        </dt>
+        <dd>SBHM Pipeline with fmridesign Models</dd>
+
+        <dt>
+
+          <code><a href="sbhm_amplitude_ls.html">sbhm_amplitude_ls()</a></code>
+
+        </dt>
+        <dd>Single-shape GLM amplitudes given matched coordinates (global LS)</dd>
+
+        <dt>
+
+          <code><a href="sbhm_amplitude_lss1.html">sbhm_amplitude_lss1()</a></code>
+
+        </dt>
+        <dd>Single-shape LSS amplitudes (2x2 per trial) given matched coordinates</dd>
+
+        <dt>
+
+          <code><a href="sbhm_amplitude_oasis_k1.html">sbhm_amplitude_oasis_k1()</a></code>
+
+        </dt>
+        <dd>OASIS K=1 amplitudes per voxel with matched HRF columns. Returns list(beta, se)</dd>
+
+        <dt>
+
+          <code><a href="sbhm_build.html">sbhm_build()</a></code>
+
+        </dt>
+        <dd>Build a Shared-Basis HRF Library (SBHM)</dd>
+
+        <dt>
+
+          <code><a href="sbhm_hrf.html">sbhm_hrf()</a></code>
+
+        </dt>
+        <dd>Wrap a Learned Basis as an HRF (SBHM HRF)</dd>
+
+        <dt>
+
+          <code><a href="sbhm_match.html">sbhm_match()</a></code>
+
+        </dt>
+        <dd>Match Voxels to Library HRFs in Shared Basis (SBHM)</dd>
+
+        <dt>
+
+          <code><a href="sbhm_prepass.html">sbhm_prepass()</a></code>
+
+        </dt>
+        <dd>SBHM Prepass: Aggregate Fit in a Shared Basis</dd>
+
+        <dt>
+
+          <code><a href="sbhm_project.html">sbhm_project()</a></code>
+
+        </dt>
+        <dd>Project Trial-wise SBHM Coefficients to Scalar Amplitudes</dd>
+      </dl></div><div class="section level2">
+      <h2 id="item-workflows">ITEM workflows<a class="anchor" aria-label="anchor" href="#item-workflows"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
 
           <code><a href="item_build_design.html">item_build_design()</a></code>
 
@@ -206,97 +438,64 @@
 
         </dt>
         <dd>Slice an ITEM bundle into train/test fold objects</dd>
+      </dl></div><div class="section level2">
+      <h2 id="options-and-supporting-functions">Options and supporting functions<a class="anchor" aria-label="anchor" href="#options-and-supporting-functions"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="dot-convert_legacy_whiten.html">.convert_legacy_whiten()</a></code>
+
+        </dt>
+        <dd>Convert old-style whitening options to new format</dd>
 
         <dt>
 
-          <code><a href="lsa.html">lsa()</a></code>
+          <code><a href="dot-mixed_solve_cpp.html">.mixed_solve_cpp()</a></code>
 
         </dt>
-        <dd>Least Squares All (LSA) Analysis</dd>
+        <dd>Mixed Model Solver using C++</dd>
 
         <dt>
 
-          <code><a href="lss.html">lss()</a></code>
+          <code><a href="dot-needs_advanced_prewhitening.html">.needs_advanced_prewhitening()</a></code>
 
         </dt>
-        <dd>Least Squares Separate (LSS) Analysis</dd>
+        <dd>Check if advanced prewhitening is needed</dd>
 
         <dt>
 
-          <code><a href="lss_beta_cpp.html">lss_beta_cpp()</a></code>
+          <code><a href="benchmark_mixed_solve.html">benchmark_mixed_solve()</a></code>
 
         </dt>
-        <dd>Vectorized LSS Beta Computation Using C++</dd>
+        <dd>Benchmark Mixed Model Implementations</dd>
 
         <dt>
 
-          <code><a href="lss_cpp_optimized.html">lss_cpp_optimized()</a></code>
+          <code><a href="fit_oasis_grid.html">fit_oasis_grid()</a></code>
 
         </dt>
-        <dd>A wrapper for the optimized C++ LSS implementation</dd>
+        <dd>Fit OASIS with HRF Grid Search</dd>
 
         <dt>
 
-          <code><a href="lss_design.html">lss_design()</a></code>
+          <code><a href="fmrilss-package.html">fmrilss-package</a></code> <code><a href="fmrilss-package.html">fmrilss</a></code>
 
         </dt>
-        <dd>LSS Analysis with fmridesign Objects</dd>
+        <dd>fmrilss: Least Squares Separate (LSS) Analysis for fMRI Data</dd>
 
         <dt>
 
-          <code><a href="lss_fit_wrappers.html">lss_fit_wrappers</a></code>
+          <code><a href="fmrilss_options.html">fmrilss_options</a></code>
 
         </dt>
-        <dd>Convenience wrappers for modern <code><a href="../reference/lss.html">lss()</a></code> usage</dd>
-
-        <dt>
-
-          <code><a href="lss_naive.html">lss_naive()</a></code>
-
-        </dt>
-        <dd>Naive Least Squares Separate (LSS) Analysis</dd>
-
-        <dt>
-
-          <code><a href="lss_naive_fit.html">lss_naive_fit()</a></code>
-
-        </dt>
-        <dd>Naive LSS with modern signature</dd>
-
-        <dt>
-
-          <code><a href="lss_optimized.html">lss_optimized()</a></code>
-
-        </dt>
-        <dd>Optimized LSS Analysis (Pure R)</dd>
-
-        <dt>
-
-          <code><a href="lss_optimized_fit.html">lss_optimized_fit()</a></code>
-
-        </dt>
-        <dd>Optimized LSS with modern signature</dd>
-
-        <dt>
-
-          <code><a href="lss_sbhm.html">lss_sbhm()</a></code>
-
-        </dt>
-        <dd>End-to-End LSS with Shared-Basis HRF Matching (SBHM)</dd>
-
-        <dt>
-
-          <code><a href="lss_sbhm_design.html">lss_sbhm_design()</a></code>
-
-        </dt>
-        <dd>SBHM Pipeline with fmridesign Models</dd>
-
-        <dt>
-
-          <code><a href="lss_with_hrf.html">lss_with_hrf()</a></code>
-
-        </dt>
-        <dd>Perform LSS using Voxel-wise HRFs</dd>
+        <dd>Option constructors for nested interfaces</dd>
 
         <dt>
 
@@ -328,13 +527,6 @@
 
         <dt>
 
-          <code><a href="plot_hrf_comparison.html">plot_hrf_comparison()</a></code>
-
-        </dt>
-        <dd>Plot HRF Recovery Comparison</dd>
-
-        <dt>
-
           <code><a href="prewhiten_options.html">prewhiten_options()</a></code>
 
         </dt>
@@ -356,47 +548,13 @@
 
         <dt>
 
-          <code><a href="sbhm_build.html">sbhm_build()</a></code>
-
-        </dt>
-        <dd>Build a Shared-Basis HRF Library (SBHM)</dd>
-
-        <dt>
-
-          <code><a href="sbhm_hrf.html">sbhm_hrf()</a></code>
-
-        </dt>
-        <dd>Wrap a Learned Basis as an HRF (SBHM HRF)</dd>
-
-        <dt>
-
-          <code><a href="sbhm_match.html">sbhm_match()</a></code>
-
-        </dt>
-        <dd>Match Voxels to Library HRFs in Shared Basis (SBHM)</dd>
-
-        <dt>
-
-          <code><a href="sbhm_prepass.html">sbhm_prepass()</a></code>
-
-        </dt>
-        <dd>SBHM Prepass: Aggregate Fit in a Shared Basis</dd>
-
-        <dt>
-
-          <code><a href="sbhm_project.html">sbhm_project()</a></code>
-
-        </dt>
-        <dd>Project Trial-wise SBHM Coefficients to Scalar Amplitudes</dd>
-
-        <dt>
-
           <code><a href="stglmnet_options.html">stglmnet_options()</a></code>
 
         </dt>
         <dd>Construct stglmnet backend options</dd>
       </dl></div>
-  </main></div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">

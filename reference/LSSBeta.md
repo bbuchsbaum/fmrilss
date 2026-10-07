@@ -14,10 +14,10 @@ No value itself. This topic documents the object returned by
 ## Stored fields
 
 `betas` is the file-backed trial-by-voxel matrix; `dimnames` preserves
-trial and voxel identity; `sframe`, `normalization`, `units`, and
-`event_amplitude` and `event_duration` define timing and coefficient
-interpretation; and `engine_requested`, `engine_used`, and `chunk_size`
-record execution. Use
+trial and voxel identity; `sframe`, `normalization`, `units`,
+`degenerate`, and `event_amplitude` and `event_duration` define timing
+and coefficient interpretation; and `engine_requested`, `engine_used`,
+and `chunk_size` record execution. Use
 [`as.matrix()`](https://rdrr.io/r/base/matrix.html) for the documented
 dense extraction path; these metadata are retained as matrix attributes.
 

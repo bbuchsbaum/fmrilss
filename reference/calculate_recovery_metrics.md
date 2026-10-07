@@ -16,7 +16,8 @@ calculate_recovery_metrics(results, true_hrf)
 
 - true_hrf:
 
-  Ground truth HRF
+  Ground truth HRF sampled on `results$hrf_times`. Shape comparisons
+  normalize each curve to unit maximum absolute height.
 
 ## Value
 
@@ -35,9 +36,9 @@ res <- compare_hrf_recovery(sim, hrf_grid = grid)
 #> Fitting SPMG3...
 #> Fitting FIR...
 calculate_recovery_metrics(res, sim$true_hrf)
-#>   method        mse correlation peak_time_error width_error beta_correlation
-#> 1  OASIS 0.07241648   0.6806805               2           1        0.5644033
-#> 2  SPMG1 0.10447257   0.9411653               1          NA        0.4846424
-#> 3  SPMG3 0.10447257   0.9411653               1          NA        0.5644033
+#>   method       mse correlation peak_time_error width_error beta_correlation
+#> 1  OASIS 0.1250698   0.6063464               2           1       -0.8164999
+#> 2  SPMG1 0.0180997   0.9411653               1          NA       -0.3952613
+#> 3  SPMG3 0.0180997   0.9411653               1          NA               NA
 # }
 ```

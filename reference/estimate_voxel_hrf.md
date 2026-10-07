@@ -14,7 +14,8 @@ estimate_voxel_hrf(
   basis,
   nuisance_regs = NULL,
   sframe = NULL,
-  fixed_regs = NULL
+  fixed_regs = NULL,
+  ref_hrf = NULL
 )
 ```
 
@@ -48,6 +49,12 @@ estimate_voxel_hrf(
   Optional finite numeric matrix of fixed/common regressors. An
   intercept is added when it is not already in their span.
 
+- ref_hrf:
+
+  HRF used to orient the sign of each estimated shape. Defaults to the
+  canonical
+  [`fmrihrf::HRF_SPMG1`](https://bbuchsbaum.github.io/fmrihrf/reference/HRF_objects.html).
+
 ## Value
 
 A [VoxelHRF](https://bbuchsbaum.github.io/fmrilss/reference/VoxelHRF.md)
@@ -61,6 +68,14 @@ object containing at least:
 - amplitude_scale:
 
   The signed scale removed from each raw pooled-fit coefficient column.
+
+- degenerate:
+
+  Logical, one per voxel: the estimated shape has no positive peak after
+  orientation, or one smaller than 5% of its largest absolute deflection
+  (typically a voxel without signal). Such shapes are scaled by their
+  largest absolute value instead, and a warning reports how many there
+  are; estimation does not fail.
 
 - basis:
 
@@ -95,9 +110,10 @@ coef <- matrix(rnorm(ncol(X) * ncol(Y)), ncol(X), ncol(Y))
 Y <- X %*% coef + Y * 0.1
 est <- estimate_voxel_hrf(Y, events, basis, sframe = sframe)
 str(est)
-#> List of 8
+#> List of 9
 #>  $ coefficients     : num [1, 1:2] 5.7 5.7
 #>  $ amplitude_scale  : num [1:2] -0.1018 0.0121
+#>  $ degenerate       : logi [1:2] FALSE FALSE
 #>  $ basis            :function (t)  
 #>   ..- attr(*, "class")= chr [1:2] "HRF" "function"
 #>   ..- attr(*, "name")= chr "SPMG1"

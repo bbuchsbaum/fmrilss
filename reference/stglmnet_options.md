@@ -39,7 +39,15 @@ stglmnet_options(
 
 - lambda:
 
-  Optional lambda sequence (or scalar in fixed mode).
+  Optional lambda sequence (or scalar in fixed mode), in the original
+  response coordinates used by `glmnet`. When `NULL`, Gaussian responses
+  are divided by one pooled RMS after nuisance projection before fitting
+  the automatic path. The same scale is reused in every CV fold;
+  coefficients, predictions and MSE are returned in original response
+  units. Automatic lambda values use normalized-response coordinates,
+  recorded in `fit$lambda_scale` and `fit$response_scale` when
+  `return_fit = TRUE`. They are not interchangeable with explicitly
+  supplied raw-response lambdas.
 
 - overlap_strategy:
 
@@ -91,6 +99,13 @@ stglmnet_options(
 ## Value
 
 A list with class `"fmrilss_stglmnet_options"`.
+
+## Details
+
+The internal cross-validation scores tune the estimator. They use a
+shared response scale and full-data nuisance projection; reliability
+also compares fold estimates with the full-data fit. These scores are
+not an unbiased held-out assessment of predictive performance.
 
 ## Examples
 

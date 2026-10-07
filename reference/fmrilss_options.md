@@ -202,6 +202,12 @@ prewhiten_options(method = "ar", p = 1)
 #> $correction_max_lag
 #> [1] 25
 #> 
+#> $voxel_bins
+#> [1] 50
+#> 
+#> $residual_model
+#> [1] "aggregate"
+#> 
 #> attr(,"class")
 #> [1] "fmrilss_prewhiten_options" "list"                     
 ```

@@ -1,6 +1,7 @@
 # Fit OASIS with HRF Grid Search
 
-Fits OASIS models with different HRF parameters and selects best
+Selects an LWU HRF by joint-model profile fit, then estimates OASIS
+betas.
 
 ## Usage
 
@@ -38,6 +39,16 @@ fit_oasis_grid(Y, onsets, sframe, hrf_grid, ridge_x = 0.01, ridge_b = 0.01)
 
 List with best HRF index, parameters, and beta estimates
 
+## Details
+
+Each candidate is scored by pooled R-squared from unpenalized joint
+least squares with a voxel-specific intercept and all trial columns. The
+denominator sums squared deviations from each voxel's own mean. Ridge
+parameters affect only the final LSS estimates, not HRF selection.
+Simulation, scoring, and fitting use the same event construction at
+0.1-second precision. This is an in-sample selection criterion;
+overlapping events can leave HRF parameters weakly identifiable.
+
 ## Examples
 
 ``` r
@@ -48,6 +59,6 @@ grid <- create_lwu_grid(n_tau = 2, n_sigma = 2, n_rho = 2)
 fit <- fit_oasis_grid(sim$Y, sim$onsets, sim$sframe, grid)
 fit$best_params
 #>   tau sigma rho
-#> 1   4   1.5 0.1
+#> 4   8   3.5 0.1
 # }
 ```

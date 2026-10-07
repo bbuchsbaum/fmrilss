@@ -8,6 +8,8 @@
 <url><loc>https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/articles/oasis_method.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/articles/oasis_theory.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/fmrilss/articles/prewhitening.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/fmrilss/articles/rank1_hrf.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/articles/sbhm.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/articles/voxel-wise-hrf.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/authors.html</loc></url>
@@ -58,6 +60,7 @@
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/lss_naive_fit.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/lss_optimized.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/lss_optimized_fit.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/fmrilss/reference/lss_rank1.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm_design.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/fmrilss/reference/lss_with_hrf.html</loc></url>

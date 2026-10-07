@@ -24,7 +24,9 @@
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul></li>
@@ -63,7 +65,8 @@
 
 
 <dt id="arg-true-hrf">true_hrf<a class="anchor" aria-label="anchor" href="#arg-true-hrf"></a></dt>
-<dd><p>Ground truth HRF</p></dd>
+<dd><p>Ground truth HRF sampled on <code>results$hrf_times</code>. Shape
+comparisons normalize each curve to unit maximum absolute height.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -83,10 +86,10 @@
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Fitting SPMG3...</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Fitting FIR...</span>
 <span class="r-in"><span><span class="fu">calculate_recovery_metrics</span><span class="op">(</span><span class="va">res</span>, <span class="va">sim</span><span class="op">$</span><span class="va">true_hrf</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   method        mse correlation peak_time_error width_error beta_correlation</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1  OASIS 0.07241648   0.6806805               2           1        0.5644033</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2  SPMG1 0.10447257   0.9411653               1          NA        0.4846424</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3  SPMG3 0.10447257   0.9411653               1          NA        0.5644033</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   method       mse correlation peak_time_error width_error beta_correlation</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  OASIS 0.1250698   0.6063464               2           1       -0.8164999</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2  SPMG1 0.0180997   0.9411653               1          NA       -0.3952613</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3  SPMG3 0.0180997   0.9411653               1          NA               NA</span>
 <span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>

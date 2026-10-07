@@ -48,3 +48,21 @@ A `glmsingle_fit`; see
 A `baseline_model` contributes its nuisance term (e.g. motion) as
 `extra_regressors`. Its drift and block terms are not used: GLMsingle
 models drift with its own per-run polynomials (`max_poly_deg`).
+
+## Examples
+
+``` r
+set.seed(1)
+sf <- fmrihrf::sampling_frame(c(80L, 80L), TR = 1)
+events <- data.frame(onset = rep(c(5, 20, 35, 50), 2),
+                     run = rep(1:2, each = 4),
+                     stimulus = factor(rep(c("A", "B"), 4)))
+em <- fmridesign::event_model(
+  onset ~ fmridesign::hrf(stimulus), data = events, block = ~run,
+  sampling_frame = sf, durations = rep(2, nrow(events)))
+Y <- matrix(100 + rnorm(160 * 4), 160, 4)
+fit <- glmsingle_design(Y, em, want_glmdenoise = FALSE,
+                        want_fracridge = FALSE, verbose = FALSE)
+dim(coef(fit, type = "b"))
+#> [1] 8 4
+```

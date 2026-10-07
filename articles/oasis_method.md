@@ -48,6 +48,9 @@ n_voxels <- 6
 TR <- 1
 sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
 times <- fmrihrf::samples(sframe, global = TRUE)
+# Canonical HRF scaled to a unit peak over a 30 s window, so coefficients are
+# on the peak-response scale.
+hrf_unit <- fmrihrf::gen_hrf(fmrihrf::HRF_SPMG1, normalize = TRUE, span = 30)
 
 onsets_a <- c(10, 20, 31, 43, 56, 68, 81, 95, 108, 121, 135, 149)
 onsets_b <- c(15, 37, 61, 86, 112, 141)
@@ -128,10 +131,10 @@ dim(fit_default)
 #> [1] 12  6
 fit_default[1:4, 1:3]
 #>           Voxel_1   Voxel_2    Voxel_3
-#> Trial_1 1.5641689 1.7579667  1.8345523
-#> Trial_2 1.4541214 0.3269049  1.8040081
-#> Trial_3 0.8812229 0.3447504 -0.1357292
-#> Trial_4 1.3235624 1.2075484 -0.9014281
+#> Trial_1 1.5666116 1.7539879  1.8351202
+#> Trial_2 1.4523001 0.3131492  1.7992711
+#> Trial_3 0.8787142 0.3259330 -0.1388822
+#> Trial_4 1.3178542 1.1977657 -0.9049780
 ```
 
 The default result is an `n_trials` by `n_voxels` matrix because this is
@@ -139,12 +142,13 @@ a one-basis design. These are fractionally penalized coefficients.
 Including condition B in `others` adjusts each target-trial estimate for
 the B signal present in the simulation.
 
-## Match ordinary LSS exactly when that is the target
+## Reproduce ordinary LSS exactly
 
-Use explicit zero ridge. The verification assembles every corresponding
-GLM independently as
-`[target trial, other target trials, Z, condition B]` and checks all
-trials and voxels.
+To match ordinary (unpenalized) LSS, set both ridge parameters to zero
+explicitly. To verify the fit, a hidden chunk builds each trial’s GLM
+independently as `[target trial, other target trials, Z, condition B]`,
+with the other target trials summed into one column, and compares the
+coefficients for all trials and voxels.
 
 ``` r
 
@@ -173,7 +177,7 @@ unpenalized LSS backends. OASIS is useful here because the event and
 other-condition design can be constructed and checked in the same
 workflow.
 
-## Evaluate ridge on the scale you care about
+## Evaluate ridge by bias, variance, and error against the truth
 
 Ridge reduces sampling variance by accepting bias. A smaller spread of
 fitted trials is not, by itself, evidence of improvement. For this fixed
@@ -183,14 +187,14 @@ conditional bias and variance under the iid noise model.
 
 | Fractional_ridge | Mean_absolute_bias | Mean_squared_bias | Mean_variance | Mean_MSE | RMSE | Monte_Carlo_MSE |
 |---:|---:|---:|---:|---:|---:|---:|
-| 0.00 | 0.0345 | 0.0022 | 0.6371 | 0.6393 | 0.7996 | 0.6079 |
-| 0.01 | 0.0380 | 0.0023 | 0.6231 | 0.6254 | 0.7908 | 0.6209 |
-| 0.05 | 0.0747 | 0.0070 | 0.5717 | 0.5787 | 0.7607 | 0.5907 |
+| 0.00 | 0.0342 | 0.0022 | 0.6362 | 0.6384 | 0.7990 | 0.6072 |
+| 0.01 | 0.0377 | 0.0023 | 0.6223 | 0.6245 | 0.7903 | 0.6203 |
+| 0.05 | 0.0742 | 0.0069 | 0.5710 | 0.5779 | 0.7602 | 0.5897 |
 
 Exact conditional ridge metrics and a 100-repetition check for this
 design, truth, and noise scale. {.table}
 
-![Grouped bars show mean MSE of 0.639 at zero ridge and 0.579 at
+![Grouped bars show mean MSE of 0.638 at zero ridge and 0.578 at
 fractional ridge 0.05; variance falls and squared bias rises as the
 ridge
 grows.](oasis_method_files/figure-html/ridge-plot-1.png)![](oasis_method_files/figure-html/ridge-plot-1.phone.png)
@@ -201,9 +205,9 @@ settings in the fixed simulation; all bars use squared-beta units.
 This is one scenario, not a universal ranking. Choose a ridge policy
 using a simulation that matches the planned timing, basis, nuisance
 structure, signal scale, and downstream loss. The package does not
-justify generic penalty cutoffs from inter-stimulus interval alone. Even
-the zero-penalty row has a small bias against the generating trial
-effects: ordinary LSS gives all other target trials one shared
+endorse generic penalty cutoffs based on the inter-stimulus interval
+alone. Even the zero-penalty row has a small bias against the generating
+trial effects: ordinary LSS gives all other target trials one shared
 coefficient, while this simulation gives them heterogeneous
 coefficients. The table therefore evaluates the full LSS estimator
 against the generating effects, not merely ridge against an unpenalized
@@ -211,9 +215,15 @@ LSS reference.
 
 ## Inspect design diagnostics
 
-`return_diag = TRUE` changes the return to a list. For a one-basis fit,
-`d`, `alpha`, and `s` are the target energy, target–other cross-product,
-and other-trial energy after projection.
+With `return_diag = TRUE`,
+[`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md) returns
+a list instead of a matrix, with the coefficients in `beta` and design
+diagnostics in `diag`. The diagnostics are computed after the common
+span has been projected out of the design. For a one-basis fit, `diag`
+holds one value per trial in each of three vectors: `d`, the energy (sum
+of squares) of the target-trial regressor; `s`, the energy of the summed
+other-trial regressor; and `alpha`, their cross-product. The code below
+converts `alpha` to a correlation.
 
 ``` r
 
@@ -232,10 +242,10 @@ diagnostics <- with(fit_diag$diag, data.frame(
 ))
 head(diagnostics, 4)
 #>          target_energy other_energy target_other_correlation
-#> trial_01      3.584692     20.70195               -0.2239838
-#> trial_02      3.650588     21.49016               -0.2660595
-#> trial_03      3.691278     21.65657               -0.2751521
-#> trial_04      3.754391     21.39954               -0.2636462
+#> trial_01      3.589038     20.81987               -0.2240243
+#> trial_02      3.654168     21.58465               -0.2647735
+#> trial_03      3.694451     21.78454               -0.2755007
+#> trial_04      3.756407     21.50997               -0.2631312
 ```
 
 These are unpenalized cross-products on the residualized design scale.
@@ -245,9 +255,13 @@ test.
 
 ## Interpret multi-basis coefficients
 
-An event-built SPMG3 design has three rows per trial: canonical,
-temporal derivative, and dispersion-derivative coefficients in that
-basis. Their scale depends on the basis definition.
+The SPMG3 basis
+([`fmrihrf::HRF_SPMG3`](https://bbuchsbaum.github.io/fmrihrf/reference/HRF_objects.html))
+is the SPM canonical HRF plus its temporal and dispersion derivatives.
+When OASIS builds the design from events with this basis, the output has
+three rows per trial: the canonical, temporal-derivative, and
+dispersion-derivative coefficients. Their scale depends on the basis
+definition.
 
 ``` r
 
@@ -338,10 +352,18 @@ whitened-and-residualized design when whitening is active.
 
 ## Standard errors require the unpenalized fixed-design model
 
-To check the standard errors (SEs), generate data that satisfy each LSS
-model: all target trials share a common coefficient vector, condition B
-and `Z` are in the fitted common span, and the temporal errors are iid
-Gaussian.
+`return_se = TRUE` is available only for an unpenalized fit
+(`ridge_x = ridge_b = 0`) with a full-rank trial model and a fixed
+design. It raises an error instead of returning SEs when the fit uses
+ridge, estimated prewhitening, HRF-grid selection, or voxel-adaptive
+HRFs, because none of these has calibrated model-based uncertainty in
+OASIS.
+
+To check the SEs against a known answer, the example generates data that
+exactly satisfy each trial’s LSS model: all target trials share a common
+coefficient vector, condition B and `Z` are in the fitted common span,
+and the temporal errors are iid Gaussian. A hidden chunk compares the
+OASIS betas and SEs with those from separately fitted full GLMs.
 
 ``` r
 
@@ -428,14 +450,15 @@ report model SEs for penalized FIR coefficients.
 
 ## HRF-grid selection is exploratory
 
-`hrf_grid` chooses one candidate from the observed `Y` using a
-matched-filter score after residualizing both the response and candidate
-against the full common span (`Z`, `Nuisance`, and modeled `others`),
-then fits that design. The call shown returns the beta matrix. Even when
-design diagnostics are requested, the public
-[`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md) route
-does not expose the winning candidate or candidate scores, and it does
-not return selection-adjusted uncertainty.
+When `design_spec$hrf_grid` lists candidate HRFs, OASIS chooses one of
+them for the target condition from the observed `Y`. It residualizes
+both the response and each candidate regressor against the full common
+span (`Z`, `Nuisance`, and modeled `others`), scores each candidate with
+a matched filter, and fits the design with the winner. The call shown
+returns the beta matrix. Even when design diagnostics are requested, the
+public [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md)
+route does not expose the winning candidate or candidate scores, and it
+does not return selection-adjusted uncertainty.
 
 ``` r
 
@@ -479,9 +502,12 @@ to
 
 ## Prewhitening changes the fitted space
 
-Use the top-level `prewhiten` argument. The same estimated operator is
-applied to the response, target design, and common design before OASIS
-fits coefficients.
+To model temporally autocorrelated noise, pass
+[`prewhiten_options()`](https://bbuchsbaum.github.io/fmrilss/reference/prewhiten_options.md)
+to the top-level `prewhiten` argument of
+[`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md). The
+same estimated whitening operator is applied to the response, target
+design, and common design before OASIS fits coefficients.
 
 ``` r
 
@@ -541,11 +567,11 @@ length(run_id)
 Always provide run labels when data span multiple runs so filtering does
 not cross run boundaries. `pooling = "global"` with `runs` uses one
 shared set of noise coefficients while still respecting those
-boundaries; `pooling = "run"` estimates a separate set for each run.
-Estimated-prewhitening uncertainty is not calibrated, so this
-coefficient route cannot also request OASIS model SEs.
+boundaries; `pooling = "run"` estimates a separate set for each run. A
+whitened fit returns coefficients only; see [Standard
+errors](#standard-errors-require-the-unpenalized-fixed-design-model).
 
-## A compact decision guide
+## When to use OASIS
 
 - Use a standard LSS backend for a fixed one-basis `X` when you want the
   basic unpenalized fit.

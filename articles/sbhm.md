@@ -107,7 +107,7 @@ sbhm <- sbhm_build(
 )
 ```
 
-### Rank is a declared approximation
+### Choose and inspect the basis rank
 
 [`sbhm_build()`](https://bbuchsbaum.github.io/fmrilss/reference/sbhm_build.md)
 performs one decomposition and retains the full singular-value spectrum
@@ -149,8 +149,8 @@ Total library energy retained and relative Frobenius residual by rank.
 
 The shared basis `B` is orthonormal on this sampled grid. The
 coordinates `A` reconstruct the rank-four candidate waveforms as
-`B %*% A`; basis vectors are algebraic modes, not direct estimates of
-latency, width, or physiology.
+`B %*% A`. The basis vectors are algebraic modes; they are not direct
+estimates of latency, width, or physiology.
 
 ## Simulate known shapes and trial coefficients
 
@@ -287,11 +287,15 @@ SBHM outputs for the simulated data. {.table}
 
 ## Evaluate the shape actually used
 
-Exact library index is secondary: nearby candidates can have almost
-identical waveforms. We therefore evaluate `B %*% alpha_coords` for
-every voxel. Angular error is zero for identical waveform direction and
-ignores arbitrary positive scale. Unit-norm waveform RMSE adds a
-time-domain discrepancy.
+Whether the match picked the exact library index matters less than the
+waveform it produced, because nearby candidates can have almost
+identical waveforms. We therefore evaluate the waveform
+`B %*% alpha_coords` for every voxel with two measures. Angular error is
+the angle between the estimated and true waveforms; it is zero when they
+point in the same direction and ignores any positive scale factor.
+Unit-norm waveform RMSE is the root-mean-square difference between the
+two waveforms after each is scaled to unit norm, a time-domain measure
+of the discrepancy.
 
 ``` r
 
@@ -334,9 +338,9 @@ radians
 off-library.](sbhm_files/figure-html/shape-plot-1.png)![](sbhm_files/figure-html/shape-plot-1.phone.png)
 
 True and hard-matched rank-four waveforms for every voxel. Solid blue is
-truth; dashed orange is the coordinate actually used by the amplitude
-refit. Panels marked ‘(off)’ contain off-library mixtures and are
-intentionally harder.
+truth; dashed orange is the waveform from the coordinates actually used
+by the amplitude refit. Panels marked ‘(off)’ contain off-library
+mixtures and are intentionally harder.
 
 For the six voxels generated from library members, we can also check
 whether the selected index matches the generating index:
@@ -351,7 +355,7 @@ data.frame(OnLibraryExactCandidateAccuracy = exact_index_accuracy)
 #> 1                               1
 ```
 
-## Hard and soft matching answer different questions
+## Compare hard and soft matching
 
 Soft matching blends candidate coordinates using softmax weights derived
 from cosine scores. These weights are not estimates of the mixture
@@ -412,21 +416,23 @@ knitr::kable(
 Hard and soft matching compared with the known simulated shapes and
 coefficients. {.table}
 
-The returned `margin` is the difference between the highest and
-second-highest cosine scores. Low margin can reveal near-ties, but no
-universal `min_margin` or `blend_margin` follows from it. If gating is
-used, inspect `shape_mode` and `fallback_low_conf`; `matched_name`
+The returned `margin` is the top cosine score minus the second-highest
+score. A low margin can reveal near-ties, but it does not imply a
+universal `min_margin` or `blend_margin` threshold. If you use gating
+thresholds, inspect `shape_mode` and `fallback_low_conf`: `matched_name`
 remains the top-scoring candidate, whereas `alpha_coords` records the
 shape actually used.
 
-## Compare trial coefficients with a direct GLM fit
+## Check the coefficient stage against a direct GLM
 
 With `amplitude$method = "global_ls"` and zero ridge, the final stage is
-an ordinary GLM that fits all trial columns jointly, conditional on the
-selected shape. The comparison below constructs each voxel’s model
-independently using public `fmrihrf` regressors. Agreement checks the
-coefficient calculation for these selected shapes; it does not remove
-shape-selection bias.
+an ordinary trial-wise GLM conditional on the selected shape. The
+reference computation below (the oracle) builds every voxel’s GLM
+independently from the public `fmrihrf` regressors and fits it with
+[`lm.fit()`](https://rdrr.io/r/stats/lmfit.html). It confirms, on this
+simulated dataset, that for the selected shapes SBHM returns the same
+coefficients as the direct GLM to numerical precision. It does not
+remove shape-selection bias.
 
 ``` r
 
@@ -472,17 +478,19 @@ conditional on this fixed simulation.
 
 ## Use a factorization for the initial shape calculation
 
-`data_fac` represents `Y` as `scores %*% loadings`, where scores are
-$`T \times q`$ and loadings are $`q \times V`$. The full `Y` is still
-required by
+The prepass can compute its cross-products from a factorization of the
+data rather than from `Y` itself. `data_fac` represents `Y` as
+`scores %*% loadings`, where scores are $`T \times q`$ and loadings are
+$`q \times V`$, for $`T`$ time points, $`V`$ voxels, and $`q`$ factors.
+The full `Y` is still required by
 [`lss_sbhm()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm.md)
 for OASIS and the amplitude stage. The shortcut therefore reduces
 multiplication in the initial shape calculation (the prepass); the full
 pipeline still depends on $`V`$. Named factor axes must agree between
 scores and loadings; when `Y` has voxel names, loadings must carry the
-same names and are aligned before use. Active prewhitening with
-`data_fac` fails explicitly because the supplied factorization is not a
-factorization of the estimated whitened data.
+same names and are aligned before use. Requesting active prewhitening
+with `data_fac` stops with an error, because the supplied factorization
+is not a factorization of the estimated whitened data.
 
 ``` r
 
@@ -512,15 +520,15 @@ data.frame(
   DenseVsFactorizedMaxError = factorized_error
 )
 #>    Scores Loadings Voxels DenseVsFactorizedMaxError
-#> 1 180 x 4   4 x 12     12              1.332268e-15
+#> 1 180 x 4   4 x 12     12              3.108624e-15
 ```
 
 For a PCA factorization, `prcomp(Y)$x` supplies scores and
 `t(prcomp(Y)$rotation)` supplies the required $`q \times V`$ loading
-orientation. The evaluated path below keeps `Y` as the response for
-OASIS and the amplitude stage while using a rank-four uncentered PCA
-approximation only for the prepass. This is a computational
-approximation, not an accuracy claim.
+orientation. The example below keeps `Y` as the response for OASIS and
+the amplitude stage while using a rank-four uncentered PCA approximation
+only for the prepass. This is a computational approximation, not an
+accuracy claim.
 
 ``` r
 
@@ -576,18 +584,18 @@ filter to bridge runs. This changes the conditional point estimator; it
 does not create calibrated post-selection standard errors. Factorized
 prepasses and active prewhitening cannot be combined.
 
-## Advanced policies are explicit heuristics
+## Advanced shape and amplitude options
 
 `alpha_source = "trial_projection"` and `"oasis_rank1"`, low-score
 fallback, condition gates, ridge penalties, and adaptive ridge controls
-are available for specialized studies. They change the estimator. No
-rank, ridge fraction, margin threshold, ISI boundary, or TR cutoff is
-generally recommended here. Choose and validate such a policy against
-the design, signal scale, failure modes, and loss function of the
-intended analysis.
+are available for specialized studies. They are heuristics, and they
+change the estimator. No rank, ridge fraction, margin threshold, ISI
+boundary, or TR cutoff is generally recommended here. Choose and
+validate such a policy against the design, signal scale, failure modes,
+and loss function of the intended analysis.
 
-The three scalar-coefficient engines also answer different model
-questions:
+The three scalar-coefficient engines, selected with `amplitude$method`,
+also fit different models:
 
 - `global_ls` fits all trial columns jointly for each selected voxel
   shape;
@@ -595,9 +603,10 @@ questions:
 - `oasis_voxel` applies the K=1 OASIS operator per voxel.
 
 Exactly coincident or otherwise unidentified trials cannot be recovered
-by any of these labels. Ridge may return symmetric finite coefficients,
-but it does not restore identification. None of the three engines
-returns calibrated SBHM standard errors.
+by any of these engines. A ridge penalty can make the fit return finite
+values for such trials (identical values for coincident trials), but it
+does not make them identifiable. None of the three engines returns
+calibrated SBHM standard errors.
 
 ## Applying SBHM to your data
 

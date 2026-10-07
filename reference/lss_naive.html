@@ -28,7 +28,9 @@ than the optimized lss function."><link href="../albers.css" rel="stylesheet"><s
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul></li>
@@ -57,7 +59,7 @@ than the optimized <code><a href="lss.html">lss</a></code> function.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">lss_naive</span><span class="op">(</span>Y <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">bdes</span>, dset <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">lss_naive</span><span class="op">(</span>Y <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">bdes</span>, dset <span class="op">=</span> <span class="cn">NULL</span>, trial_groups <span class="op">=</span> <span class="cn">NULL</span>, ridge <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -80,6 +82,17 @@ If NULL, the function will attempt to extract data from <code>dset</code>.</p></
 <dt id="arg-dset">dset<a class="anchor" aria-label="anchor" href="#arg-dset"></a></dt>
 <dd><p>Optional dataset object. If provided and Y is NULL, data will be
 extracted using <code>get_data_matrix</code>.</p></dd>
+
+
+<dt id="arg-trial-groups">trial_groups<a class="anchor" aria-label="anchor" href="#arg-trial-groups"></a></dt>
+<dd><p>Optional vector with one condition label per trial. When
+supplied, each trial model uses one summed "other trials" regressor per
+group (LSS-N) instead of a single pooled regressor. See <code><a href="lss.html">lss</a></code>.</p></dd>
+
+
+<dt id="arg-ridge">ridge<a class="anchor" aria-label="anchor" href="#arg-ridge"></a></dt>
+<dd><p>Optional fractional ridge penalty (one or two numbers); see
+<code><a href="lss.html">lss</a></code>.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -135,7 +148,7 @@ implementation is conceptually clear and serves as a reference for validation.</
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="va">beta_estimates_fast</span> <span class="op">&lt;-</span> <span class="fu"><a href="lss.html">lss</a></span><span class="op">(</span>Y <span class="op">=</span> <span class="va">Y</span>, X <span class="op">=</span> <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">beta_estimates_naive</span> <span class="op">-</span> <span class="va">beta_estimates_fast</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 4.440892e-16</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.332268e-15</span>
 <span class="r-in"><span><span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>

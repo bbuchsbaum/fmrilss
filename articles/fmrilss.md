@@ -144,17 +144,20 @@ round(beta_lss[1:4, 1:4], 2)
 
 Each row comes from a model with three parts: the target trial, the sum
 of all other trials, and the shared regressors. The target coefficient
-becomes the reported beta. Repeating that model for every trial reduces
-competition among individual trial columns, but it does not make a poor
-or rank-deficient design informative.
+becomes the reported beta. Because overlapping trial regressors share
+variance, fitting them all at once makes their individual estimates
+compete for that variance. Repeating the three-part model for every
+trial reduces this competition among individual trial columns, but it
+does not make a poor or rank-deficient design informative.
 
-![Heatmap with 24 trial rows and 8 voxel columns. Dark red cells are
-strongly negative and dark blue cells are strongly
-positive.](fmrilss_files/figure-html/beta-heatmap-1.png)![](fmrilss_files/figure-html/beta-heatmap-1.phone.png)
+![Heatmap with 24 trial rows and 8 voxel columns on a colour scale
+centred at zero. Dark red cells are strongly positive and dark blue
+cells are strongly
+negative.](fmrilss_files/figure-html/beta-heatmap-1.png)![](fmrilss_files/figure-html/beta-heatmap-1.phone.png)
 
 Estimated single-trial responses for the eight simulated voxels. Red is
-negative and blue is positive; deeper colour indicates larger magnitude,
-not statistical significance.
+positive, blue is negative, and white is zero; deeper colour indicates
+larger magnitude, not statistical significance.
 
 ## How should I handle nuisance regressors?
 
@@ -179,8 +182,12 @@ beta_projected <- lss(
 )
 c(maximum_absolute_difference = max(abs(beta_lss - beta_projected)))
 #> maximum_absolute_difference 
-#>                9.200973e-14
+#>                1.993961e-13
 ```
+
+The difference is at the level of numerical rounding: when the
+projection is applied to all three matrices, the two routes give the
+same estimates.
 
 Leaving `Z` unprojected changes the model and can change the trial
 estimates.
@@ -200,6 +207,12 @@ To make the comparison reproducible, the next experiment holds `X`,
 are linear here, we can calculate conditional squared bias and noise
 variance directly. We also generate 100 independent noise realizations
 as a check on that calculation.
+
+The first table below checks that the trial design remains estimable
+after the shared `Z` and `Nuisance` columns are removed (the
+“residualized” design): its rank equals the number of trials. The second
+table gives the exact decomposition of mean squared error (MSE) at the
+noise level used to simulate `Y`.
 
 | Diagnostic                         |  Value |
 |:-----------------------------------|-------:|
@@ -228,8 +241,10 @@ error.](fmrilss_files/figure-html/comparison-plot-1.png)![](fmrilss_files/figure
 At noise SD 2.5, LSS has more squared bias but sufficiently lower
 variance to produce lower mean squared error than LSA.
 
-The noise scale matters. The calculated crossover for this fixed design
-and truth is SD = 0.818:
+Which estimator wins depends on the noise level. As noise grows, the
+variance term grows while the squared bias stays fixed, so lower
+variance matters more. The crossover is the noise SD at which LSS and
+LSA have equal MSE; for this fixed design and truth it is SD = 0.818:
 
 | Noise SD | LSS RMSE | LSA RMSE |
 |---------:|---------:|---------:|
@@ -271,6 +286,10 @@ the API and backend agreement, not a benefit from whitening. Treat AR(1)
 as an example starting model: choose an order and pooling strategy using
 residual diagnostics and acquisition-aware validation.
 
+How the noise model is estimated matters for single-trial designs: see
+[`vignette("prewhitening")`](https://bbuchsbaum.github.io/fmrilss/articles/prewhitening.md)
+for the `residual_model` choices and when each is appropriate.
+
 For multiple runs, use run-aware intercepts and supply run labels to
 `prewhiten_options(method = "ar", p = 1, pooling = "run", runs = ...)`.
 Do not concatenate runs and let filtering cross a run boundary.
@@ -289,7 +308,7 @@ beta_cpp <- lss(
 )
 c(maximum_absolute_difference = max(abs(beta_lss - beta_cpp)))
 #> maximum_absolute_difference 
-#>                1.776357e-15
+#>                 4.72955e-14
 ```
 
 Start with the default backend while developing the analysis, then
@@ -297,10 +316,46 @@ switch when runtime or memory justifies it. Backend agreement is a
 useful regression check, but agreement alone does not validate the
 scientific model.
 
+Three options refine the trial-wise model itself. They are supported by
+the `r_optimized`, `cpp_optimized`, and `cpp` backends (and the `naive`
+reference for `trial_groups` and `ridge`), and can be combined in one
+call:
+
+- `trial_groups` gives one summed “other trials” regressor per condition
+  (LSS-N; Turner et al., 2012) instead of pooling every other trial. Use
+  it when conditions are expected to evoke different responses.
+- `ridge` adds a fractional ridge penalty to each trial model, shrinking
+  trial estimates toward zero. Give one value, or `c(trial, others)` to
+  penalize the target-trial and other-trials coefficients separately;
+  each value is a fraction of the mean design energy. In rapid designs,
+  where neighbouring trials overlap, this can trade a little bias for a
+  large reduction in variance; choose the amount by validation on your
+  design.
+- `prewhiten_options(pooling = "voxel")` fits a voxel-adaptive noise
+  model: voxels are binned by residual autocorrelation and each bin is
+  fitted with its own filtered design.
+
+``` r
+
+conditions <- rep(c("A", "B"), length.out = ncol(X))
+beta_lss_n <- lss(Y, X, Z = Z, Nuisance = Nuisance, trial_groups = conditions)
+beta_ridge <- lss(
+  Y, X, Z = Z, Nuisance = Nuisance,
+  trial_groups = conditions,
+  ridge = c(0.5, 0),
+  prewhiten = prewhiten_options(method = "ar", p = 1, pooling = "voxel",
+                                voxel_bins = 4)
+)
+dim(beta_ridge)
+#> [1] 24  8
+```
+
 ## What are the important limits?
 
-- `X` must already encode the HRF-convolved response for each trial. Use
-  a design-aware workflow if you begin from event tables.
+- `X` must already encode the HRF-convolved response for each trial. If
+  you begin from event tables, build `X` with a design-aware workflow
+  such as
+  [`vignette("lss_with_fmridesign")`](https://bbuchsbaum.github.io/fmrilss/articles/lss_with_fmridesign.md).
 - LSS reduces competition among individual trial columns; it cannot
   recover information absent from the acquisition or rescue a singular
   design.
@@ -340,9 +395,14 @@ scientific model.
   for library HRF selection, GLMdenoise, and voxel-wise ridge selection
   when conditions repeat across runs.
 
-## Reference
+## References
 
 Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
 Deconvolving BOLD activation in event-related designs for multivoxel
 pattern classification analyses. *NeuroImage*, 59(3), 2636–2643.
 <https://doi.org/10.1016/j.neuroimage.2011.08.076>
+
+Turner, B. O., Mumford, J. A., Poldrack, R. A., & Ashby, F. G. (2012).
+Spatiotemporal activity estimation for multivoxel pattern analysis with
+rapid event-related designs. *NeuroImage*, 62(3), 1429–1438.
+<https://doi.org/10.1016/j.neuroimage.2012.05.057>

@@ -19,7 +19,9 @@ lss(
   block_size = 96,
   oasis = list(),
   stglmnet = list(),
-  prewhiten = NULL
+  prewhiten = NULL,
+  trial_groups = NULL,
+  ridge = NULL
 )
 ```
 
@@ -101,6 +103,32 @@ lss(
   [`prewhiten_options`](https://bbuchsbaum.github.io/fmrilss/reference/prewhiten_options.md)
   for the full list.
 
+- trial_groups:
+
+  Optional vector (character, factor, or integer) with one condition
+  label per trial, i.e. per column of `X`. When supplied, each
+  trial-wise model uses one summed "other trials" regressor per
+  condition (the LSS-N variant of Turner et al., 2012), with the trial
+  of interest removed from its own condition's regressor, instead of a
+  single regressor pooling every other trial. This is the model used by
+  Nilearn's and NiBetaSeries' LSS beta series and is more accurate when
+  conditions evoke different responses. Supported by methods
+  `"r_optimized"`, `"cpp_optimized"`, `"cpp"`, and `"naive"`. Defaults
+  to `NULL` (classic LSS).
+
+- ridge:
+
+  Optional fractional ridge penalty: one number, or two numbers
+  `c(trial, others)` for the trial-of-interest and the other-trials
+  coefficients. Each is a fraction of the mean design energy (the
+  `ridge_mode = "fractional"` convention of OASIS), i.e. the penalty
+  added to the trial diagonal is `ridge[1] * mean(c_i'c_i)`. Ridge
+  shrinks trial estimates toward zero and can greatly reduce their
+  variance in rapid designs where neighbouring trials overlap; it
+  composes with `trial_groups` and `prewhiten`. Supported by methods
+  `"r_optimized"`, `"cpp_optimized"`, `"cpp"`, and `"naive"`. Defaults
+  to `NULL` (no ridge).
+
 ## Value
 
 Normally, a numeric matrix of trial-wise beta estimates: T × V for a
@@ -127,6 +155,14 @@ includes:
 
 - Common fixed regressors (Z matrix), whose coefficients are not
   returned
+
+**Computation.** Each LSS estimate is a linear functional of the data,
+\\\hat\beta_i = w_i^\top y\\. The optimized methods build the \\n \times
+T\\ weight matrix \\W\\ from the (small) trial design and compute all
+trial betas with one matrix product \\W^\top Y\\. Because the weights
+lie in the residual space of the confounds, the data matrix is never
+residualized or copied, so the cost is a single \\O(nTV)\\ BLAS call
+regardless of the number of confounds.
 
 If Nuisance regressors are provided, the rank-revealed combined span
 `cbind(Z, Nuisance)` is projected from both Y and X before fitting.
@@ -230,9 +266,12 @@ for a validated constructor):
 
   - `"voxel"`:
 
-    Fit a separate AR model per voxel. Shared-design `lss()` calls
-    reject this mode because each voxel would require its own matching
-    filtered design.
+    Voxel-adaptive noise model. Per-voxel residual autocorrelations are
+    estimated, voxels are grouped into `voxel_bins` bins (default 50) of
+    similar autocorrelation, and an AR model is refitted per bin; each
+    bin gets its own filtered design, as in Nilearn's AR(1) GLM.
+    Supported by methods `"r_optimized"`, `"cpp_optimized"` and `"cpp"`;
+    other methods reject it.
 
   - `"run"`:
 
@@ -241,9 +280,9 @@ for a validated constructor):
 
   - `"parcel"`:
 
-    Fit one AR model per parcel (requires `parcels`). Shared-design
-    `lss()` calls reject this mode until parcel-specific filtered
-    designs are fitted separately.
+    Fit one AR model per parcel (requires `parcels`); each parcel is
+    fitted with its own filtered design. Supported by methods
+    `"r_optimized"`, `"cpp_optimized"` and `"cpp"`.
 
 - `runs`: Integer vector of length `nrow(Y)` giving run/block labels.
   Required for `pooling = "run"` and recommended whenever data span
@@ -258,8 +297,8 @@ for a validated constructor):
   observation instead.
 
 - `compute_residuals`: Logical (default TRUE). When TRUE, OLS residuals
-  from the full design are computed before fitting the noise model. Set
-  to FALSE only if Y is already residualized.
+  (see `residual_model`) are computed before fitting the noise model.
+  Set to FALSE only if Y is already residualized.
 
 - `design`: Optional numeric design matrix whose projection produced
   those residuals. Supplying it opts in to fmriAR's correction for
@@ -272,6 +311,19 @@ for a validated constructor):
   [`fmriAR::acvf_bias_matrix()`](https://bbuchsbaum.github.io/fmriAR/reference/acvf_bias_matrix.html),
   used instead of `design` when reusing a correction across datasets.
   The two fields are mutually exclusive.
+
+- `voxel_bins`: Positive integer number of autocorrelation bins for
+  `pooling = "voxel"` (default 50).
+
+- `residual_model`: which model's residuals the noise model is estimated
+  from. `"aggregate"` (default) uses the confounds plus one summed trial
+  regressor per `trial_groups` level (or per basis function); `"full"`
+  uses the full trial-wise design, whose many columns bias the
+  autocorrelation downward in rapid designs; `"corrected"` uses the full
+  design with fmriAR's bias correction (least biased, slower, global/run
+  pooling only). `"full"` is implied by `design`/`acvf_correction`. See
+  [`vignette("prewhitening")`](https://bbuchsbaum.github.io/fmrilss/articles/prewhitening.md)
+  for when to use each.
 
 - `correction_max_lag`: Positive integer lag budget used when `design`
   is supplied (default 25). The correction is intended for
@@ -316,6 +368,10 @@ each trial arranged sequentially.
 Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
 Deconvolving BOLD activation in event-related designs for multivoxel
 pattern classification analyses. NeuroImage, 59(3), 2636-2643.
+
+Turner, B. O., Mumford, J. A., Poldrack, R. A., & Ashby, F. G. (2012).
+Spatiotemporal activity estimation for multivoxel pattern analysis with
+rapid event-related designs. NeuroImage, 62(3), 1429-1438.
 
 ## Examples
 

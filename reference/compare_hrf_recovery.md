@@ -36,6 +36,6 @@ res <- compare_hrf_recovery(sim, hrf_grid = grid)
 #> Fitting FIR...
 names(res)
 #> [1] "oasis"       "spmg1"       "spmg3"       "fir"         "true_hrf"   
-#> [6] "true_params" "true_betas" 
+#> [6] "true_params" "hrf_times"   "true_betas" 
 # }
 ```

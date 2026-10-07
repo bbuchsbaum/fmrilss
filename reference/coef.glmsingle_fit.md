@@ -27,3 +27,12 @@ coef(object, type = c("d", "c", "b", "a"), ...)
 ## Value
 
 Trials x voxels matrix (a vector for type `"a"`).
+
+## Examples
+
+``` r
+example("glmsingle", echo = FALSE)
+beta <- coef(fit)
+dim(beta)
+#> [1] 36 40
+```

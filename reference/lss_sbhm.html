@@ -30,7 +30,9 @@ refit using the selected voxel shape."><link href="../albers.css" rel="styleshee
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul></li>
@@ -179,6 +181,12 @@ as optional nested <em>override lists</em>: you can provide only the fields you 
 to change. Unspecified nested defaults are preserved.</p>
 <p>If you already use <code>fmridesign</code>, prefer <code><a href="lss_sbhm_design.html">lss_sbhm_design()</a></code> to avoid manually
 assembling an OASIS <code>design_spec</code>.</p>
+<p>Active prewhitening records the fitted <code>fmriAR_plan</code> in the
+<code>whiten_plan</code> attribute on the result and its returned amplitude/coefficient
+arrays. <code>diag$prewhitening</code> distinguishes requested and applied whitening,
+records the residual model, and reports whether filtering changed <code>Y</code>
+exactly. An applied identity filter can leave the response unchanged; inspect
+the recorded plan's order and coefficients before interpreting that case.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

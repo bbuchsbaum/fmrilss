@@ -81,6 +81,9 @@ realized-engine, and chunk-size metadata. With a
 positive-peak-normalized shape, a zero-duration unit-amplitude event has
 a peak-response-amplitude coefficient. Otherwise the result is a
 coefficient on the supplied duration- and amplitude-coded event design.
+The `degenerate` metadata repeats the per-voxel flags of
+`hrf_estimates`: flagged voxels have no positive-peak shape, so their
+coefficients are not in peak-response units.
 
 ## Examples
 

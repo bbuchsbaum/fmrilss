@@ -41,7 +41,9 @@
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul>
@@ -202,7 +204,7 @@ expect.</p>
 <span>  ref <span class="op">=</span> <span class="st">"mean"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <div class="section level3">
-<h3 id="rank-is-a-declared-approximation">Rank is a declared approximation<a class="anchor" aria-label="anchor" href="#rank-is-a-declared-approximation"></a>
+<h3 id="choose-and-inspect-the-basis-rank">Choose and inspect the basis rank<a class="anchor" aria-label="anchor" href="#choose-and-inspect-the-basis-rank"></a>
 </h3>
 <p><code><a href="../reference/sbhm_build.html">sbhm_build()</a></code> performs one decomposition and retains the
 full singular-value spectrum as metadata. The cumulative fraction below
@@ -268,8 +270,9 @@ by rank.</caption>
 </table>
 <p>The shared basis <code>B</code> is orthonormal on this sampled grid.
 The coordinates <code>A</code> reconstruct the rank-four candidate
-waveforms as <code>B %*% A</code>; basis vectors are algebraic modes,
-not direct estimates of latency, width, or physiology.</p>
+waveforms as <code>B %*% A</code>. The basis vectors are algebraic
+modes; they are not direct estimates of latency, width, or
+physiology.</p>
 </div>
 </div>
 <div class="section level2">
@@ -436,11 +439,15 @@ amplitude rows</td>
 <div class="section level2">
 <h2 id="evaluate-the-shape-actually-used">Evaluate the shape actually used<a class="anchor" aria-label="anchor" href="#evaluate-the-shape-actually-used"></a>
 </h2>
-<p>Exact library index is secondary: nearby candidates can have almost
-identical waveforms. We therefore evaluate
-<code>B %*% alpha_coords</code> for every voxel. Angular error is zero
-for identical waveform direction and ignores arbitrary positive scale.
-Unit-norm waveform RMSE adds a time-domain discrepancy.</p>
+<p>Whether the match picked the exact library index matters less than
+the waveform it produced, because nearby candidates can have almost
+identical waveforms. We therefore evaluate the waveform
+<code>B %*% alpha_coords</code> for every voxel with two measures.
+Angular error is the angle between the estimated and true waveforms; it
+is zero when they point in the same direction and ignores any positive
+scale factor. Unit-norm waveform RMSE is the root-mean-square difference
+between the two waveforms after each is scaled to unit norm, a
+time-domain measure of the discrepancy.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">shape_summary_display</span> <span class="op">&lt;-</span> <span class="va">shape_summary</span></span>
 <span><span class="va">shape_summary_display</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">shape_summary_display</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span>, <span class="va">round</span>, <span class="fl">5</span><span class="op">)</span></span>
@@ -495,9 +502,9 @@ coverage.</caption>
 <div class="figure" style="text-align: center">
 <img src="sbhm_files/figure-html/shape-plot-1.png" class="r-plt" alt="Twelve panels compare true solid and hard-matched dashed rank-four waveforms. Mean angular error is 0.000 radians on-library and 0.091 radians off-library." width="100%"><img class="albers-phone-twin" src="sbhm_files/figure-html/shape-plot-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="576" hidden><p class="caption">
 True and hard-matched rank-four waveforms for every voxel. Solid blue is
-truth; dashed orange is the coordinate actually used by the amplitude
-refit. Panels marked ‘(off)’ contain off-library mixtures and are
-intentionally harder.
+truth; dashed orange is the waveform from the coordinates actually used
+by the amplitude refit. Panels marked ‘(off)’ contain off-library
+mixtures and are intentionally harder.
 </p>
 </div>
 <p>For the six voxels generated from library members, we can also check
@@ -511,7 +518,7 @@ whether the selected index matches the generating index:</p>
 <span><span class="co">#&gt; 1                               1</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="hard-and-soft-matching-answer-different-questions">Hard and soft matching answer different questions<a class="anchor" aria-label="anchor" href="#hard-and-soft-matching-answer-different-questions"></a>
+<h2 id="compare-hard-and-soft-matching">Compare hard and soft matching<a class="anchor" aria-label="anchor" href="#compare-hard-and-soft-matching"></a>
 </h2>
 <p>Soft matching blends candidate coordinates using softmax weights
 derived from cosine scores. These weights are not estimates of the
@@ -591,23 +598,25 @@ and coefficients.</caption>
 </tr>
 </tbody>
 </table>
-<p>The returned <code>margin</code> is the difference between the
-highest and second-highest cosine scores. Low margin can reveal
-near-ties, but no universal <code>min_margin</code> or
-<code>blend_margin</code> follows from it. If gating is used, inspect
-<code>shape_mode</code> and <code>fallback_low_conf</code>;
-<code>matched_name</code> remains the top-scoring candidate, whereas
-<code>alpha_coords</code> records the shape actually used.</p>
+<p>The returned <code>margin</code> is the top cosine score minus the
+second-highest score. A low margin can reveal near-ties, but it does not
+imply a universal <code>min_margin</code> or <code>blend_margin</code>
+threshold. If you use gating thresholds, inspect <code>shape_mode</code>
+and <code>fallback_low_conf</code>: <code>matched_name</code> remains
+the top-scoring candidate, whereas <code>alpha_coords</code> records the
+shape actually used.</p>
 </div>
 <div class="section level2">
-<h2 id="compare-trial-coefficients-with-a-direct-glm-fit">Compare trial coefficients with a direct GLM fit<a class="anchor" aria-label="anchor" href="#compare-trial-coefficients-with-a-direct-glm-fit"></a>
+<h2 id="check-the-coefficient-stage-against-a-direct-glm">Check the coefficient stage against a direct GLM<a class="anchor" aria-label="anchor" href="#check-the-coefficient-stage-against-a-direct-glm"></a>
 </h2>
 <p>With <code>amplitude$method = "global_ls"</code> and zero ridge, the
-final stage is an ordinary GLM that fits all trial columns jointly,
-conditional on the selected shape. The comparison below constructs each
-voxel’s model independently using public <code>fmrihrf</code>
-regressors. Agreement checks the coefficient calculation for these
-selected shapes; it does not remove shape-selection bias.</p>
+final stage is an ordinary trial-wise GLM conditional on the selected
+shape. The reference computation below (the oracle) builds every voxel’s
+GLM independently from the public <code>fmrihrf</code> regressors and
+fits it with <code><a href="https://rdrr.io/r/stats/lmfit.html" class="external-link">lm.fit()</a></code>. It confirms, on this simulated
+dataset, that for the selected shapes SBHM returns the same coefficients
+as the direct GLM to numerical precision. It does not remove
+shape-selection bias.</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">amplitude_display</span> <span class="op">&lt;-</span> <span class="va">amplitude_table</span></span>
 <span><span class="va">amplitude_display</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">amplitude_display</span><span class="op">[</span><span class="op">-</span><span class="fl">1</span><span class="op">]</span>, <span class="va">round</span>, <span class="fl">5</span><span class="op">)</span></span>
@@ -668,21 +677,29 @@ conditional on this fixed simulation.
 <div class="section level2">
 <h2 id="use-a-factorization-for-the-initial-shape-calculation">Use a factorization for the initial shape calculation<a class="anchor" aria-label="anchor" href="#use-a-factorization-for-the-initial-shape-calculation"></a>
 </h2>
-<p><code>data_fac</code> represents <code>Y</code> as
-<code>scores %*% loadings</code>, where scores are
+<p>The prepass can compute its cross-products from a factorization of
+the data rather than from <code>Y</code> itself. <code>data_fac</code>
+represents <code>Y</code> as <code>scores %*% loadings</code>, where
+scores are
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mo>×</mo><mi>q</mi></mrow><annotation encoding="application/x-tex">T \times q</annotation></semantics></math>
 and loadings are
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>q</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">q \times V</annotation></semantics></math>.
-The full <code>Y</code> is still required by <code><a href="../reference/lss_sbhm.html">lss_sbhm()</a></code> for
-OASIS and the amplitude stage. The shortcut therefore reduces
-multiplication in the initial shape calculation (the prepass); the full
-pipeline still depends on
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>q</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">q \times V</annotation></semantics></math>,
+for
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>
+time points,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>V</mi><annotation encoding="application/x-tex">V</annotation></semantics></math>
+voxels, and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math>
+factors. The full <code>Y</code> is still required by
+<code><a href="../reference/lss_sbhm.html">lss_sbhm()</a></code> for OASIS and the amplitude stage. The shortcut
+therefore reduces multiplication in the initial shape calculation (the
+prepass); the full pipeline still depends on
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>V</mi><annotation encoding="application/x-tex">V</annotation></semantics></math>.
 Named factor axes must agree between scores and loadings; when
 <code>Y</code> has voxel names, loadings must carry the same names and
-are aligned before use. Active prewhitening with <code>data_fac</code>
-fails explicitly because the supplied factorization is not a
-factorization of the estimated whitened data.</p>
+are aligned before use. Requesting active prewhitening with
+<code>data_fac</code> stops with an error, because the supplied
+factorization is not a factorization of the estimated whitened data.</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">813</span><span class="op">)</span></span>
 <span><span class="va">q</span> <span class="op">&lt;-</span> <span class="fl">4L</span></span>
@@ -710,12 +727,12 @@ factorization of the estimated whitened data.</p>
 <span>  DenseVsFactorizedMaxError <span class="op">=</span> <span class="va">factorized_error</span></span>
 <span><span class="op">)</span></span>
 <span><span class="co">#&gt;    Scores Loadings Voxels DenseVsFactorizedMaxError</span></span>
-<span><span class="co">#&gt; 1 180 x 4   4 x 12     12              1.332268e-15</span></span></code></pre></div>
+<span><span class="co">#&gt; 1 180 x 4   4 x 12     12              3.108624e-15</span></span></code></pre></div>
 <p>For a PCA factorization, <code>prcomp(Y)$x</code> supplies scores and
 <code>t(prcomp(Y)$rotation)</code> supplies the required
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>q</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">q \times V</annotation></semantics></math>
-loading orientation. The evaluated path below keeps <code>Y</code> as
-the response for OASIS and the amplitude stage while using a rank-four
+loading orientation. The example below keeps <code>Y</code> as the
+response for OASIS and the amplitude stage while using a rank-four
 uncentered PCA approximation only for the prepass. This is a
 computational approximation, not an accuracy claim.</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
@@ -771,17 +788,18 @@ estimator; it does not create calibrated post-selection standard errors.
 Factorized prepasses and active prewhitening cannot be combined.</p>
 </div>
 <div class="section level2">
-<h2 id="advanced-policies-are-explicit-heuristics">Advanced policies are explicit heuristics<a class="anchor" aria-label="anchor" href="#advanced-policies-are-explicit-heuristics"></a>
+<h2 id="advanced-shape-and-amplitude-options">Advanced shape and amplitude options<a class="anchor" aria-label="anchor" href="#advanced-shape-and-amplitude-options"></a>
 </h2>
 <p><code>alpha_source = "trial_projection"</code> and
 <code>"oasis_rank1"</code>, low-score fallback, condition gates, ridge
 penalties, and adaptive ridge controls are available for specialized
-studies. They change the estimator. No rank, ridge fraction, margin
-threshold, ISI boundary, or TR cutoff is generally recommended here.
-Choose and validate such a policy against the design, signal scale,
-failure modes, and loss function of the intended analysis.</p>
-<p>The three scalar-coefficient engines also answer different model
-questions:</p>
+studies. They are heuristics, and they change the estimator. No rank,
+ridge fraction, margin threshold, ISI boundary, or TR cutoff is
+generally recommended here. Choose and validate such a policy against
+the design, signal scale, failure modes, and loss function of the
+intended analysis.</p>
+<p>The three scalar-coefficient engines, selected with
+<code>amplitude$method</code>, also fit different models:</p>
 <ul>
 <li>
 <code>global_ls</code> fits all trial columns jointly for each
@@ -794,8 +812,9 @@ trial;</li>
 voxel.</li>
 </ul>
 <p>Exactly coincident or otherwise unidentified trials cannot be
-recovered by any of these labels. Ridge may return symmetric finite
-coefficients, but it does not restore identification. None of the three
+recovered by any of these engines. A ridge penalty can make the fit
+return finite values for such trials (identical values for coincident
+trials), but it does not make them identifiable. None of the three
 engines returns calibrated SBHM standard errors.</p>
 </div>
 <div class="section level2">

@@ -24,7 +24,9 @@
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul></li>
@@ -63,7 +65,9 @@
 <span>  compute_residuals <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  design <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  acvf_correction <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  correction_max_lag <span class="op">=</span> <span class="fl">25L</span></span>
+<span>  correction_max_lag <span class="op">=</span> <span class="fl">25L</span>,</span>
+<span>  voxel_bins <span class="op">=</span> <span class="fl">50L</span>,</span>
+<span>  residual_model <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -127,6 +131,30 @@ produced by <code><a href="https://bbuchsbaum.github.io/fmriAR/reference/acvf_bi
 supplied. See <code><a href="https://bbuchsbaum.github.io/fmriAR/reference/fit_noise.html" class="external-link">fmriAR::fit_noise()</a></code> for the computational and filtering
 requirements of the correction.</p></dd>
 
+
+<dt id="arg-voxel-bins">voxel_bins<a class="anchor" aria-label="anchor" href="#arg-voxel-bins"></a></dt>
+<dd><p>Positive integer number of autocorrelation bins used by
+<code>pooling = "voxel"</code> in the weight-matrix LSS methods. Voxels with similar
+residual autocorrelation share one AR model refitted from their pooled
+residuals (default 50).</p></dd>
+
+
+<dt id="arg-residual-model">residual_model<a class="anchor" aria-label="anchor" href="#arg-residual-model"></a></dt>
+<dd><p>Which model's OLS residuals the noise model is
+estimated from. <code>"aggregate"</code> (the default unless <code>design</code> or
+<code>acvf_correction</code> is supplied) keeps the confounds plus one summed
+regressor per trial group or basis function: fast and available for every
+pooling mode, but trial-to-trial response variability stays in the
+residuals and inflates the autocorrelation estimate when it is large
+relative to the noise. <code>"full"</code> uses every trial regressor (the LSA
+model); with many trials this removes so many degrees of freedom that the
+autocorrelation is biased strongly downward. <code>"corrected"</code> uses the full
+model and fmriAR's residual-autocovariance bias correction, built
+automatically; it is the least biased choice but costs roughly
+O(n^2 x trials) and requires <code>method = "ar"</code> with global or run pooling.
+Supplying <code>design</code> or <code>acvf_correction</code> yourself implies <code>"full"</code>. See
+<code><a href="../articles/prewhitening.html">vignette("prewhitening")</a></code>.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -174,6 +202,12 @@ requirements of the correction.</p></dd>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $correction_max_lag</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 25</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $voxel_bins</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 50</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $residual_model</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "aggregate"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> attr(,"class")</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "fmrilss_prewhiten_options" "list"                     </span>

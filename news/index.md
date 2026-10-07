@@ -1,1 +1,239 @@
 # Changelog
+
+## fmrilss (development version)
+
+### Correctness and diagnostics
+
+- Normalize automatic Gaussian stglmnet paths by a common response RMS
+  to prevent scale-dependent path collapse. Betas, predictions, and CV
+  errors retain input units; explicit lambda values keep their existing
+  semantics.
+- Preserve the fitted whitening plan on SBHM outputs and report whether
+  it changed the response. Infer run IDs before validating run-pooled
+  prepasses.
+- Add opt-in `lss_design(diagnostics = TRUE)` input-design
+  rank/conditioning, trial and voxel mappings, and nonfinite-beta
+  summaries.
+- Score
+  [`fit_oasis_grid()`](https://bbuchsbaum.github.io/fmrilss/reference/fit_oasis_grid.md)
+  HRF candidates using joint least-squares profile residuals with voxel
+  intercepts; use the production event builder for both simulation and
+  selection. Preserve fractional onsets and sample times. Compare
+  normalized HRF shapes on their actual time grid, incorporate event
+  amplitudes in beta truth, and leave unavailable beta correlations as
+  `NA`.
+
+### GLMsingle fixes
+
+- Match event run IDs to matrix data in run order, including
+  nonascending IDs.
+- Guard fractional-ridge interpolation against zero/nonfinite norms and
+  retain regularization when the design has zero eigenvalues.
+- Handle constant or single-voxel R^2 distributions in automatic
+  thresholding, and skip threshold estimation when denoising is
+  disabled.
+- Limit noise PCs to the available rank across runs; empty and rank-zero
+  pools use zero PCs instead of arbitrary eigenvectors.
+
+### New: `glmsingle()`
+
+- [`glmsingle()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle.md)
+  implements GLMsingle (Prince et al., 2022): an ON-OFF model, a
+  per-voxel HRF chosen from GLMsingle’s 20-HRF library, GLMdenoise noise
+  regressors chosen by cross-validation, and voxel-wise fractional ridge
+  regression chosen by cross-validation over repeated conditions.
+- It computes the same estimator as the reference implementation but
+  solves each run separately, applies nuisance projections as low-rank
+  products, scores models from sufficient statistics, and compiles the
+  repeated-trial cross-validation into fixed per-trial weights. On
+  simulated data with 8–12 runs and 20,000 voxels it runs 18–24 times
+  faster than pinned Python GLMsingle on a single thread.
+- Agreement with pinned Python GLMsingle (commit `1ab54a6`) is tested on
+  11 scenarios: all HRF, noise-component and ridge-fraction choices
+  match, and betas agree to single-precision accuracy.
+- Defaults differ from GLMsingle only where GLMsingle is internally
+  inconsistent (`extras_in_denoise`, `zero_sd_cv`); the alternative
+  argument values reproduce GLMsingle.
+- [`glmsingle_design()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_design.md)
+  fits from an fmridesign event model;
+  [`glmsingle_hrf()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_hrf_library.md)
+  and
+  [`glmsingle_hrf_library()`](https://bbuchsbaum.github.io/fmrilss/reference/glmsingle_hrf_library.md)
+  return GLMsingle’s HRFs.
+- New vignette:
+  [`vignette("glmsingle")`](https://bbuchsbaum.github.io/fmrilss/articles/glmsingle.md).
+
+### Vignettes
+
+- Use CRAN albersdown (\>= 2.1.0) and its `albers_vignette()` output
+  format; theme assets are embedded from the installed package.
+
+- Recalibrated `fmrilss`, `oasis_method` and `voxel-wise-hrf` for
+  fmrihrf’s corrected SPMG HRFs (smaller raw scale and a realistic
+  undershoot). Designs now use unit-peak HRFs, and checks that were tied
+  to the old kernel are relative or computed.
+
+### Rank-1 estimation fixes
+
+- Make rank-1 Gram solves invariant to event-amplitude units and
+  preserve the estimable span of dependent other-trial groups instead of
+  dropping all other-trial regressors.
+- Report the residual sum of squares at the final returned amplitudes in
+  both separate and joint ALS models.
+
+### Performance
+
+- The optimized LSS backends (`r_optimized`, `cpp_optimized`, `cpp`) now
+  build the n x T LSS weight matrix from the residualized trial design
+  and compute every trial beta with one matrix product. The data matrix
+  is no longer residualized or copied, the per-voxel R loop is gone, and
+  `cpp_optimized` only splits voxels across OpenMP threads when the
+  linked BLAS is single-threaded. Default
+  [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md) on
+  600 scans x 20,000 voxels with 150 trials: 1.9 s -\> 0.07 s.
+- Prewhitening fits AR models with global or run pooling from an
+  n-column factor of the residual Gram matrix instead of the n x V
+  residuals (exact), and computes noise residuals with BLAS-3
+  projections. AR(1)
+  [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md) on
+  the same problem: 4.9 s -\> 0.7 s.
+- Non-allocating finiteness check for `Y`.
+
+### New features
+
+- `lss(trial_groups = )` fits LSS-N (Turner et al., 2012): one summed
+  “other trials” regressor per condition, the model used by Nilearn’s
+  and NiBetaSeries’ beta series.
+
+- `lss(ridge = )` adds a fractional ridge penalty to each trial model
+  (the OASIS `ridge_mode = "fractional"` convention), composable with
+  `trial_groups` and prewhitening. In rapid designs with overlapping
+  trials it lowers beta RMSE substantially (about a third in the
+  benchmark) without changing pattern correlations.
+
+- `prewhiten = list(pooling = "voxel")` and `pooling = "parcel"` now
+  work with a shared design for `r_optimized`, `cpp_optimized` and
+  `cpp`: each whitening operator gets its own filtered design. Voxel
+  pooling bins voxels by residual autocorrelation (`voxel_bins`,
+  default 50) and refits an AR model per bin, as in Nilearn’s AR(1) GLM.
+
+- New
+  [`lss_rank1()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_rank1.md):
+  the rank-1 GLM of Pedregosa et al. (2015), which learns one HRF per
+  voxel (in any fmrihrf basis) jointly with per-trial amplitudes, as
+  least-squares-separate (`model = "separate"`, R1-GLMS, optionally with
+  LSS-N `trial_groups`) or least-squares-all (`model = "joint"`,
+  R1-GLM). It is fitted by exact alternating least squares on K x K Gram
+  blocks, which is monotone, parallel over voxels and, in benchmarks,
+  reaches the same optimum as the paper’s L-BFGS approach (also
+  available as `solver = "lbfgs"`) 3-200x faster. The learned HRFs are
+  returned as a `VoxelHRF` for
+  [`lss_with_hrf()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_with_hrf.md)
+  on new data. See
+  [`vignette("rank1_hrf")`](https://bbuchsbaum.github.io/fmrilss/articles/rank1_hrf.md).
+
+### Bug fixes
+
+- The noise model was estimated from residuals of the full trial-wise
+  (LSA) design. In rapid designs with many trials this biased the AR
+  estimate strongly downward (e.g. -0.32 for data with AR(1) ~ 0.35),
+  making prewhitened betas less accurate than OLS. The new
+  `prewhiten$residual_model` defaults to `"aggregate"` (confounds plus
+  one summed regressor per trial group or basis function); `"full"`
+  restores the previous behaviour and is implied by a user-supplied
+  residual-bias correction; `"corrected"` fits the full model with
+  fmriAR’s bias correction, built automatically (least biased;
+  global/run pooling only). The new
+  [`vignette("prewhitening")`](https://bbuchsbaum.github.io/fmrilss/articles/prewhitening.md)
+  explains the trade-offs.
+
+### Benchmarks
+
+- `bench/python_comparison/` compares fmrilss with Nilearn (per-trial
+  `run_glm`, OLS and AR(1)) and NumPy LSS implementations on a shared
+  simulation: fmrilss reproduces the Python OLS estimates to \< 5e-13,
+  is ~200x faster than the Nilearn per-trial loop at 20k voxels, and its
+  voxel-adaptive AR(1) matches Nilearn’s AR(1) accuracy.
+
+## fmrilss 0.2.0
+
+### Major Enhancements
+
+#### fmriAR Integration for Advanced Prewhitening
+
+- **New `prewhiten` parameter** in
+  [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md)
+  function provides comprehensive AR/ARMA noise modeling
+  - Automatic AR order selection: `p = "auto"`
+  - Voxel-specific parameters: `pooling = "voxel"`
+  - Run-aware estimation: `pooling = "run"` with `runs` parameter
+  - Parcel-based pooling: `pooling = "parcel"` with `parcels` parameter
+  - ARMA models: `method = "arma"` for complex noise structures
+- Works with all LSS methods (r_optimized, cpp_optimized, oasis, etc.)
+- Leverages fmriAR’s optimized C++ implementations with OpenMP
+- [`prewhiten_options()`](https://bbuchsbaum.github.io/fmrilss/reference/prewhiten_options.md)
+  now forwards fmriAR 0.3.3’s opt-in residual- autocovariance
+  bias-correction controls: `design`, `acvf_correction`, and
+  `correction_max_lag`.
+- Applied prewhitening now records the fitted `fmriAR_plan` in the
+  result’s `whiten_plan` attribute.
+- [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md)
+  recognizes an unmodified multi-basis fmridesign design matrix and
+  returns the same canonical trial-major rows as
+  [`lss_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_design.md).
+- [`lss_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_design.md)
+  supports every
+  [`lss()`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md)
+  estimator for one-basis designs and gives an actionable error when a
+  non-OASIS estimator is used with a multi-basis model.
+- [`create_lwu_grid()`](https://bbuchsbaum.github.io/fmrilss/reference/create_lwu_grid.md)
+  output now composes directly with
+  `sbhm_build(library_spec = list(..., pgrid = grid))`.
+
+#### API changes
+
+- The legacy `oasis$whiten` option is deprecated and ignored. Use the
+  top-level `prewhiten` argument and
+  [`prewhiten_options()`](https://bbuchsbaum.github.io/fmrilss/reference/prewhiten_options.md)
+  instead.
+- Matrix responses are now supported by
+  [`mixed_solve()`](https://bbuchsbaum.github.io/fmrilss/reference/mixed_solve.md)
+  as documented; each response column is fitted independently.
+- Invalid block sizes and basis dimensions now fail before entering
+  native blocked loops.
+
+### Documentation Updates
+
+- Enhanced vignettes with prewhitening examples:
+  - `getting_started.Rmd`: New section on temporal autocorrelation
+  - `oasis_method.Rmd`: Advanced prewhitening demonstrations
+- Comprehensive examples in `examples/prewhitening_examples.R`
+- Updated function documentation with detailed parameter descriptions
+
+### Testing
+
+- New test suite for fmriAR integration (`test-fmriAR-integration.R`)
+- Updated existing tests to use new API
+- Added regression tests for rank-deficient confounds, matrix responses,
+  and blocked-loop contracts.
+
+### Dependencies
+
+- Added `fmriAR (>= 0.3.3)` to Imports.
+- Raised the minimum R version to 4.0, matching the imported `fmriAR`
+  package.
+
+### Maintenance
+
+- Consolidated the OASIS backend into one implementation owner and
+  removed duplicate helper definitions.
+
+## fmrilss 0.1.0
+
+### Added
+
+- Initial support for voxel-wise HRF estimation and LSS using
+  voxel-specific HRFs via
+  [`estimate_voxel_hrf()`](https://bbuchsbaum.github.io/fmrilss/reference/estimate_voxel_hrf.md)
+  and
+  [`lss_with_hrf()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_with_hrf.md).

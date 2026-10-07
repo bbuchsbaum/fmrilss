@@ -164,6 +164,14 @@ If you already use `fmridesign`, prefer
 [`lss_sbhm_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm_design.md)
 to avoid manually assembling an OASIS `design_spec`.
 
+Active prewhitening records the fitted `fmriAR_plan` in the
+`whiten_plan` attribute on the result and its returned
+amplitude/coefficient arrays. `diag$prewhitening` distinguishes
+requested and applied whitening, records the residual model, and reports
+whether filtering changed `Y` exactly. An applied identity filter can
+leave the response unchanged; inspect the recorded plan's order and
+coefficients before interpreting that case.
+
 ## See also
 
 [`lss_sbhm_design()`](https://bbuchsbaum.github.io/fmrilss/reference/lss_sbhm_design.md),

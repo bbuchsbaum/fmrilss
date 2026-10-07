@@ -17,7 +17,8 @@ lss_design(
   prewhiten = NULL,
   blockids = NULL,
   validate = TRUE,
-  ...
+  ...,
+  diagnostics = FALSE
 )
 ```
 
@@ -87,6 +88,16 @@ lss_design(
 - ...:
 
   Additional arguments passed to the underlying LSS method.
+
+- diagnostics:
+
+  Logical. If TRUE, attach a `diagnostics` attribute with trial/basis
+  and voxel identities, retained/excluded counts, non-finite output
+  locations, and rank/conditioning of the assembled input design. The
+  design diagnostics precede whitening and describe the full design, not
+  each trial-specific LSS model. No trials or voxels are silently
+  dropped; invalid inputs raise errors. This option does not change the
+  return type.
 
 ## Value
 

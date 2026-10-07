@@ -30,7 +30,9 @@ modulators, and structured nuisance handling."><link href="../albers.css" rel="s
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul></li>
@@ -69,7 +71,8 @@ modulators, and structured nuisance handling.</p>
 <span>  prewhiten <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  blockids <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  validate <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  <span class="va">...</span></span>
+<span>  <span class="va">...</span>,</span>
+<span>  diagnostics <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -134,6 +137,15 @@ design compatibility, collinearity, and temporal alignment.</p></dd>
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
 <dd><p>Additional arguments passed to the underlying LSS method.</p></dd>
+
+
+<dt id="arg-diagnostics">diagnostics<a class="anchor" aria-label="anchor" href="#arg-diagnostics"></a></dt>
+<dd><p>Logical. If TRUE, attach a <code>diagnostics</code> attribute with
+trial/basis and voxel identities, retained/excluded counts, non-finite
+output locations, and rank/conditioning of the assembled input design.
+The design diagnostics precede whitening and describe the full design,
+not each trial-specific LSS model. No trials or voxels are silently dropped;
+invalid inputs raise errors. This option does not change the return type.</p></dd>
 
 </dl></div>
     <div class="section level2">

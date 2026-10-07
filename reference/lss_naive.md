@@ -8,7 +8,7 @@ less efficient than the optimized
 ## Usage
 
 ``` r
-lss_naive(Y = NULL, bdes, dset = NULL)
+lss_naive(Y = NULL, bdes, dset = NULL, trial_groups = NULL, ridge = NULL)
 ```
 
 ## Arguments
@@ -35,6 +35,18 @@ lss_naive(Y = NULL, bdes, dset = NULL)
 
   Optional dataset object. If provided and Y is NULL, data will be
   extracted using `get_data_matrix`.
+
+- trial_groups:
+
+  Optional vector with one condition label per trial. When supplied,
+  each trial model uses one summed "other trials" regressor per group
+  (LSS-N) instead of a single pooled regressor. See
+  [`lss`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md).
+
+- ridge:
+
+  Optional fractional ridge penalty (one or two numbers); see
+  [`lss`](https://bbuchsbaum.github.io/fmrilss/reference/lss.md).
 
 ## Value
 
@@ -99,6 +111,6 @@ beta_estimates_naive <- lss_naive(Y = Y, bdes = bdes)
 
 beta_estimates_fast <- lss(Y = Y, X = X, Z = Z)
 max(abs(beta_estimates_naive - beta_estimates_fast))
-#> [1] 4.440892e-16
+#> [1] 1.332268e-15
 # }
 ```

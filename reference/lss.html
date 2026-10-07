@@ -32,7 +32,9 @@ other-trial regressor per basis function."><link href="../albers.css" rel="style
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul></li>
@@ -73,7 +75,9 @@ other-trial regressor per basis function.</p>
 <span>  block_size <span class="op">=</span> <span class="fl">96</span>,</span>
 <span>  oasis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  stglmnet <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  prewhiten <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  prewhiten <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  trial_groups <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  ridge <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -144,6 +148,30 @@ See Details and <code><a href="stglmnet_options.html">stglmnet_options</a></code
 package, or <code>NULL</code> (no whitening, the default).
 See Details and <code><a href="prewhiten_options.html">prewhiten_options</a></code> for the full list.</p></dd>
 
+
+<dt id="arg-trial-groups">trial_groups<a class="anchor" aria-label="anchor" href="#arg-trial-groups"></a></dt>
+<dd><p>Optional vector (character, factor, or integer) with one
+condition label per trial, i.e. per column of <code>X</code>. When supplied, each
+trial-wise model uses one summed "other trials" regressor per condition
+(the LSS-N variant of Turner et al., 2012), with the trial of interest
+removed from its own condition's regressor, instead of a single regressor
+pooling every other trial. This is the model used by Nilearn's and
+NiBetaSeries' LSS beta series and is more accurate when conditions evoke
+different responses. Supported by methods <code>"r_optimized"</code>,
+<code>"cpp_optimized"</code>, <code>"cpp"</code>, and <code>"naive"</code>. Defaults to <code>NULL</code> (classic LSS).</p></dd>
+
+
+<dt id="arg-ridge">ridge<a class="anchor" aria-label="anchor" href="#arg-ridge"></a></dt>
+<dd><p>Optional fractional ridge penalty: one number, or two numbers
+<code>c(trial, others)</code> for the trial-of-interest and the other-trials
+coefficients. Each is a fraction of the mean design energy (the
+<code>ridge_mode = "fractional"</code> convention of OASIS), i.e. the penalty added to
+the trial diagonal is <code>ridge[1] * mean(c_i'c_i)</code>. Ridge shrinks trial
+estimates toward zero and can greatly reduce their variance in rapid
+designs where neighbouring trials overlap; it composes with
+<code>trial_groups</code> and <code>prewhiten</code>. Supported by methods <code>"r_optimized"</code>,
+<code>"cpp_optimized"</code>, <code>"cpp"</code>, and <code>"naive"</code>. Defaults to <code>NULL</code> (no ridge).</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -165,7 +193,14 @@ structured returns).</p>
 <li><p>For a one-basis design, all other trials combined into one summed
 regressor. A K-basis OASIS model uses a K-column summed block.</p></li>
 <li><p>Common fixed regressors (Z matrix), whose coefficients are not returned</p></li>
-</ul><p>If Nuisance regressors are provided, the rank-revealed combined span
+</ul><p><strong>Computation.</strong> Each LSS estimate is a linear functional of the data,
+\(\hat\beta_i = w_i^\top y\). The optimized methods build the
+\(n \times T\) weight matrix \(W\) from the (small) trial design and
+compute all trial betas with one matrix product \(W^\top Y\). Because the
+weights lie in the residual space of the confounds, the data matrix is never
+residualized or copied, so the cost is a single
+\(O(nTV)\) BLAS call regardless of the number of confounds.</p>
+<p>If Nuisance regressors are provided, the rank-revealed combined span
 <code>cbind(Z, Nuisance)</code> is projected from both Y and X before fitting. Without a
 separate Nuisance matrix, Z remains explicitly in every trial-wise model.</p>
 <p>When using method="oasis", the following options are available in the oasis list
@@ -233,9 +268,13 @@ estimated from the median autocorrelation across all voxels.
 Fast and usually adequate.</p></dd>
 
 <dt><code>"voxel"</code></dt>
-<dd><p>Fit a separate AR model per voxel. Shared-design
-<code>lss()</code> calls reject this mode because each voxel would require
-its own matching filtered design.</p></dd>
+<dd><p>Voxel-adaptive noise model. Per-voxel residual
+autocorrelations are estimated, voxels are grouped into
+<code>voxel_bins</code> bins (default 50) of similar autocorrelation, and an
+AR model is refitted per bin; each bin gets its own filtered design,
+as in Nilearn's AR(1) GLM. Supported by methods
+<code>"r_optimized"</code>, <code>"cpp_optimized"</code> and <code>"cpp"</code>; other
+methods reject it.</p></dd>
 
 <dt><code>"run"</code></dt>
 <dd><p>Fit one AR model per run (requires <code>runs</code>).
@@ -243,8 +282,9 @@ Useful when noise structure differs between runs.</p></dd>
 
 <dt><code>"parcel"</code></dt>
 <dd><p>Fit one AR model per parcel (requires
-<code>parcels</code>). Shared-design <code>lss()</code> calls reject this mode
-until parcel-specific filtered designs are fitted separately.</p></dd>
+<code>parcels</code>); each parcel is fitted with its own filtered design.
+Supported by methods <code>"r_optimized"</code>, <code>"cpp_optimized"</code>
+and <code>"cpp"</code>.</p></dd>
 
 
 </dl></li>
@@ -259,8 +299,8 @@ parcel labels.  Required for <code>pooling = "parcel"</code>.</p></li>
 segment is scaled by \(\sqrt{1 - \phi_1^2}\) for the exact
 likelihood; <code>"none"</code> drops the first observation instead.</p></li>
 <li><p><code>compute_residuals</code>: Logical (default TRUE). When TRUE,
-OLS residuals from the full design are computed before fitting the
-noise model.  Set to FALSE only if Y is already residualized.</p></li>
+OLS residuals (see <code>residual_model</code>) are computed before fitting
+the noise model.  Set to FALSE only if Y is already residualized.</p></li>
 <li><p><code>design</code>: Optional numeric design matrix whose projection
 produced those residuals. Supplying it opts in to fmriAR's correction
 for downward bias in residual autocovariance. When
@@ -271,6 +311,17 @@ that fmrilss adds when none is already represented.</p></li>
 matrices from <code><a href="https://bbuchsbaum.github.io/fmriAR/reference/acvf_bias_matrix.html" class="external-link">fmriAR::acvf_bias_matrix()</a></code>, used instead of
 <code>design</code> when reusing a correction across datasets. The two fields
 are mutually exclusive.</p></li>
+<li><p><code>voxel_bins</code>: Positive integer number of autocorrelation bins
+for <code>pooling = "voxel"</code> (default 50).</p></li>
+<li><p><code>residual_model</code>: which model's residuals the noise model is
+estimated from. <code>"aggregate"</code> (default) uses the confounds plus one
+summed trial regressor per <code>trial_groups</code> level (or per basis
+function); <code>"full"</code> uses the full trial-wise design, whose many
+columns bias the autocorrelation downward in rapid designs;
+<code>"corrected"</code> uses the full design with fmriAR's bias correction
+(least biased, slower, global/run pooling only). <code>"full"</code> is
+implied by <code>design</code>/<code>acvf_correction</code>. See
+<code><a href="../articles/prewhitening.html">vignette("prewhitening")</a></code> for when to use each.</p></li>
 <li><p><code>correction_max_lag</code>: Positive integer lag budget used when
 <code>design</code> is supplied (default 25). The correction is intended for
 high-pass-filtered designs; without high-pass filtering, the required
@@ -306,6 +357,9 @@ have K*ntrials rows, with basis functions for each trial arranged sequentially.<
     <p>Mumford, J. A., Turner, B. O., Ashby, F. G., &amp; Poldrack, R. A. (2012).
 Deconvolving BOLD activation in event-related designs for multivoxel pattern
 classification analyses. NeuroImage, 59(3), 2636-2643.</p>
+<p>Turner, B. O., Mumford, J. A., Poldrack, R. A., &amp; Ashby, F. G. (2012).
+Spatiotemporal activity estimation for multivoxel pattern analysis with
+rapid event-related designs. NeuroImage, 62(3), 1429-1438.</p>
     </div>
 
     <div class="section level2">

@@ -30,7 +30,9 @@ makes the HRF basis unidentifiable or rank deficient."><link href="../albers.css
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul></li>
@@ -66,7 +68,8 @@ makes the HRF basis unidentifiable or rank deficient.</p>
 <span>  <span class="va">basis</span>,</span>
 <span>  nuisance_regs <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  sframe <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  fixed_regs <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  fixed_regs <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  ref_hrf <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -101,6 +104,11 @@ TR. Required; onset and duration values use its physical-time units.</p></dd>
 <dd><p>Optional finite numeric matrix of fixed/common regressors. An
 intercept is added when it is not already in their span.</p></dd>
 
+
+<dt id="arg-ref-hrf">ref_hrf<a class="anchor" aria-label="anchor" href="#arg-ref-hrf"></a></dt>
+<dd><p>HRF used to orient the sign of each estimated shape.
+Defaults to the canonical <code><a href="https://bbuchsbaum.github.io/fmrihrf/reference/HRF_objects.html" class="external-link">fmrihrf::HRF_SPMG1</a></code>.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -112,6 +120,13 @@ with one row per basis function and one column per voxel.</p></dd>
 <dt>amplitude_scale</dt>
 <dd><p>The signed scale removed from each raw pooled-fit
 coefficient column.</p></dd>
+
+<dt>degenerate</dt>
+<dd><p>Logical, one per voxel: the estimated shape has no
+positive peak after orientation, or one smaller than 5% of its largest
+absolute deflection (typically a voxel without signal). Such shapes are
+scaled by their largest absolute value instead, and a warning reports
+how many there are; estimation does not fail.</p></dd>
 
 <dt>basis</dt>
 <dd><p>The HRF basis object used.</p></dd>
@@ -144,9 +159,10 @@ are pooled into one shape per voxel.</p></dd>
 <span class="r-in"><span><span class="va">Y</span> <span class="op">&lt;-</span> <span class="va">X</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">coef</span> <span class="op">+</span> <span class="va">Y</span> <span class="op">*</span> <span class="fl">0.1</span></span></span>
 <span class="r-in"><span><span class="va">est</span> <span class="op">&lt;-</span> <span class="fu">estimate_voxel_hrf</span><span class="op">(</span><span class="va">Y</span>, <span class="va">events</span>, <span class="va">basis</span>, sframe <span class="op">=</span> <span class="va">sframe</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/str.html" class="external-link">str</a></span><span class="op">(</span><span class="va">est</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> List of 8</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> List of 9</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  $ coefficients     : num [1, 1:2] 5.7 5.7</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  $ amplitude_scale  : num [1:2] -0.1018 0.0121</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  $ degenerate       : logi [1:2] FALSE FALSE</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  $ basis            :function (t)  </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   ..- attr(*, "class")= chr [1:2] "HRF" "function"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   ..- attr(*, "name")= chr "SPMG1"</span>

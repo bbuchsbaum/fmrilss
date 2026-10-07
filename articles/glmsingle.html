@@ -41,7 +41,9 @@
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul>
@@ -170,7 +172,7 @@ order.</p>
 <span><span class="co">#&gt;   models: A (ON-OFF), B (HRF library), C (GLMdenoise), D (fractional ridge) </span></span>
 <span><span class="co">#&gt;   noise PCs selected: 3</span></span>
 <span><span class="co">#&gt;   median ridge fraction: 0.70</span></span>
-<span><span class="co">#&gt;   elapsed: 0.4 s</span></span></code></pre></div>
+<span><span class="co">#&gt;   elapsed: 0.5 s</span></span></code></pre></div>
 <p>The result contains <code>typea</code>, <code>typeb</code>,
 <code>typec</code>, and <code>typed</code> lists using GLMsingle’s field
 names. Types B–D contain trial-by-voxel betas, ordered by run and then

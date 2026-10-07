@@ -41,7 +41,9 @@
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul>
@@ -239,14 +241,17 @@ the first few estimates:</p>
 <span><span class="co">#&gt; trial_04     2.39     0.02    -1.08    -0.59</span></span></code></pre></div>
 <p>Each row comes from a model with three parts: the target trial, the
 sum of all other trials, and the shared regressors. The target
-coefficient becomes the reported beta. Repeating that model for every
-trial reduces competition among individual trial columns, but it does
-not make a poor or rank-deficient design informative.</p>
+coefficient becomes the reported beta. Because overlapping trial
+regressors share variance, fitting them all at once makes their
+individual estimates compete for that variance. Repeating the three-part
+model for every trial reduces this competition among individual trial
+columns, but it does not make a poor or rank-deficient design
+informative.</p>
 <div class="figure" style="text-align: center">
-<img src="fmrilss_files/figure-html/beta-heatmap-1.png" class="r-plt" alt="Heatmap with 24 trial rows and 8 voxel columns. Dark red cells are strongly negative and dark blue cells are strongly positive." width="100%"><img class="albers-phone-twin" src="fmrilss_files/figure-html/beta-heatmap-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="482" hidden><p class="caption">
+<img src="fmrilss_files/figure-html/beta-heatmap-1.png" class="r-plt" alt="Heatmap with 24 trial rows and 8 voxel columns on a colour scale centred at zero. Dark red cells are strongly positive and dark blue cells are strongly negative." width="100%"><img class="albers-phone-twin" src="fmrilss_files/figure-html/beta-heatmap-1.phone.png" alt="" aria-hidden="true" loading="lazy" data-albers-below="482" hidden><p class="caption">
 Estimated single-trial responses for the eight simulated voxels. Red is
-negative and blue is positive; deeper colour indicates larger magnitude,
-not statistical significance.
+positive, blue is negative, and white is zero; deeper colour indicates
+larger magnitude, not statistical significance.
 </p>
 </div>
 </div>
@@ -271,7 +276,10 @@ it to every matrix that remains in the model. Here we project only
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>maximum_absolute_difference <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">beta_lss</span> <span class="op">-</span> <span class="va">beta_projected</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; maximum_absolute_difference </span></span>
-<span><span class="co">#&gt;                9.200973e-14</span></span></code></pre></div>
+<span><span class="co">#&gt;                1.993961e-13</span></span></code></pre></div>
+<p>The difference is at the level of numerical rounding: when the
+projection is applied to all three matrices, the two routes give the
+same estimates.</p>
 <p>Leaving <code>Z</code> unprojected changes the model and can change
 the trial estimates. <code><a href="../reference/project_confounds.html">project_confounds()</a></code> also materializes
 an
@@ -290,6 +298,11 @@ trial-specific model. The choice involves a bias–variance trade-off.</p>
 Because both estimators are linear here, we can calculate conditional
 squared bias and noise variance directly. We also generate 100
 independent noise realizations as a check on that calculation.</p>
+<p>The first table below checks that the trial design remains estimable
+after the shared <code>Z</code> and <code>Nuisance</code> columns are
+removed (the “residualized” design): its rank equals the number of
+trials. The second table gives the exact decomposition of mean squared
+error (MSE) at the noise level used to simulate <code>Y</code>.</p>
 <table class="table">
 <caption>Diagnostics for the residualized trial design used in the
 comparison.</caption>
@@ -353,8 +366,11 @@ At noise SD 2.5, LSS has more squared bias but sufficiently lower
 variance to produce lower mean squared error than LSA.
 </p>
 </div>
-<p>The noise scale matters. The calculated crossover for this fixed
-design and truth is SD = 0.818:</p>
+<p>Which estimator wins depends on the noise level. As noise grows, the
+variance term grows while the squared bias stays fixed, so lower
+variance matters more. The crossover is the noise SD at which LSS and
+LSA have equal MSE; for this fixed design and truth it is SD =
+0.818:</p>
 <table class="table">
 <caption>Conditional RMSE on both sides of the design-specific
 crossover.</caption>
@@ -409,6 +425,9 @@ backends:</p>
 the API and backend agreement, not a benefit from whitening. Treat AR(1)
 as an example starting model: choose an order and pooling strategy using
 residual diagnostics and acquisition-aware validation.</p>
+<p>How the noise model is estimated matters for single-trial designs:
+see <code><a href="../articles/prewhitening.html">vignette("prewhitening")</a></code> for the
+<code>residual_model</code> choices and when each is appropriate.</p>
 <p>For multiple runs, use run-aware intercepts and supply run labels to
 <code>prewhiten_options(method = "ar", p = 1, pooling = "run", runs = ...)</code>.
 Do not concatenate runs and let filtering cross a run boundary.</p>
@@ -424,11 +443,48 @@ computation, not the estimand:</p>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>maximum_absolute_difference <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">beta_lss</span> <span class="op">-</span> <span class="va">beta_cpp</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; maximum_absolute_difference </span></span>
-<span><span class="co">#&gt;                1.776357e-15</span></span></code></pre></div>
+<span><span class="co">#&gt;                 4.72955e-14</span></span></code></pre></div>
 <p>Start with the default backend while developing the analysis, then
 switch when runtime or memory justifies it. Backend agreement is a
 useful regression check, but agreement alone does not validate the
 scientific model.</p>
+<p>Three options refine the trial-wise model itself. They are supported
+by the <code>r_optimized</code>, <code>cpp_optimized</code>, and
+<code>cpp</code> backends (and the <code>naive</code> reference for
+<code>trial_groups</code> and <code>ridge</code>), and can be combined
+in one call:</p>
+<ul>
+<li>
+<code>trial_groups</code> gives one summed “other trials” regressor
+per condition (LSS-N; Turner et al., 2012) instead of pooling every
+other trial. Use it when conditions are expected to evoke different
+responses.</li>
+<li>
+<code>ridge</code> adds a fractional ridge penalty to each trial
+model, shrinking trial estimates toward zero. Give one value, or
+<code>c(trial, others)</code> to penalize the target-trial and
+other-trials coefficients separately; each value is a fraction of the
+mean design energy. In rapid designs, where neighbouring trials overlap,
+this can trade a little bias for a large reduction in variance; choose
+the amount by validation on your design.</li>
+<li>
+<code>prewhiten_options(pooling = "voxel")</code> fits a
+voxel-adaptive noise model: voxels are binned by residual
+autocorrelation and each bin is fitted with its own filtered
+design.</li>
+</ul>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">conditions</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"A"</span>, <span class="st">"B"</span><span class="op">)</span>, length.out <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">X</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">beta_lss_n</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span><span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>, trial_groups <span class="op">=</span> <span class="va">conditions</span><span class="op">)</span></span>
+<span><span class="va">beta_ridge</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lss.html">lss</a></span><span class="op">(</span></span>
+<span>  <span class="va">Y</span>, <span class="va">X</span>, Z <span class="op">=</span> <span class="va">Z</span>, Nuisance <span class="op">=</span> <span class="va">Nuisance</span>,</span>
+<span>  trial_groups <span class="op">=</span> <span class="va">conditions</span>,</span>
+<span>  ridge <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.5</span>, <span class="fl">0</span><span class="op">)</span>,</span>
+<span>  prewhiten <span class="op">=</span> <span class="fu"><a href="../reference/prewhiten_options.html">prewhiten_options</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"ar"</span>, p <span class="op">=</span> <span class="fl">1</span>, pooling <span class="op">=</span> <span class="st">"voxel"</span>,</span>
+<span>                                voxel_bins <span class="op">=</span> <span class="fl">4</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">beta_ridge</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 24  8</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="what-are-the-important-limits">What are the important limits?<a class="anchor" aria-label="anchor" href="#what-are-the-important-limits"></a>
@@ -436,8 +492,9 @@ scientific model.</p>
 <ul>
 <li>
 <code>X</code> must already encode the HRF-convolved response for
-each trial. Use a design-aware workflow if you begin from event
-tables.</li>
+each trial. If you begin from event tables, build <code>X</code> with a
+design-aware workflow such as
+<code><a href="../articles/lss_with_fmridesign.html">vignette("lss_with_fmridesign")</a></code>.</li>
 <li>LSS reduces competition among individual trial columns; it cannot
 recover information absent from the acquisition or rescue a singular
 design.</li>
@@ -472,12 +529,16 @@ runs.</li>
 </ul>
 </div>
 <div class="section level2">
-<h2 id="reference">Reference<a class="anchor" aria-label="anchor" href="#reference"></a>
+<h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
 </h2>
 <p>Mumford, J. A., Turner, B. O., Ashby, F. G., &amp; Poldrack, R. A.
 (2012). Deconvolving BOLD activation in event-related designs for
 multivoxel pattern classification analyses. <em>NeuroImage</em>, 59(3),
 2636–2643. <a href="https://doi.org/10.1016/j.neuroimage.2011.08.076" class="external-link uri">https://doi.org/10.1016/j.neuroimage.2011.08.076</a></p>
+<p>Turner, B. O., Mumford, J. A., Poldrack, R. A., &amp; Ashby, F. G.
+(2012). Spatiotemporal activity estimation for multivoxel pattern
+analysis with rapid event-related designs. <em>NeuroImage</em>, 62(3),
+1429–1438. <a href="https://doi.org/10.1016/j.neuroimage.2012.05.057" class="external-link uri">https://doi.org/10.1016/j.neuroimage.2012.05.057</a></p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

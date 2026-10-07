@@ -65,4 +65,19 @@ sbhm_prepass(
 
 A list containing named `beta_bar` (rank by voxel), the residualized
 aggregate design `A_agg`, its Gram matrix `G`, and design diagnostics
-and identity maps.
+and identity maps. Active whitening is recorded in the `whiten_plan`
+attribute.
+
+## Examples
+
+``` r
+times <- seq(0, 30, by = 0.5)
+H <- cbind(stats::dgamma(times, 5, 1), stats::dgamma(times, 7, 1))
+basis <- sbhm_build(library_H = H, tgrid = times, span = 30, r = 2)
+spec <- list(sframe = fmrihrf::sampling_frame(80L, TR = 1),
+             cond = list(onsets = c(5, 20, 35, 50), duration = 0))
+set.seed(1)
+pre <- sbhm_prepass(matrix(rnorm(80 * 3), 80, 3), basis, spec)
+dim(pre$beta_bar)
+#> [1] 2 3
+```

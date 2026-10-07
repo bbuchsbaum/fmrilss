@@ -11,7 +11,9 @@ No value itself. This topic documents the structure returned by
 ## Stored fields
 
 `coefficients` contains one normalized HRF-shape column per voxel;
-`amplitude_scale` records the removed positive-peak scale; `basis`
+`amplitude_scale` records the removed positive-peak scale; `degenerate`
+flags voxels whose shape has no positive peak of at least 5% of its
+largest absolute deflection (scaled by that deflection instead); `basis`
 stores the HRF basis; `conditions` records observed labels while
 `condition_pooling` states that all events estimate one pooled shape;
 `sframe` preserves physical scan timing; and `normalization` plus

@@ -18,7 +18,9 @@ prewhiten_options(
   compute_residuals = TRUE,
   design = NULL,
   acvf_correction = NULL,
-  correction_max_lag = 25L
+  correction_max_lag = 25L,
+  voxel_bins = 50L,
+  residual_model = NULL
 )
 ```
 
@@ -82,6 +84,30 @@ prewhiten_options(
   [`fmriAR::fit_noise()`](https://bbuchsbaum.github.io/fmriAR/reference/fit_noise.html)
   for the computational and filtering requirements of the correction.
 
+- voxel_bins:
+
+  Positive integer number of autocorrelation bins used by
+  `pooling = "voxel"` in the weight-matrix LSS methods. Voxels with
+  similar residual autocorrelation share one AR model refitted from
+  their pooled residuals (default 50).
+
+- residual_model:
+
+  Which model's OLS residuals the noise model is estimated from.
+  `"aggregate"` (the default unless `design` or `acvf_correction` is
+  supplied) keeps the confounds plus one summed regressor per trial
+  group or basis function: fast and available for every pooling mode,
+  but trial-to-trial response variability stays in the residuals and
+  inflates the autocorrelation estimate when it is large relative to the
+  noise. `"full"` uses every trial regressor (the LSA model); with many
+  trials this removes so many degrees of freedom that the
+  autocorrelation is biased strongly downward. `"corrected"` uses the
+  full model and fmriAR's residual-autocovariance bias correction, built
+  automatically; it is the least biased choice but costs roughly O(n^2 x
+  trials) and requires `method = "ar"` with global or run pooling.
+  Supplying `design` or `acvf_correction` yourself implies `"full"`. See
+  [`vignette("prewhitening")`](https://bbuchsbaum.github.io/fmrilss/articles/prewhitening.md).
+
 ## Value
 
 A list with class `"fmrilss_prewhiten_options"`.
@@ -128,6 +154,12 @@ prewhiten_options(method = "ar", p = 1, pooling = "run",
 #> 
 #> $correction_max_lag
 #> [1] 25
+#> 
+#> $voxel_bins
+#> [1] 50
+#> 
+#> $residual_model
+#> [1] "aggregate"
 #> 
 #> attr(,"class")
 #> [1] "fmrilss_prewhiten_options" "list"                     

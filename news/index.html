@@ -24,7 +24,9 @@
     <li><a class="dropdown-item" href="../articles/oasis_method.html">Practical OASIS: Design, Regularization, and Diagnostics</a></li>
     <li><a class="dropdown-item" href="../articles/oasis_theory.html">OASIS Theory: What Is Reused, Solved, and Returned</a></li>
     <li><a class="dropdown-item" href="../articles/lss_with_fmridesign.html">Run-aware LSS with fmridesign</a></li>
+    <li><a class="dropdown-item" href="../articles/prewhitening.html">Prewhitening: Where the Noise Model Comes From</a></li>
     <li><a class="dropdown-item" href="../articles/voxel-wise-hrf.html">Voxel-wise HRF shapes and trial coefficients</a></li>
+    <li><a class="dropdown-item" href="../articles/rank1_hrf.html">Rank-1 GLM: Learning One HRF per Voxel While Estimating Trials</a></li>
     <li><a class="dropdown-item" href="../articles/sbhm.html">Shared-basis HRF matching: shapes, score margins, and trial coefficients</a></li>
     <li><a class="dropdown-item" href="../articles/glmsingle.html">GLMsingle in fmrilss: library HRFs, GLMdenoise and fractional ridge</a></li>
   </ul></li>
@@ -44,7 +46,139 @@
       <small>Source: <a href="https://github.com/bbuchsbaum/fmrilss/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
-  </main></div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="development version" id="fmrilss-development-version">fmrilss (development version)<a class="anchor" aria-label="anchor" href="#fmrilss-development-version"></a></h2>
+<div class="section level3">
+<h3 id="correctness-and-diagnostics-development-version">Correctness and diagnostics<a class="anchor" aria-label="anchor" href="#correctness-and-diagnostics-development-version"></a></h3>
+<ul><li>Normalize automatic Gaussian stglmnet paths by a common response RMS to prevent scale-dependent path collapse. Betas, predictions, and CV errors retain input units; explicit lambda values keep their existing semantics.</li>
+<li>Preserve the fitted whitening plan on SBHM outputs and report whether it changed the response. Infer run IDs before validating run-pooled prepasses.</li>
+<li>Add opt-in <code>lss_design(diagnostics = TRUE)</code> input-design rank/conditioning, trial and voxel mappings, and nonfinite-beta summaries.</li>
+<li>Score <code><a href="../reference/fit_oasis_grid.html">fit_oasis_grid()</a></code> HRF candidates using joint least-squares profile residuals with voxel intercepts; use the production event builder for both simulation and selection. Preserve fractional onsets and sample times. Compare normalized HRF shapes on their actual time grid, incorporate event amplitudes in beta truth, and leave unavailable beta correlations as <code>NA</code>.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="glmsingle-fixes-development-version">GLMsingle fixes<a class="anchor" aria-label="anchor" href="#glmsingle-fixes-development-version"></a></h3>
+<ul><li>Match event run IDs to matrix data in run order, including nonascending IDs.</li>
+<li>Guard fractional-ridge interpolation against zero/nonfinite norms and retain regularization when the design has zero eigenvalues.</li>
+<li>Handle constant or single-voxel R^2 distributions in automatic thresholding, and skip threshold estimation when denoising is disabled.</li>
+<li>Limit noise PCs to the available rank across runs; empty and rank-zero pools use zero PCs instead of arbitrary eigenvectors.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="new-glmsingle-development-version">New: <code>glmsingle()</code>
+<a class="anchor" aria-label="anchor" href="#new-glmsingle-development-version"></a></h3>
+<ul><li>
+<code><a href="../reference/glmsingle.html">glmsingle()</a></code> implements GLMsingle (Prince et al., 2022): an ON-OFF model, a per-voxel HRF chosen from GLMsingle’s 20-HRF library, GLMdenoise noise regressors chosen by cross-validation, and voxel-wise fractional ridge regression chosen by cross-validation over repeated conditions.</li>
+<li>It computes the same estimator as the reference implementation but solves each run separately, applies nuisance projections as low-rank products, scores models from sufficient statistics, and compiles the repeated-trial cross-validation into fixed per-trial weights. On simulated data with 8–12 runs and 20,000 voxels it runs 18–24 times faster than pinned Python GLMsingle on a single thread.</li>
+<li>Agreement with pinned Python GLMsingle (commit <code>1ab54a6</code>) is tested on 11 scenarios: all HRF, noise-component and ridge-fraction choices match, and betas agree to single-precision accuracy.</li>
+<li>Defaults differ from GLMsingle only where GLMsingle is internally inconsistent (<code>extras_in_denoise</code>, <code>zero_sd_cv</code>); the alternative argument values reproduce GLMsingle.</li>
+<li>
+<code><a href="../reference/glmsingle_design.html">glmsingle_design()</a></code> fits from an fmridesign event model; <code><a href="../reference/glmsingle_hrf_library.html">glmsingle_hrf()</a></code> and <code><a href="../reference/glmsingle_hrf_library.html">glmsingle_hrf_library()</a></code> return GLMsingle’s HRFs.</li>
+<li>New vignette: <code><a href="../articles/glmsingle.html">vignette("glmsingle")</a></code>.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="vignettes-development-version">Vignettes<a class="anchor" aria-label="anchor" href="#vignettes-development-version"></a></h3>
+<ul><li><p>Use CRAN albersdown (&gt;= 2.1.0) and its <code>albers_vignette()</code> output format; theme assets are embedded from the installed package.</p></li>
+<li><p>Recalibrated <code>fmrilss</code>, <code>oasis_method</code> and <code>voxel-wise-hrf</code> for fmrihrf’s corrected SPMG HRFs (smaller raw scale and a realistic undershoot). Designs now use unit-peak HRFs, and checks that were tied to the old kernel are relative or computed.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="rank-estimation-fixes-development-version">Rank-1 estimation fixes<a class="anchor" aria-label="anchor" href="#rank-estimation-fixes-development-version"></a></h3>
+<ul><li>Make rank-1 Gram solves invariant to event-amplitude units and preserve the estimable span of dependent other-trial groups instead of dropping all other-trial regressors.</li>
+<li>Report the residual sum of squares at the final returned amplitudes in both separate and joint ALS models.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="performance-development-version">Performance<a class="anchor" aria-label="anchor" href="#performance-development-version"></a></h3>
+<ul><li>The optimized LSS backends (<code>r_optimized</code>, <code>cpp_optimized</code>, <code>cpp</code>) now build the n x T LSS weight matrix from the residualized trial design and compute every trial beta with one matrix product. The data matrix is no longer residualized or copied, the per-voxel R loop is gone, and <code>cpp_optimized</code> only splits voxels across OpenMP threads when the linked BLAS is single-threaded. Default <code><a href="../reference/lss.html">lss()</a></code> on 600 scans x 20,000 voxels with 150 trials: 1.9 s -&gt; 0.07 s.</li>
+<li>Prewhitening fits AR models with global or run pooling from an n-column factor of the residual Gram matrix instead of the n x V residuals (exact), and computes noise residuals with BLAS-3 projections. AR(1) <code><a href="../reference/lss.html">lss()</a></code> on the same problem: 4.9 s -&gt; 0.7 s.</li>
+<li>Non-allocating finiteness check for <code>Y</code>.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="new-features-development-version">New features<a class="anchor" aria-label="anchor" href="#new-features-development-version"></a></h3>
+<ul><li><p><code>lss(trial_groups = )</code> fits LSS-N (Turner et al., 2012): one summed “other trials” regressor per condition, the model used by Nilearn’s and NiBetaSeries’ beta series.</p></li>
+<li><p><code>lss(ridge = )</code> adds a fractional ridge penalty to each trial model (the OASIS <code>ridge_mode = "fractional"</code> convention), composable with <code>trial_groups</code> and prewhitening. In rapid designs with overlapping trials it lowers beta RMSE substantially (about a third in the benchmark) without changing pattern correlations.</p></li>
+<li><p><code>prewhiten = list(pooling = "voxel")</code> and <code>pooling = "parcel"</code> now work with a shared design for <code>r_optimized</code>, <code>cpp_optimized</code> and <code>cpp</code>: each whitening operator gets its own filtered design. Voxel pooling bins voxels by residual autocorrelation (<code>voxel_bins</code>, default 50) and refits an AR model per bin, as in Nilearn’s AR(1) GLM.</p></li>
+<li><p>New <code><a href="../reference/lss_rank1.html">lss_rank1()</a></code>: the rank-1 GLM of Pedregosa et al. (2015), which learns one HRF per voxel (in any fmrihrf basis) jointly with per-trial amplitudes, as least-squares-separate (<code>model = "separate"</code>, R1-GLMS, optionally with LSS-N <code>trial_groups</code>) or least-squares-all (<code>model = "joint"</code>, R1-GLM). It is fitted by exact alternating least squares on K x K Gram blocks, which is monotone, parallel over voxels and, in benchmarks, reaches the same optimum as the paper’s L-BFGS approach (also available as <code>solver = "lbfgs"</code>) 3-200x faster. The learned HRFs are returned as a <code>VoxelHRF</code> for <code><a href="../reference/lss_with_hrf.html">lss_with_hrf()</a></code> on new data. See <code><a href="../articles/rank1_hrf.html">vignette("rank1_hrf")</a></code>.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-development-version">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-development-version"></a></h3>
+<ul><li>The noise model was estimated from residuals of the full trial-wise (LSA) design. In rapid designs with many trials this biased the AR estimate strongly downward (e.g. -0.32 for data with AR(1) ~ 0.35), making prewhitened betas less accurate than OLS. The new <code>prewhiten$residual_model</code> defaults to <code>"aggregate"</code> (confounds plus one summed regressor per trial group or basis function); <code>"full"</code> restores the previous behaviour and is implied by a user-supplied residual-bias correction; <code>"corrected"</code> fits the full model with fmriAR’s bias correction, built automatically (least biased; global/run pooling only). The new <code><a href="../articles/prewhitening.html">vignette("prewhitening")</a></code> explains the trade-offs.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="benchmarks-development-version">Benchmarks<a class="anchor" aria-label="anchor" href="#benchmarks-development-version"></a></h3>
+<ul><li>
+<code>bench/python_comparison/</code> compares fmrilss with Nilearn (per-trial <code>run_glm</code>, OLS and AR(1)) and NumPy LSS implementations on a shared simulation: fmrilss reproduces the Python OLS estimates to &lt; 5e-13, is ~200x faster than the Nilearn per-trial loop at 20k voxels, and its voxel-adaptive AR(1) matches Nilearn’s AR(1) accuracy.</li>
+</ul></div>
+</div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.2.0" id="fmrilss-020">fmrilss 0.2.0<a class="anchor" aria-label="anchor" href="#fmrilss-020"></a></h2>
+<div class="section level3">
+<h3 id="major-enhancements-0-2-0">Major Enhancements<a class="anchor" aria-label="anchor" href="#major-enhancements-0-2-0"></a></h3>
+<div class="section level4">
+<h4 id="fmriar-integration-for-advanced-prewhitening-0-2-0">fmriAR Integration for Advanced Prewhitening<a class="anchor" aria-label="anchor" href="#fmriar-integration-for-advanced-prewhitening-0-2-0"></a></h4>
+<ul><li>
+<strong>New <code>prewhiten</code> parameter</strong> in <code><a href="../reference/lss.html">lss()</a></code> function provides comprehensive AR/ARMA noise modeling
+<ul><li>Automatic AR order selection: <code>p = "auto"</code>
+</li>
+<li>Voxel-specific parameters: <code>pooling = "voxel"</code>
+</li>
+<li>Run-aware estimation: <code>pooling = "run"</code> with <code>runs</code> parameter</li>
+<li>Parcel-based pooling: <code>pooling = "parcel"</code> with <code>parcels</code> parameter</li>
+<li>ARMA models: <code>method = "arma"</code> for complex noise structures</li>
+</ul></li>
+<li>Works with all LSS methods (r_optimized, cpp_optimized, oasis, etc.)</li>
+<li>Leverages fmriAR’s optimized C++ implementations with OpenMP</li>
+<li>
+<code><a href="../reference/prewhiten_options.html">prewhiten_options()</a></code> now forwards fmriAR 0.3.3’s opt-in residual- autocovariance bias-correction controls: <code>design</code>, <code>acvf_correction</code>, and <code>correction_max_lag</code>.</li>
+<li>Applied prewhitening now records the fitted <code>fmriAR_plan</code> in the result’s <code>whiten_plan</code> attribute.</li>
+<li>
+<code><a href="../reference/lss.html">lss()</a></code> recognizes an unmodified multi-basis fmridesign design matrix and returns the same canonical trial-major rows as <code><a href="../reference/lss_design.html">lss_design()</a></code>.</li>
+<li>
+<code><a href="../reference/lss_design.html">lss_design()</a></code> supports every <code><a href="../reference/lss.html">lss()</a></code> estimator for one-basis designs and gives an actionable error when a non-OASIS estimator is used with a multi-basis model.</li>
+<li>
+<code><a href="../reference/create_lwu_grid.html">create_lwu_grid()</a></code> output now composes directly with <code>sbhm_build(library_spec = list(..., pgrid = grid))</code>.</li>
+</ul></div>
+<div class="section level4">
+<h4 id="api-changes-0-2-0">API changes<a class="anchor" aria-label="anchor" href="#api-changes-0-2-0"></a></h4>
+<ul><li>The legacy <code>oasis$whiten</code> option is deprecated and ignored. Use the top-level <code>prewhiten</code> argument and <code><a href="../reference/prewhiten_options.html">prewhiten_options()</a></code> instead.</li>
+<li>Matrix responses are now supported by <code><a href="../reference/mixed_solve.html">mixed_solve()</a></code> as documented; each response column is fitted independently.</li>
+<li>Invalid block sizes and basis dimensions now fail before entering native blocked loops.</li>
+</ul></div>
+</div>
+<div class="section level3">
+<h3 id="documentation-updates-0-2-0">Documentation Updates<a class="anchor" aria-label="anchor" href="#documentation-updates-0-2-0"></a></h3>
+<ul><li>Enhanced vignettes with prewhitening examples:
+<ul><li>
+<code>getting_started.Rmd</code>: New section on temporal autocorrelation</li>
+<li>
+<code>oasis_method.Rmd</code>: Advanced prewhitening demonstrations</li>
+</ul></li>
+<li>Comprehensive examples in <code>examples/prewhitening_examples.R</code>
+</li>
+<li>Updated function documentation with detailed parameter descriptions</li>
+</ul></div>
+<div class="section level3">
+<h3 id="testing-0-2-0">Testing<a class="anchor" aria-label="anchor" href="#testing-0-2-0"></a></h3>
+<ul><li>New test suite for fmriAR integration (<code>test-fmriAR-integration.R</code>)</li>
+<li>Updated existing tests to use new API</li>
+<li>Added regression tests for rank-deficient confounds, matrix responses, and blocked-loop contracts.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="dependencies-0-2-0">Dependencies<a class="anchor" aria-label="anchor" href="#dependencies-0-2-0"></a></h3>
+<ul><li>Added <code>fmriAR (&gt;= 0.3.3)</code> to Imports.</li>
+<li>Raised the minimum R version to 4.0, matching the imported <code>fmriAR</code> package.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="maintenance-0-2-0">Maintenance<a class="anchor" aria-label="anchor" href="#maintenance-0-2-0"></a></h3>
+<ul><li>Consolidated the OASIS backend into one implementation owner and removed duplicate helper definitions.</li>
+</ul></div>
+</div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.1.0" id="fmrilss-010">fmrilss 0.1.0<a class="anchor" aria-label="anchor" href="#fmrilss-010"></a></h2>
+<div class="section level3">
+<h3 id="added-0-1-0">Added<a class="anchor" aria-label="anchor" href="#added-0-1-0"></a></h3>
+<ul><li>Initial support for voxel-wise HRF estimation and LSS using voxel-specific HRFs via <code><a href="../reference/estimate_voxel_hrf.html">estimate_voxel_hrf()</a></code> and <code><a href="../reference/lss_with_hrf.html">lss_with_hrf()</a></code>.</li>
+</ul></div>
+</div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">
