@@ -330,7 +330,12 @@ test_that("Manual AR(1) prewhiten equals internal prewhiten in VOXHRF path", {
 
   # Manual prewhiten with AR(1) using the public prewhiten API
   Z <- matrix(1, n_time, 1)  # intercept, matches default behavior
-  pw <- fmrilss:::`.prewhiten_data`(Y, X_trials, Z, NULL, prewhiten = list(method = "ar", p = 1))
+  # The noise model uses one summed regressor per basis function.
+  X_noise <- vapply(seq_len(K), function(k) {
+    rowSums(X_trials[, seq.int(k, ncol(X_trials), by = K), drop = FALSE])
+  }, numeric(n_time))
+  pw <- fmrilss:::`.prewhiten_data`(Y, X_trials, Z, NULL, prewhiten = list(method = "ar", p = 1),
+                                     X_noise = X_noise)
   Yw <- pw$Y_whitened
   Xw <- pw$X_whitened
   Zw <- pw$Z_whitened

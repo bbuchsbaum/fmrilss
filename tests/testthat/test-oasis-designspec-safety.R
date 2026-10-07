@@ -20,7 +20,10 @@ test_that("design_spec warns for likely run-relative onsets and injects run inte
   # Manual run-wise intercepts should match the auto-injected ones
   runs <- rep(1:2, c(50, 50))
   Z_run <- stats::model.matrix(~ 0 + factor(runs))
-  beta_manual <- lss(Y, X = NULL, Z = Z_run, method = "oasis", oasis = list(design_spec = spec))
+  expect_warning(
+    beta_manual <- lss(Y, X = NULL, Z = Z_run, method = "oasis", oasis = list(design_spec = spec)),
+    "run-relative"
+  )
 
   expect_equal(dim(beta_auto), dim(beta_manual))
   expect_equal(beta_auto, beta_manual, tolerance = 1e-8)

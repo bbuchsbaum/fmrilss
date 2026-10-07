@@ -14,7 +14,9 @@ lss(
   block_size = 96,
   oasis = list(),
   stglmnet = list(),
-  prewhiten = NULL
+  prewhiten = NULL,
+  trial_groups = NULL,
+  ridge = NULL
 )
 }
 \arguments{
@@ -65,6 +67,26 @@ See Details and \code{\link{stglmnet_options}} for the common fields.}
 \item{prewhiten}{A list of prewhitening options using the \pkg{fmriAR}
 package, or \code{NULL} (no whitening, the default).
 See Details and \code{\link{prewhiten_options}} for the full list.}
+
+\item{trial_groups}{Optional vector (character, factor, or integer) with one
+condition label per trial, i.e. per column of \code{X}. When supplied, each
+trial-wise model uses one summed "other trials" regressor per condition
+(the LSS-N variant of Turner et al., 2012), with the trial of interest
+removed from its own condition's regressor, instead of a single regressor
+pooling every other trial. This is the model used by Nilearn's and
+NiBetaSeries' LSS beta series and is more accurate when conditions evoke
+different responses. Supported by methods \code{"r_optimized"},
+\code{"cpp_optimized"}, \code{"cpp"}, and \code{"naive"}. Defaults to \code{NULL} (classic LSS).}
+
+\item{ridge}{Optional fractional ridge penalty: one number, or two numbers
+\code{c(trial, others)} for the trial-of-interest and the other-trials
+coefficients. Each is a fraction of the mean design energy (the
+\code{ridge_mode = "fractional"} convention of OASIS), i.e. the penalty added to
+the trial diagonal is \verb{ridge[1] * mean(c_i'c_i)}. Ridge shrinks trial
+estimates toward zero and can greatly reduce their variance in rapid
+designs where neighbouring trials overlap; it composes with
+\code{trial_groups} and \code{prewhiten}. Supported by methods \code{"r_optimized"},
+\code{"cpp_optimized"}, \code{"cpp"}, and \code{"naive"}. Defaults to \code{NULL} (no ridge).}
 }
 \value{
 Normally, a numeric matrix of trial-wise beta estimates: T × V for
@@ -94,6 +116,14 @@ The LSS approach fits a separate GLM for each trial, where each model includes:
 regressor. A K-basis OASIS model uses a K-column summed block.
 \item Common fixed regressors (Z matrix), whose coefficients are not returned
 }
+
+\strong{Computation.} Each LSS estimate is a linear functional of the data,
+\eqn{\hat\beta_i = w_i^\top y}. The optimized methods build the
+\eqn{n \times T} weight matrix \eqn{W} from the (small) trial design and
+compute all trial betas with one matrix product \eqn{W^\top Y}. Because the
+weights lie in the residual space of the confounds, the data matrix is never
+residualized or copied, so the cost is a single
+\eqn{O(nTV)} BLAS call regardless of the number of confounds.
 
 If Nuisance regressors are provided, the rank-revealed combined span
 \code{cbind(Z, Nuisance)} is projected from both Y and X before fitting. Without a
@@ -172,14 +202,19 @@ One of:
 \item{\code{"global"}}{(default) A single set of AR coefficients is
 estimated from the median autocorrelation across all voxels.
 Fast and usually adequate.}
-\item{\code{"voxel"}}{Fit a separate AR model per voxel. Shared-design
-\code{lss()} calls reject this mode because each voxel would require
-its own matching filtered design.}
+\item{\code{"voxel"}}{Voxel-adaptive noise model. Per-voxel residual
+autocorrelations are estimated, voxels are grouped into
+\code{voxel_bins} bins (default 50) of similar autocorrelation, and an
+AR model is refitted per bin; each bin gets its own filtered design,
+as in Nilearn's AR(1) GLM. Supported by methods
+\code{"r_optimized"}, \code{"cpp_optimized"} and \code{"cpp"}; other
+methods reject it.}
 \item{\code{"run"}}{Fit one AR model per run (requires \code{runs}).
 Useful when noise structure differs between runs.}
 \item{\code{"parcel"}}{Fit one AR model per parcel (requires
-\code{parcels}). Shared-design \code{lss()} calls reject this mode
-until parcel-specific filtered designs are fitted separately.}
+\code{parcels}); each parcel is fitted with its own filtered design.
+Supported by methods \code{"r_optimized"}, \code{"cpp_optimized"}
+and \code{"cpp"}.}
 }
 \item \code{runs}: Integer vector of length \code{nrow(Y)} giving
 run/block labels. Required for \code{pooling = "run"} and recommended
@@ -192,8 +227,8 @@ parcel labels.  Required for \code{pooling = "parcel"}.
 segment is scaled by \eqn{\sqrt{1 - \phi_1^2}} for the exact
 likelihood; \code{"none"} drops the first observation instead.
 \item \code{compute_residuals}: Logical (default TRUE). When TRUE,
-OLS residuals from the full design are computed before fitting the
-noise model.  Set to FALSE only if Y is already residualized.
+OLS residuals (see \code{residual_model}) are computed before fitting
+the noise model.  Set to FALSE only if Y is already residualized.
 \item \code{design}: Optional numeric design matrix whose projection
 produced those residuals. Supplying it opts in to fmriAR's correction
 for downward bias in residual autocovariance. When
@@ -204,6 +239,17 @@ that fmrilss adds when none is already represented.
 matrices from \code{fmriAR::acvf_bias_matrix()}, used instead of
 \code{design} when reusing a correction across datasets. The two fields
 are mutually exclusive.
+\item \code{voxel_bins}: Positive integer number of autocorrelation bins
+for \code{pooling = "voxel"} (default 50).
+\item \code{residual_model}: which model's residuals the noise model is
+estimated from. \code{"aggregate"} (default) uses the confounds plus one
+summed trial regressor per \code{trial_groups} level (or per basis
+function); \code{"full"} uses the full trial-wise design, whose many
+columns bias the autocorrelation downward in rapid designs;
+\code{"corrected"} uses the full design with fmriAR's bias correction
+(least biased, slower, global/run pooling only). \code{"full"} is
+implied by \code{design}/\code{acvf_correction}. See
+\code{vignette("prewhitening")} for when to use each.
 \item \code{correction_max_lag}: Positive integer lag budget used when
 \code{design} is supplied (default 25). The correction is intended for
 high-pass-filtered designs; without high-pass filtering, the required
@@ -314,4 +360,8 @@ standard_errors <- result_with_se$se
 Mumford, J. A., Turner, B. O., Ashby, F. G., & Poldrack, R. A. (2012).
 Deconvolving BOLD activation in event-related designs for multivoxel pattern
 classification analyses. NeuroImage, 59(3), 2636-2643.
+
+Turner, B. O., Mumford, J. A., Poldrack, R. A., & Ashby, F. G. (2012).
+Spatiotemporal activity estimation for multivoxel pattern analysis with
+rapid event-related designs. NeuroImage, 62(3), 1429-1438.
 }

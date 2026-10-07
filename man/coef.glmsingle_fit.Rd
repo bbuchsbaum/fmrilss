@@ -20,3 +20,8 @@ Trials x voxels matrix (a vector for type \code{"a"}).
 \description{
 Single-trial betas from a glmsingle fit
 }
+\examples{
+example("glmsingle", echo = FALSE)
+beta <- coef(fit)
+dim(beta)
+}

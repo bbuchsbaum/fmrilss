@@ -52,7 +52,8 @@ test_that("zero regressor detection works correctly", {
   
   # Should produce multiple warnings
   expect_warning(
-    lss(Y, X_multiple, method = "naive"),
+    expect_warning(lss(Y, X_multiple, method = "naive"),
+                   "Trial regressor 'NearZero' has very low variance"),
     "Trial regressor 'Zero' appears to be zero"
   )
   

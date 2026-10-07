@@ -196,11 +196,22 @@ test_that("fmriAR integration with voxel-specific AR parameters", {
     }
   }
 
-  # A shared design cannot be paired with voxel-specific whitening operators.
+  # The generic whitening path cannot pair a shared design with
+  # voxel-specific whitening operators...
   expect_error(
-    lss(Y, X, prewhiten = list(method = "ar", p = 1, pooling = "voxel")),
+    lss(Y, X, method = "naive",
+        prewhiten = list(method = "ar", p = 1, pooling = "voxel")),
     "cannot be applied to a shared design matrix"
   )
+
+  # ...but the weight-matrix methods fit one filtered design per AR bin.
+  result <- lss(Y, X, prewhiten = list(method = "ar", p = 1, pooling = "voxel",
+                                       voxel_bins = 3))
+  expect_equal(dim(result), c(n_trials, n_voxels))
+  expect_true(all(is.finite(result)))
+  plan <- attr(result, "whiten_plan")
+  expect_identical(plan$pooling, "parcel")
+  expect_length(plan$parcels, n_voxels)
 })
 
 test_that("fmriAR integration with run-aware estimation", {
@@ -339,7 +350,12 @@ test_that("prewhiten parameter works with all LSS methods", {
   methods <- c("r_optimized", "r_vectorized", "naive")
 
   for (m in methods) {
-    result <- lss(Y, X, method = m, prewhiten = prewhiten_opts)
+    if (m == "r_vectorized") {
+      expect_warning(result <- lss(Y, X, method = m, prewhiten = prewhiten_opts),
+                     "No intercept detected")
+    } else {
+      result <- lss(Y, X, method = m, prewhiten = prewhiten_opts)
+    }
     expect_true(is.matrix(result))
     expect_equal(nrow(result), n_trials)
     expect_equal(ncol(result), n_voxels)

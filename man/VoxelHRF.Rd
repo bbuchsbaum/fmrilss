@@ -14,7 +14,9 @@ voxel-wise HRF basis coefficients and related metadata.
 \section{Stored fields}{
 
 \code{coefficients} contains one normalized HRF-shape column per voxel;
-\code{amplitude_scale} records the removed positive-peak scale; \code{basis} stores the
+\code{amplitude_scale} records the removed positive-peak scale; \code{degenerate}
+flags voxels whose shape has no positive peak of at least 5\% of its largest
+absolute deflection (scaled by that deflection instead); \code{basis} stores the
 HRF basis; \code{conditions} records observed labels while \code{condition_pooling}
 states that all events estimate one pooled shape; \code{sframe} preserves physical scan
 timing; and \code{normalization} plus \code{coefficient_units} state the coefficient

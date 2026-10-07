@@ -20,6 +20,86 @@ articles:
   - oasis_method
   - oasis_theory
   - lss_with_fmridesign
+  - prewhitening
   - voxel-wise-hrf
+  - rank1_hrf
   - sbhm
   - glmsingle
+
+reference:
+- title: Single-trial estimation
+  contents:
+  - "LSSBeta"
+  - "coef.glmsingle_fit"
+  - "glmsingle"
+  - "glmsingle_design"
+  - "lsa"
+  - "lss"
+  - "lss_beta_cpp"
+  - "lss_cpp_optimized"
+  - "lss_design"
+  - "lss_fit_wrappers"
+  - "lss_fused_optim_cpp"
+  - "lss_naive"
+  - "lss_naive_fit"
+  - "lss_optimized"
+  - "lss_optimized_fit"
+  - "lss_rank1"
+- title: HRF modeling and recovery
+  contents:
+  - "VoxelHRF"
+  - "calculate_recovery_metrics"
+  - "compare_hrf_recovery"
+  - "create_lwu_grid"
+  - "estimate_voxel_hrf"
+  - "generate_lwu_data"
+  - "generate_rapid_design"
+  - "glmsingle_hrf_library"
+  - "lss_with_hrf"
+  - "lss_with_hrf_pure_r"
+  - "plot_hrf_comparison"
+- title: Shared-basis HRF matching
+  contents:
+  - ".sbhm_adaptive_ridge_gls"
+  - ".sbhm_auto_gate_threshold"
+  - ".sbhm_build_trial_regs"
+  - ".sbhm_prewhiten"
+  - ".sbhm_resid"
+  - ".sbhm_resolve_ridge"
+  - ".sbhm_solve"
+  - "lss_sbhm"
+  - "lss_sbhm_design"
+  - "sbhm_amplitude_ls"
+  - "sbhm_amplitude_lss1"
+  - "sbhm_amplitude_oasis_k1"
+  - "sbhm_build"
+  - "sbhm_hrf"
+  - "sbhm_match"
+  - "sbhm_prepass"
+  - "sbhm_project"
+- title: ITEM workflows
+  contents:
+  - "item_build_design"
+  - "item_compute_u"
+  - "item_cv"
+  - "item_fit"
+  - "item_from_lsa"
+  - "item_predict"
+  - "item_slice_fold"
+- title: Options and supporting functions
+  contents:
+  - ".convert_legacy_whiten"
+  - ".mixed_solve_cpp"
+  - ".needs_advanced_prewhitening"
+  - "benchmark_mixed_solve"
+  - "fit_oasis_grid"
+  - "fmrilss-package"
+  - "fmrilss_options"
+  - "mixed_precompute"
+  - "mixed_solve"
+  - "mixed_solve_optimized"
+  - "oasis_options"
+  - "prewhiten_options"
+  - "project_confounds"
+  - "project_confounds_cpp"
+  - "stglmnet_options"

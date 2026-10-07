@@ -16,7 +16,9 @@ prewhiten_options(
   compute_residuals = TRUE,
   design = NULL,
   acvf_correction = NULL,
-  correction_max_lag = 25L
+  correction_max_lag = 25L,
+  voxel_bins = 50L,
+  residual_model = NULL
 )
 }
 \arguments{
@@ -52,6 +54,26 @@ produced by \code{fmriAR::acvf_bias_matrix()}. This is a cached alternative to
 \item{correction_max_lag}{Positive integer lag budget used when \code{design} is
 supplied. See \code{fmriAR::fit_noise()} for the computational and filtering
 requirements of the correction.}
+
+\item{voxel_bins}{Positive integer number of autocorrelation bins used by
+\code{pooling = "voxel"} in the weight-matrix LSS methods. Voxels with similar
+residual autocorrelation share one AR model refitted from their pooled
+residuals (default 50).}
+
+\item{residual_model}{Which model's OLS residuals the noise model is
+estimated from. \code{"aggregate"} (the default unless \code{design} or
+\code{acvf_correction} is supplied) keeps the confounds plus one summed
+regressor per trial group or basis function: fast and available for every
+pooling mode, but trial-to-trial response variability stays in the
+residuals and inflates the autocorrelation estimate when it is large
+relative to the noise. \code{"full"} uses every trial regressor (the LSA
+model); with many trials this removes so many degrees of freedom that the
+autocorrelation is biased strongly downward. \code{"corrected"} uses the full
+model and fmriAR's residual-autocovariance bias correction, built
+automatically; it is the least biased choice but costs roughly
+O(n^2 x trials) and requires \code{method = "ar"} with global or run pooling.
+Supplying \code{design} or \code{acvf_correction} yourself implies \code{"full"}. See
+\code{vignette("prewhitening")}.}
 }
 \value{
 A list with class \code{"fmrilss_prewhiten_options"}.

@@ -206,9 +206,13 @@
     stop("prewhiten must be a list of prewhitening options", call. = FALSE)
   }
   trusted_plan <- inherits(prewhiten, "fmrilss_internal_prewhiten")
+  blocks <- fmrihrf::blockids(sframe)
+  # Supply frame boundaries before validating run pooling, which requires them.
+  if (is.null(prewhiten$runs) && !identical(prewhiten$method, "none")) {
+    prewhiten$runs <- blocks
+  }
   prewhiten <- .resolve_prewhiten_options(prewhiten, internal = trusted_plan)
   if (identical(prewhiten$method, "none")) return(prewhiten)
-  blocks <- fmrihrf::blockids(sframe)
   if (is.null(prewhiten$runs)) {
     prewhiten$runs <- blocks
     return(prewhiten)
@@ -252,7 +256,16 @@
 #'
 #' @return A list containing named `beta_bar` (rank by voxel), the residualized
 #'   aggregate design `A_agg`, its Gram matrix `G`, and design diagnostics and
-#'   identity maps.
+#'   identity maps. Active whitening is recorded in the `whiten_plan` attribute.
+#' @examples
+#' times <- seq(0, 30, by = 0.5)
+#' H <- cbind(stats::dgamma(times, 5, 1), stats::dgamma(times, 7, 1))
+#' basis <- sbhm_build(library_H = H, tgrid = times, span = 30, r = 2)
+#' spec <- list(sframe = fmrihrf::sampling_frame(80L, TR = 1),
+#'              cond = list(onsets = c(5, 20, 35, 50), duration = 0))
+#' set.seed(1)
+#' pre <- sbhm_prepass(matrix(rnorm(80 * 3), 80, 3), basis, spec)
+#' dim(pre$beta_bar)
 #' @export
 sbhm_prepass <- function(Y, sbhm, design_spec,
                          Nuisance = NULL,
@@ -293,14 +306,16 @@ sbhm_prepass <- function(Y, sbhm, design_spec,
                   if (!is.null(X_other))  X_other)
 
   used_prewhiten <- FALSE
+  whiten_plan <- NULL
 
   # 4) Optional prewhitening (dense Y only in PR2)
   if (!is.null(prewhiten) && is.null(data_fac)) {
-    whitened <- .prewhiten_data(Y, A, NULL, N_nuis, prewhiten)
+    whitened <- .prewhiten_data(Y, A, NULL, N_nuis, prewhiten, X_noise = A)
     Yw <- whitened$Y_whitened
     Aw <- whitened$X_whitened
     Nw <- whitened$Nuisance_whitened
-    used_prewhiten <- TRUE
+    used_prewhiten <- whitened$applied
+    whiten_plan <- whitened$whiten_plan
   } else {
     if (!is.null(prewhiten) &&
         !identical(prewhiten$method %||% "none", "none")) {
@@ -403,7 +418,7 @@ sbhm_prepass <- function(Y, sbhm, design_spec,
   dimnames(beta_bar) <- list(basis_names, voxel_names)
   dimnames(G) <- list(basis_names, basis_names)
 
-  list(
+  out <- list(
     beta_bar = beta_bar,
     A_agg    = A_res,
     G        = G,
@@ -414,4 +429,5 @@ sbhm_prepass <- function(Y, sbhm, design_spec,
       trial_names = built$trial_names
     )
   )
+  .attach_whiten_plan(out, whiten_plan)
 }

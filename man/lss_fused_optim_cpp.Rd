@@ -4,24 +4,45 @@
 \alias{lss_fused_optim_cpp}
 \title{Fused Single-Pass LSS Solver (C++)}
 \usage{
-lss_fused_optim_cpp(X, Y, C, block_size = 96L)
+lss_fused_optim_cpp(
+  X,
+  Y,
+  C,
+  block_size = 96L,
+  groups = NULL,
+  use_omp = TRUE,
+  ridge_x = 0,
+  ridge_b = 0
+)
 }
 \arguments{
-\item{X}{The nuisance regressor matrix (confounds).}
+\item{X}{The confound regressor matrix (n x k).}
 
-\item{Y}{The data matrix (e.g., fMRI data).}
+\item{Y}{The data matrix (n x V).}
 
-\item{C}{The trial-wise design matrix.}
+\item{C}{The trial-wise design matrix (n x T).}
 
-\item{block_size}{The number of voxels to process in each parallel block.}
+\item{block_size}{The number of voxels per OpenMP block when
+\code{use_omp = TRUE}.}
+
+\item{groups}{Optional 1-based integer trial group codes (LSS-N); NULL for
+a single pooled "other trials" regressor.}
+
+\item{use_omp}{Logical; distribute voxel blocks across OpenMP threads.
+Useful with a single-threaded BLAS. With a multithreaded BLAS a single
+matrix product is faster.}
+
+\item{ridge_x, ridge_b}{Fractional ridge penalties on the trial and
+other-trial coefficients.}
 }
 \value{
-A matrix of LSS beta estimates.
+A T x V matrix of LSS beta estimates.
 }
 \description{
-This function computes Least Squares-Separate (LSS) beta estimates using
-a memory-efficient, single-pass algorithm. It fuses the projection and
-estimation steps, processing voxels in parallel blocks to maximize cache
-efficiency.
+Computes Least Squares-Separate (LSS) beta estimates by residualizing the
+trial design against the confounds, forming the n x T LSS weight matrix
+once, and applying it to the data with a single matrix product. The data
+matrix is never residualized: each weight vector already lies in the
+confound residual space.
 }
 \keyword{internal}

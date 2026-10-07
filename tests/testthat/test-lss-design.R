@@ -537,3 +537,48 @@ test_that("lss_design warns about collinearity", {
     NA
   )
 })
+
+test_that("optional design diagnostics preserve matrix and list output contracts", {
+  skip_if_not_installed("fmridesign")
+  set.seed(1414)
+  sf <- fmrihrf::sampling_frame(80L, TR = 1)
+  events <- data.frame(onset = c(5, 20, 35, 50), run = 1L)
+  model <- fmridesign::event_model(
+    onset ~ fmridesign::trialwise(basis = "spmg1"), data = events,
+    block = ~run, sampling_frame = sf
+  )
+  Y <- matrix(rnorm(80 * 3), 80, 3, dimnames = list(NULL, c("left", "right", "zero")))
+  Y[, 3] <- 0
+  plain <- lss_design(Y, model, validate = FALSE)
+  out <- lss_design(Y, model, validate = FALSE, diagnostics = TRUE)
+  expect_true(is.matrix(out))
+  expect_equal(as.numeric(out), as.numeric(plain), tolerance = 0)
+  expect_null(attr(plain, "diagnostics"))
+  d <- attr(out, "diagnostics")
+  expect_identical(d$trial_basis_map, attr(out, "trial_basis_map"))
+  expect_identical(d$voxel_map$voxel, colnames(Y))
+  expect_equal(unname(d$counts[c("trials", "voxels", "excluded_trials", "excluded_voxels")]), c(4, 3, 0, 0))
+  expect_length(d$nonfinite_trials, 0)
+  expect_length(d$nonfinite_voxels, 0)
+  full <- cbind(1, as.matrix(fmridesign::design_matrix(model)))
+  expect_equal(d$design$rank, qr(full)$rank)
+  expect_equal(d$design$condition_number, kappa(full, exact = TRUE), tolerance = 1e-10)
+  listed <- lss_design(Y, model, validate = FALSE, diagnostics = TRUE,
+                       oasis = list(return_diag = TRUE))
+  expect_true(is.list(listed))
+  expect_equal(attr(listed, "diagnostics"), d)
+  expect_error(lss_design(Y, model, diagnostics = NA), "diagnostics must be TRUE or FALSE")
+})
+
+test_that("design diagnostics identify singular columns and non-finite outputs", {
+  X <- cbind(a = c(0, 1, 0, 1), b = c(0, 1, 0, 1), empty = 0)
+  beta <- matrix(c(1, NA, 3, 4, 5, Inf), 3, 2)
+  map <- data.frame(trial = c(1L, 2L, 3L))
+  d <- fmrilss:::.lss_design_diagnostics(X, NULL, NULL, beta, map)
+  expect_equal(d$design$rank, 1)
+  expect_identical(d$design$condition_number, Inf)
+  expect_identical(d$design$zero_column_names, "empty")
+  expect_identical(d$nonfinite_beta_rows, c(2L, 3L))
+  expect_identical(d$nonfinite_trials, c(2L, 3L))
+  expect_identical(d$nonfinite_voxels, c(1L, 2L))
+})

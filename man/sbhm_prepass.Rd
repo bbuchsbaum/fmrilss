@@ -42,11 +42,21 @@ to \code{Y}.}
 \value{
 A list containing named \code{beta_bar} (rank by voxel), the residualized
 aggregate design \code{A_agg}, its Gram matrix \code{G}, and design diagnostics and
-identity maps.
+identity maps. Active whitening is recorded in the \code{whiten_plan} attribute.
 }
 \description{
 Fit the trial-aggregated SBHM basis to every voxel after projecting
 run-specific intercepts, supplied nuisance columns, and complete modeled
 other-condition spans. The same run-safe design builder is used by the full
 SBHM pipeline.
+}
+\examples{
+times <- seq(0, 30, by = 0.5)
+H <- cbind(stats::dgamma(times, 5, 1), stats::dgamma(times, 7, 1))
+basis <- sbhm_build(library_H = H, tgrid = times, span = 30, r = 2)
+spec <- list(sframe = fmrihrf::sampling_frame(80L, TR = 1),
+             cond = list(onsets = c(5, 20, 35, 50), duration = 0))
+set.seed(1)
+pre <- sbhm_prepass(matrix(rnorm(80 * 3), 80, 3), basis, spec)
+dim(pre$beta_bar)
 }

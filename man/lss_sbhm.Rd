@@ -112,6 +112,13 @@ to change. Unspecified nested defaults are preserved.
 
 If you already use \code{fmridesign}, prefer \code{\link[=lss_sbhm_design]{lss_sbhm_design()}} to avoid manually
 assembling an OASIS \code{design_spec}.
+
+Active prewhitening records the fitted \code{fmriAR_plan} in the
+\code{whiten_plan} attribute on the result and its returned amplitude/coefficient
+arrays. \code{diag$prewhitening} distinguishes requested and applied whitening,
+records the residual model, and reports whether filtering changed \code{Y}
+exactly. An applied identity filter can leave the response unchanged; inspect
+the recorded plan's order and coefficients before interpreting that case.
 }
 \examples{
 \donttest{

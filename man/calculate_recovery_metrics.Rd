@@ -9,7 +9,8 @@ calculate_recovery_metrics(results, true_hrf)
 \arguments{
 \item{results}{Output from compare_hrf_recovery}
 
-\item{true_hrf}{Ground truth HRF}
+\item{true_hrf}{Ground truth HRF sampled on \code{results$hrf_times}. Shape
+comparisons normalize each curve to unit maximum absolute height.}
 }
 \value{
 Data frame with recovery metrics

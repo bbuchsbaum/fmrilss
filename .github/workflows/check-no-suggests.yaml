@@ -16,6 +16,7 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
+      _R_CHECK_FORCE_SUGGESTS_: false
 
     steps:
       - uses: actions/checkout@v6
@@ -26,6 +27,7 @@ jobs:
         with:
           r-version: release
           use-public-rspm: true
+          extra-repositories: https://bbuchsbaum.r-universe.dev
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
@@ -41,4 +43,5 @@ jobs:
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
-          build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'
+          build_args: 'c("--no-manual", "--no-build-vignettes")'
+          args: 'c("--no-manual", "--ignore-vignettes")'

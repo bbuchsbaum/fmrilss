@@ -36,6 +36,12 @@
 #'   per scan. If NULL, run intercepts are derived from the sampling frame.
 #' @param validate Logical. If TRUE (default), performs validation checks on
 #'   design compatibility, collinearity, and temporal alignment.
+#' @param diagnostics Logical. If TRUE, attach a `diagnostics` attribute with
+#'   trial/basis and voxel identities, retained/excluded counts, non-finite
+#'   output locations, and rank/conditioning of the assembled input design.
+#'   The design diagnostics precede whitening and describe the full design,
+#'   not each trial-specific LSS model. No trials or voxels are silently dropped;
+#'   invalid inputs raise errors. This option does not change the return type.
 #' @param ... Additional arguments passed to the underlying LSS method.
 #'
 #' @return Normally a trial-by-voxel beta matrix, or a
@@ -163,11 +169,13 @@ lss_design <- function(Y,
                        prewhiten = NULL,
                        blockids = NULL,
                        validate = TRUE,
-                       ...) {
+                       ...,
+                       diagnostics = FALSE) {
 
   # ---- Input Validation ----
 
   validate <- .as_scalar_logical(validate, "validate")
+  diagnostics <- .as_scalar_logical(diagnostics, "diagnostics")
   if (!is.list(oasis)) stop("oasis must be a list", call. = FALSE)
   if (!is.null(oasis$design_spec)) {
     stop("oasis$design_spec must not be supplied to lss_design(); event_model defines the design",
@@ -403,8 +411,46 @@ lss_design <- function(Y,
   attr(result, "sampling_frame") <- sframe
   attr(result, "method") <- "lss_design"
   attr(result, "trial_basis_map") <- prepared$map
+  if (diagnostics) {
+    beta <- if (is.matrix(result)) result else result$beta
+    attr(result, "diagnostics") <- .lss_design_diagnostics(
+      X, Z, Nuisance, beta, prepared$map
+    )
+  }
 
   return(result)
+}
+
+.lss_design_diagnostics <- function(X, Z, Nuisance, beta, map) {
+  design <- cbind(X, Z, Nuisance)
+  singular_values <- svd(design, nu = 0, nv = 0)$d
+  tolerance <- max(dim(design)) * .Machine$double.eps * max(singular_values)
+  rank <- sum(singular_values > tolerance)
+  zero_columns <- which(colSums(abs(design)) == 0)
+  nonfinite <- !is.finite(beta)
+  voxel_names <- colnames(beta) %||% paste0("Voxel_", seq_len(ncol(beta)))
+  bad_rows <- which(rowSums(nonfinite) > 0L)
+  bad_voxels <- which(colSums(nonfinite) > 0L)
+  list(
+    trial_basis_map = map,
+    voxel_map = data.frame(output_column = seq_len(ncol(beta)), voxel = voxel_names),
+    counts = c(timepoints = nrow(X), trials = length(unique(map$trial)),
+               beta_rows = nrow(beta), voxels = ncol(beta),
+               excluded_trials = 0L, excluded_voxels = 0L,
+               nonfinite_beta_values = sum(nonfinite)),
+    excluded_trials = integer(), excluded_voxels = integer(),
+    nonfinite_beta_rows = bad_rows,
+    nonfinite_trials = unique(map$trial[bad_rows]),
+    nonfinite_voxels = bad_voxels,
+    design = list(
+      scope = "assembled input design before whitening",
+      columns = ncol(design), rank = rank, rank_tolerance = tolerance,
+      condition_number = if (rank < ncol(design)) Inf else
+        max(singular_values) / min(singular_values),
+      zero_columns = zero_columns,
+      zero_column_names = colnames(design)[zero_columns]
+    )
+  )
 }
 
 # Convert a fmridesign event design into the explicit LSS target contract.

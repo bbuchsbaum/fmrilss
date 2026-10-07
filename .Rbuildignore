@@ -32,3 +32,5 @@
 ^cran-comments\.md$
 ^tools$
 ^tests/testthat/fixtures/glmsingle$
+^\.worktrees($|/)
+^\.dashboard($|/)

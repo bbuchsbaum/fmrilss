@@ -16,6 +16,19 @@
 #'   which must then be a single positive value.
 #' @param ... Further arguments passed to [glmsingle()].
 #' @return A `glmsingle_fit`; see [glmsingle()].
+#' @examplesIf requireNamespace("fmridesign", quietly = TRUE)
+#' set.seed(1)
+#' sf <- fmrihrf::sampling_frame(c(80L, 80L), TR = 1)
+#' events <- data.frame(onset = rep(c(5, 20, 35, 50), 2),
+#'                      run = rep(1:2, each = 4),
+#'                      stimulus = factor(rep(c("A", "B"), 4)))
+#' em <- fmridesign::event_model(
+#'   onset ~ fmridesign::hrf(stimulus), data = events, block = ~run,
+#'   sampling_frame = sf, durations = rep(2, nrow(events)))
+#' Y <- matrix(100 + rnorm(160 * 4), 160, 4)
+#' fit <- glmsingle_design(Y, em, want_glmdenoise = FALSE,
+#'                         want_fracridge = FALSE, verbose = FALSE)
+#' dim(coef(fit, type = "b"))
 #' @export
 glmsingle_design <- function(Y, event_model, baseline_model = NULL, stimdur = NULL, ...) {
   if (!requireNamespace("fmridesign", quietly = TRUE)) {
@@ -121,6 +134,10 @@ print.summary.glmsingle_fit <- function(x, ...) {
 #'   (GLMdenoise), `"b"` (HRF library) or `"a"` (ON-OFF, one value per voxel).
 #' @param ... Unused.
 #' @return Trials x voxels matrix (a vector for type `"a"`).
+#' @examples
+#' example("glmsingle", echo = FALSE)
+#' beta <- coef(fit)
+#' dim(beta)
 #' @export
 coef.glmsingle_fit <- function(object, type = c("d", "c", "b", "a"), ...) {
   type <- match.arg(type)

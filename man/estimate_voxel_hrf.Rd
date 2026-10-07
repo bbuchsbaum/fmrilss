@@ -10,7 +10,8 @@ estimate_voxel_hrf(
   basis,
   nuisance_regs = NULL,
   sframe = NULL,
-  fixed_regs = NULL
+  fixed_regs = NULL,
+  ref_hrf = NULL
 )
 }
 \arguments{
@@ -29,6 +30,9 @@ TR. Required; onset and duration values use its physical-time units.}
 
 \item{fixed_regs}{Optional finite numeric matrix of fixed/common regressors. An
 intercept is added when it is not already in their span.}
+
+\item{ref_hrf}{HRF used to orient the sign of each estimated shape.
+Defaults to the canonical \code{fmrihrf::HRF_SPMG1}.}
 }
 \value{
 A \link{VoxelHRF} object containing at least:
@@ -36,6 +40,11 @@ A \link{VoxelHRF} object containing at least:
 with one row per basis function and one column per voxel.}
 \item{amplitude_scale}{The signed scale removed from each raw pooled-fit
 coefficient column.}
+\item{degenerate}{Logical, one per voxel: the estimated shape has no
+positive peak after orientation, or one smaller than 5\% of its largest
+absolute deflection (typically a voxel without signal). Such shapes are
+scaled by their largest absolute value instead, and a warning reports
+how many there are; estimation does not fail.}
 \item{basis}{The HRF basis object used.}
 \item{conditions}{Observed event labels. Labels are metadata: all events
 are pooled into one shape per voxel.}
