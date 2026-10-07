@@ -1,6 +1,6 @@
 # Fast GLMsingle in fmrilss: due diligence and implementation plan
 
-**Status:** plan v3.2. It incorporates external review 1 (disposition log in
+**Status:** plan v3.3. It incorporates external review 1 (disposition log in
 §8) and the maintainer's decisions (§9).
 **Reference implementation:** GLMsingle Python, `cvnlab/GLMsingle` at
 `1ab54a6` (2025-11-09, current HEAD), with `fracridge` 3.0.
@@ -19,7 +19,7 @@ substantially faster. Estimator changes are a separate, gated research track
 
 | Decision | Resolution |
 |---|---|
-| Where it lives | **fmrilss, implemented in R.** Speed comes from algorithmic restructuring executed through R's BLAS/LAPACK-backed matrix operations (`crossprod`, `tcrossprod`, `chol`, `backsolve`, `svd`/`eigen`). Rcpp is used only if Phase 6 profiling finds an R-level loop that BLAS cannot absorb, and then only for that kernel. Python is a test-time reference only: no runtime dependency and no reticulate. It shares the fmrihrf/fmridesign integration and the test and bench infrastructure |
+| Where it lives | **fmrilss, implemented in R + Rcpp/RcppArmadillo**, like the rest of the package. Orchestration and selection logic are in R. The hot data-pass and solve kernels are in C++, with OpenMP over voxel tiles. Python is a test-time reference only: no runtime dependency and no reticulate. It shares the fmrihrf/fmridesign integration and the test and bench infrastructure |
 | API style | **One function, documented arguments.** All settings are arguments of `glmsingle()`, documented in its roxygen. There is no options constructor and no policy sets. Where a behaviour has variants, it is a `match.arg()` argument whose first (default) value is the best choice |
 | Parity target | **Python GLMsingle at `1ab54a6`.** It can be scripted without a licence and includes Python's latest fix (`19e6617`). MATLAB-only later commits are audited in §2.4 |
 | PC-count CV on the selection subset only | **Yes, by default.** Estimates are unchanged. The full-volume `glmbadness` diagnostic is available on request. Both a lean-output and a matched-output mode are benchmarked (task 7.3) |
@@ -149,9 +149,12 @@ a handling rule in §3.4.
 4. **Fixed numerical behaviour lives in one internal file**
    (`glmsingle_numerics.R`, §3.4): rank rules, singular handling and the
    autoscale operator. These are not user options.
-5. **Pure R first.** All kernels are written as blocked matrix algebra in R,
-   so BLAS does the heavy lifting. Rcpp only enters through Phase 6, with
-   profiling evidence. No new hard dependencies.
+5. **R for orchestration and selection; RcppArmadillo for hot kernels.**
+   The C++ covers the data pass (filter-bank `XᵀY`, `QᵀY`, norms), noise
+   covariance accumulation, the block spectral ridge path, and (if profiling
+   warrants it) prefix maps. OpenMP runs over voxel tiles, reusing the existing
+   Makevars setup. Python is never a runtime dependency. No new hard
+   dependencies.
 
 ### 3.2 Module layout
 
@@ -161,29 +164,31 @@ R/glmsingle_numerics.R   internal fixed numerics (§3.4): rank rule, singular ha
 R/glmsingle_runs.R       run geometry: onset TRs, trial↔run↔condition↔session maps, folds
 R/glmsingle_hrf.R        HRF library: vendored TSV, stimdur conv, pchip→TR, peak-normalise, exact support
 R/glmsingle_nuisance.R   per-run bases, PC derivation via tiled crossprod covariance
-R/glmsingle_stats.R      data pass: filter-bank XᵀY, QᵀY, norms (blocked BLAS); sufficient-statistic R²
+R/glmsingle_stats.R      wrappers for data-pass kernels; sufficient-statistic R²
 R/glmsingle_ridge.R      run-blocked OLS/fracridge path, pooled grid + interpolation
 R/glmsingle_select.R     compiled CV, tail threshold, select_noise_regressors, autoscale
 R/glmsingle_methods.R    "glmsingle_fit": print/summary/coef/as.matrix
+src/glmsingle_kernels.cpp  filter-bank XᵀY, QᵀY, covariance accumulation, block spectral path, prefix maps
+src/blocked_products.h     shared residualise-and-multiply helper (also used by OASIS)
 inst/extdata/glmsingle_hrflibrary.tsv   vendored, BSD-3 (inst/COPYRIGHTS)
 tools/glmsingle_ref/       pinned Python env + fixture writer (Rbuildignored)
 tests/testthat/helper-glmsingle.R        fixture reader, simulator, compact float64 spec references
 ```
 
 Dependency order: `numerics → runs → hrf → nuisance → stats → ridge → select →
-glmsingle()`. Budget: about 1,600 lines of R, excluding tests. Split any file approaching 400 lines.
+glmsingle()`. Budget: about 1,300 lines of R and about 500 of C++, excluding tests. Split any file approaching 400 lines.
 
 ### 3.3 Reuse map
 
 | Existing | Use | Action |
 |---|---|---|
 | `.voxhrf_orthonormal_span()` (R/voxel_hrf.R) | Orthonormal bases | Promote to `.orthonormal_span(X, rank_rule = c("qr", "normalized_gram"))` in aaa_utils. `"qr"` keeps current behaviour for the existing callers; `"normalized_gram"` implements S1 |
-| `oasis_AtY_SY_blocked` (C++) | Pattern for blocked residualise-and-multiply | Mirror the blocking pattern in R (`crossprod` on column blocks). No C++ sharing unless Phase 6 adds a kernel |
+| `oasis_AtY_SY_blocked`, `oasisk_compute_RY_norm2` (C++) | Blocked residualise-and-multiply | Extract into `src/blocked_products.h`, used by the GLMsingle data pass. OASIS migrates separately, gated by its tests |
 | `.as_*` validators | Argument validation | Reuse |
 | `.set_beta_dimnames`, `.default_trial_names` | Output naming | Reuse |
 | `lss_design()` + `.validate_design_models()` | `glmsingle_design()` fmridesign front-end | Mirror it; error if onsets are off the TR grid |
 | `fmrihrf::sampling_frame/blocklens/blockids`; `fmrihrf::evaluate` | Run structure; non-parity user HRF libraries | Reuse |
-| `bench/` conventions | Benchmark script | Reuse. Threading comes from the BLAS (e.g. OpenBLAS/MKL threads); benchmarks report the BLAS used |
+| Makevars OpenMP; `bench/` conventions | Threading over voxel tiles; benchmark script | Reuse. Benchmarks report the OpenMP thread count and the BLAS used |
 | `.item_safe_solve()` | — | Not used: its chol→svd→pinv fallbacks contradict S2/S4 |
 | `generate_rapid_design()` | — | Not used: continuous onsets, global `set.seed` |
 | fmriAR prewhitening | — | Out of scope. The nuisance layer leaves a hook |
@@ -382,9 +387,10 @@ Each task is about one reviewable commit with a done-criterion. Phases 2–5 are
 
 - **1.1** `.orthonormal_span(rank_rule = )` promotion. Existing tests stay green;
   an S1 fixture test is added.
-- **1.2** `glmsingle_numerics.R` (rank rule, singular handling, autoscale
+- **1.2** Extract `src/blocked_products.h` (no OASIS behaviour change; OASIS tests stay green).
+- **1.3** `glmsingle_numerics.R` (rank rule, singular handling, autoscale
   operator), with unit tests against the S1, S2 and S4 fixtures.
-- **1.3** `glmsingle()` argument skeleton: signature, roxygen for every
+- **1.4** `glmsingle()` argument skeleton: signature, roxygen for every
   argument (including the GLMsingle name mapping and the rationale for each
   variant default), and validation with the `.as_*` helpers. Stages are stubs.
 
@@ -407,7 +413,7 @@ The HRF index and `pcnum` are injected from fixtures.
 
 - **3.1** HRF library port with exact support (vs R1 at 1e-6 on float32
   values).
-- **3.2** Filter-bank `X_hᵀY` in R: per onset, `bank (H×L) %*% Y[window, tile]`, accumulated into an `H×n×V_tile` array (vs dense at the R2 tolerance).
+- **3.2** Filter-bank `X_hᵀY` kernel (RcppArmadillo, OpenMP over tiles): per onset, `bank (H×L) × Y[window, tile]`, batching windows. Test against dense products at the R2 tolerance; benchmark against dense GEMM.
 - **3.3** Sufficient-statistic R²/R2run and score-only selection (forward
   solve), with winner reconstruction.
 - *Gate:* type B parity. HRF-index decisions are certified or reported.
@@ -436,8 +442,8 @@ The HRF index and `pcnum` are injected from fixtures.
 Profile first (task 7.3 tooling), then choose from:
 - PC-prefix maps or rank-one updates (with a cancellation guard and fallback);
 - filter-bank batching vs GEMM;
-- BLAS threading and tile size;
-- Rcpp for a specific R-level loop, only if profiling shows BLAS cannot absorb it (candidate: the per-onset filter-bank loop);
+- OpenMP over tiles and tile size;
+- moving any remaining R-level hot loop to C++;
 - CV-row-only reconstruction.
 
 Each change must keep every Phase 2–4 gate green.
@@ -455,6 +461,7 @@ Each change must keep every Phase 2–4 gate green.
   and diagnostics, same thread count, same input precision, I/O excluded on
   both sides. Per-stage time and peak RSS at 1 and N threads, in lean and
   matched-output modes. *Target:* ≥ 5× end to end at 1 thread.
+- **7.4** Optional OASIS migration to `blocked_products.h`.
 - **7.5 Docs:** vignette (usage, a "Differences from GLMsingle" section listing every variant argument and its Python-compatible value, parity evidence, timing), pkgdown,
   NEWS, `inst/COPYRIGHTS` (GLMsingle BSD-3, fracridge BSD-2).
 - **7.6** `R CMD check` clean; the GLMsingle test suite runs in under 60 s.
@@ -532,5 +539,5 @@ already addressed in v2 (`1dcaabf`).
 | 3 | **GMM eps floor** (MATLAB `91e5b7e`) | Adopt, with deterministic restarts |
 | 4 | **S6 zero-SD voxels in CV** | Zero for all candidates (MATLAB semantics). Python's in-place divisor mutation is an aliasing artefact that scores constant voxels inconsistently across candidates |
 | 5 | **Upstream issues** | None will be filed. Deviations are documented in the vignette's "Differences from GLMsingle" section |
-| 6 | **Implementation language** | R. Algorithmic restructuring through BLAS-backed matrix operations; Rcpp only for a profiled bottleneck (Phase 6). Python is used only to generate test fixtures |
+| 6 | **Implementation language** | R + Rcpp/RcppArmadillo (hot kernels in C++, OpenMP over tiles). Python is used only to generate test fixtures |
 | 7 | **API** | A single `glmsingle()` with every setting as a documented argument. Variants are `match.arg()` arguments that default to the best choice. No options object, no policy sets |
