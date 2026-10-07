@@ -31,10 +31,17 @@ maintainer's decisions (§9).
 | Units | `test-glmsingle-units.R` | HRFs, rank rule, compiled CV (both zero-SD modes), PC rule, autoscale, fracridge mapping |
 | C: accuracy | Vignette simulation | Correlation with true trial amplitudes: B 0.33 → C 0.60 → D 0.66 |
 
-**Benchmark** (`bench/run_glmsingle_benchmark.R`): 8 runs × 200 TRs × 20,000
-voxels (375 trials), 1 thread, OpenBLAS for both. Python 339 s; fmrilss 27.6 s
-(**12.3×**). PC count is identical and the median per-voxel beta correlation
-is 1.000.
+**Benchmark** (`bench/run_glmsingle_benchmark.R`): 1 thread, OpenBLAS for
+both sides, optimised (`-O2`) build. PC count is identical and the median
+per-voxel beta correlation is 1.000 in both runs.
+
+| Data | Python GLMsingle | fmrilss | Speedup |
+|---|---:|---:|---:|
+| 8 runs × 200 TRs × 20,000 voxels (375 trials) | 339 s | 27.6 s | **12.3×** |
+| 12 runs × 220 TRs × 20,000 voxels (628 trials) | 884 s | 46.8 s | **18.9×** |
+
+The speedup grows with the number of runs because GLMsingle's stacked design
+scales with total trials, while the per-run solves do not.
 
 **Deviations from this plan, with reasons:**
 - **Tier A tolerance uses κ², not κ.** Python forms float32 normal equations,
