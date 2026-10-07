@@ -1,6 +1,7 @@
 # Rank-1 GLM (lss_rank1) benchmarks.
 #
-# Usage: Rscript bench/rank1/run_rank1_bench.R [out_dir]
+# Usage: Rscript bench/rank1/run_rank1_bench.R [out_dir] [parts]
+#   parts: comma-separated subset of "solver,estimator" (default both)
 #
 # 1. Solver comparison: exact alternating least squares (solver = "als") vs
 #    joint L-BFGS-B (solver = "lbfgs", the approach of Pedregosa et al.,
@@ -12,6 +13,7 @@
 suppressPackageStartupMessages(library(fmrilss))
 args <- commandArgs(trailingOnly = TRUE)
 out_dir <- if (length(args)) args[[1]] else "bench/rank1/results"
+parts <- if (length(args) >= 2) strsplit(args[[2]], ",")[[1]] else c("solver", "estimator")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 # --- simulation -------------------------------------------------------------
@@ -69,7 +71,7 @@ simulate <- function(V, iti, amplitudes, noise_sd, seed = 11) {
 
 beta_r <- function(est, d) mean(vapply(seq_len(d$V), function(v) cor(est[, v], d$B[, v]), 1))
 hrf_r <- function(fit, d) {
-  wf <- fmrilss:::.rank1_waveforms(fit$hrf$basis, fmrihrf::HRF_SPMG1, 24, precision = 0.1)
+  wf <- fmrilss:::.voxhrf_waveforms(fit$hrf$basis, fmrihrf::HRF_SPMG1, 24, precision = 0.1)
   W <- wf$H %*% fit$hrf$coefficients
   mean(vapply(seq_len(d$V), function(v) cor(W[, v], d$truth[, d$grp[v]]), 1))
 }
@@ -83,6 +85,7 @@ scenarios <- list(
 )
 
 # --- 1. solver comparison ---------------------------------------------------
+if ("solver" %in% parts) {
 Sys.setenv(OMP_NUM_THREADS = 1)
 solver_rows <- list()
 for (sc in c("positive", "positive_rapid")) {
@@ -118,13 +121,17 @@ Sys.unsetenv("OMP_NUM_THREADS")
 solver_tab <- do.call(rbind, solver_rows)
 utils::write.csv(solver_tab, file.path(out_dir, "solver_comparison.csv"), row.names = FALSE)
 print(solver_tab, digits = 3, row.names = FALSE)
+}
 
 # --- 2. estimator comparison -------------------------------------------------
+if ("estimator" %in% parts) {
 est_rows <- list()
-add <- function(sc, method, sec, est, d, hr = NA_real_) {
+add <- function(sc, method, sec, est, d, hr = NA_real_, n_degenerate = NA_integer_) {
   est_rows[[length(est_rows) + 1L]] <<- data.frame(
-    scenario = sc, method = method, seconds = sec, beta_r = beta_r(est, d), hrf_r = hr)
+    scenario = sc, method = method, seconds = sec, beta_r = beta_r(est, d),
+    hrf_r = hr, n_degenerate = n_degenerate)
 }
+quiet <- function(expr) suppressWarnings(expr)  # degenerate counts are recorded
 for (sc in names(scenarios)) {
   d <- do.call(simulate, c(list(V = 2000), scenarios[[sc]]))
   g <- d$events$condition
@@ -142,25 +149,22 @@ for (sc in names(scenarios)) {
       system.time(e <- lss(d$Y, Xc, trial_groups = g))[["elapsed"]], e, d)
   for (bn in names(bases)) {
     b <- bases[[bn]]
-    sec <- system.time(e <- tryCatch({
-      vh <- estimate_voxel_hrf(d$Y, d$events, b, sframe = d$sframe)
-      unclass(lss_with_hrf(d$Y, d$events, vh, verbose = FALSE))[seq_len(d$Tn), , drop = FALSE]
-    }, error = function(err) NULL))[["elapsed"]]
-    if (is.null(e)) {
-      est_rows[[length(est_rows) + 1L]] <- data.frame(
-        scenario = sc, method = paste("estimate_voxel_hrf + lss_with_hrf,", bn, "(error)"),
-        seconds = NA, beta_r = NA, hrf_r = NA)
-    } else {
-      add(sc, paste("estimate_voxel_hrf + lss_with_hrf,", bn), sec, e, d)
-    }
-    sec <- system.time(f <- lss_rank1(d$Y, d$events, b, d$sframe))[["elapsed"]]
-    add(sc, paste("lss_rank1 separate,", bn), sec, f$beta, d, hrf_r(f, d))
-    sec <- system.time(f <- lss_rank1(d$Y, d$events, b, d$sframe, trial_groups = g))[["elapsed"]]
-    add(sc, paste("lss_rank1 separate + trial_groups,", bn), sec, f$beta, d, hrf_r(f, d))
-    sec <- system.time(f <- lss_rank1(d$Y, d$events, b, d$sframe, model = "joint"))[["elapsed"]]
-    add(sc, paste("lss_rank1 joint,", bn), sec, f$beta, d, hrf_r(f, d))
+    sec <- system.time({
+      vh <- quiet(estimate_voxel_hrf(d$Y, d$events, b, sframe = d$sframe))
+      e <- unclass(lss_with_hrf(d$Y, d$events, vh, verbose = FALSE))[seq_len(d$Tn), , drop = FALSE]
+    })[["elapsed"]]
+    add(sc, paste("estimate_voxel_hrf + lss_with_hrf,", bn), sec, e, d,
+        hrf_r(list(hrf = vh), d), sum(vh$degenerate))
+    sec <- system.time(f <- quiet(lss_rank1(d$Y, d$events, b, d$sframe)))[["elapsed"]]
+    add(sc, paste("lss_rank1 separate,", bn), sec, f$beta, d, hrf_r(f, d), sum(f$degenerate))
+    sec <- system.time(f <- quiet(lss_rank1(d$Y, d$events, b, d$sframe, trial_groups = g)))[["elapsed"]]
+    add(sc, paste("lss_rank1 separate + trial_groups,", bn), sec, f$beta, d, hrf_r(f, d),
+        sum(f$degenerate))
+    sec <- system.time(f <- quiet(lss_rank1(d$Y, d$events, b, d$sframe, model = "joint")))[["elapsed"]]
+    add(sc, paste("lss_rank1 joint,", bn), sec, f$beta, d, hrf_r(f, d), sum(f$degenerate))
   }
 }
 est_tab <- do.call(rbind, est_rows)
 utils::write.csv(est_tab, file.path(out_dir, "estimator_comparison.csv"), row.names = FALSE)
 print(est_tab, digits = 3, row.names = FALSE)
+}

@@ -333,9 +333,13 @@ all(fit$converged)
   voxels, or trials x groups x voxels with `trial_groups`).
 * `hrf`: the unit-peak HRF coefficients as a `VoxelHRF` object.
 * `objective`, `iterations`, `converged`: per-voxel fit diagnostics.
-* `degenerate`: voxels whose estimated HRF has no positive peak after
-  orientation, typically voxels without signal. They are scaled by their
-  largest absolute value instead of failing the whole fit.
+* `degenerate`: voxels whose estimated HRF has no positive peak of at least
+  5% of its largest absolute deflection after orientation, typically voxels
+  without signal. They are scaled by their
+  largest absolute value instead, so their amplitudes are not in
+  peak-response units, and a warning reports how many there are. This is the
+  same policy and normalization code as `estimate_voxel_hrf()`; the flags are
+  also stored in `fit$hrf$degenerate` and passed on by `lss_with_hrf()`.
 
 `prewhiten` accepts global or run pooling; the noise model is estimated from
 one aggregate regressor per basis function (see `vignette("prewhitening")`).

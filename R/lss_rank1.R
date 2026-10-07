@@ -94,8 +94,12 @@
 #'     the trial-wise models for `"separate"`).}
 #'   \item{iterations, converged}{Per-voxel iteration counts and convergence
 #'     flags.}
-#'   \item{degenerate}{Voxels whose estimated HRF has no positive peak after
-#'     orientation (scaled by its largest absolute value instead).}
+#'   \item{degenerate}{Voxels whose estimated HRF has no positive peak of at
+#'     least 5\% of its largest absolute deflection after orientation (scaled
+#'     by that deflection instead, so their
+#'     amplitudes are not in peak-response units). Also stored in `hrf`. The
+#'     policy is shared with [estimate_voxel_hrf()]: such voxels are flagged
+#'     and reported in one warning rather than failing the fit.}
 #'   \item{model}{The fitted model.}
 #' }
 #' When prewhitening is applied the fitted plan is attached as the
@@ -214,7 +218,7 @@ lss_rank1 <- function(Y, events, basis, sframe, nuisance_regs = NULL,
 
   # Basis waveforms on a fine grid, for initialization and normalization
   span <- if (!is.null(attr(basis, "span"))) attr(basis, "span") else 30
-  wf <- .rank1_waveforms(basis, ref_hrf, span)
+  wf <- .voxhrf_waveforms(basis, ref_hrf, span)
   H0 <- .rank1_init(init, K, ncol(Y), U, GTT, n_trials, wf)
 
   fit <- if (model == "separate") {
@@ -245,20 +249,17 @@ lss_rank1 <- function(Y, events, basis, sframe, nuisance_regs = NULL,
     r1glm_fit_cpp(U, crossprod(Xr), yy, H0, max_iter, tol)
   }
 
-  # Resolve the scale/sign ambiguity: unit positive peak, oriented to ref_hrf.
-  waves <- wf$H %*% fit$h
-  orientation <- sign(drop(crossprod(wf$ref, waves)))
-  orientation[!is.finite(orientation) | orientation == 0] <- 1
-  peak <- apply(sweep(waves, 2L, orientation, "*"), 2L, max)
-  amp <- apply(abs(waves), 2L, max)
-  degenerate <- !is.finite(peak) | peak <= 1e-8 * pmax(amp, .Machine$double.xmin)
-  peak[degenerate] <- amp[degenerate]
-  peak[!is.finite(peak) | peak == 0] <- 1
-  scale <- orientation * peak
+  # Resolve the scale/sign ambiguity exactly as estimate_voxel_hrf() does:
+  # unit positive peak, oriented to ref_hrf, degenerate voxels flagged.
+  normalized <- .normalize_voxel_hrf_coefficients(fit$h, basis, span,
+                                                  ref_hrf = ref_hrf)
+  scale <- normalized$amplitude_scale
+  degenerate <- normalized$degenerate
+  .warn_degenerate_hrf(degenerate)
 
   voxel_names <- colnames(Y)
   trial_names <- paste0("trial_", seq_len(n_trials))
-  coefficients <- sweep(fit$h, 2L, scale, "/")
+  coefficients <- normalized$coefficients
   dimnames(coefficients) <- list(paste0("basis_", seq_len(K)), voxel_names)
   beta <- sweep(fit$beta, 2L, scale, "*")
   dimnames(beta) <- list(trial_names, voxel_names)
@@ -281,6 +282,7 @@ lss_rank1 <- function(Y, events, basis, sframe, nuisance_regs = NULL,
   hrf <- structure(list(
     coefficients = coefficients,
     amplitude_scale = scale,
+    degenerate = stats::setNames(degenerate, voxel_names),
     basis = basis,
     conditions = unique(as.character(events$condition)),
     sframe = sframe,
@@ -301,23 +303,6 @@ lss_rank1 <- function(Y, events, basis, sframe, nuisance_regs = NULL,
     model = model
   )
   .attach_whiten_plan(result, whiten_plan)
-}
-
-#' Basis and reference waveforms on a fine grid
-#' @keywords internal
-#' @noRd
-.rank1_waveforms <- function(basis, ref_hrf, span, precision = 0.05) {
-  grid <- seq(0, span, by = precision)
-  eval_hrf <- function(h) {
-    impulse <- fmrihrf::regressor(onsets = 0, hrf = h, duration = 0, span = span)
-    out <- fmrihrf::evaluate(impulse, grid, precision = precision, method = "conv")
-    if (inherits(out, "Matrix")) out <- as.matrix(out)
-    if (!is.matrix(out)) out <- matrix(out, ncol = 1L)
-    sweep(out, 2L, out[1L, ], "-")
-  }
-  H <- eval_hrf(basis)
-  ref <- eval_hrf(ref_hrf)[, 1L]
-  list(H = H, ref = ref, ref_coef = qr.coef(qr(H), ref))
 }
 
 #' Starting HRF coefficients (K x V)

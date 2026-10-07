@@ -1,49 +1,49 @@
-"scenario","method","seconds","beta_r","hrf_r"
-"positive","oracle LSS (true HRF)",NA,0.633359423657919,NA
-"positive","oracle LSS-N (true HRF)",NA,0.63209984599922,NA
-"positive","LSS, canonical HRF",0.00600000000002865,0.559302040960595,NA
-"positive","LSS-N, canonical HRF",0.0080000000000382,0.55664229488965,NA
-"positive","estimate_voxel_hrf + lss_with_hrf, SPMG3",8.58799999999997,0.620363780385805,NA
-"positive","lss_rank1 separate, SPMG3",0.143000000000029,0.620493203396881,0.951096508854944
-"positive","lss_rank1 separate + trial_groups, SPMG3",0.177999999999997,0.616110452086177,0.950053495113603
-"positive","lss_rank1 joint, SPMG3",4.36599999999999,0.570511155050652,0.937821781518614
-"positive","estimate_voxel_hrf + lss_with_hrf, FIR12 (error)",NA,NA,NA
-"positive","lss_rank1 separate, FIR12",0.249000000000024,0.560362264960697,0.840359168293266
-"positive","lss_rank1 separate + trial_groups, FIR12",0.434000000000026,0.530757240993014,0.820263506707488
-"positive","lss_rank1 joint, FIR12",71.221,0.376762557993503,0.664090531284642
-"positive_rapid","oracle LSS (true HRF)",NA,0.390472638275349,NA
-"positive_rapid","oracle LSS-N (true HRF)",NA,0.374650058741848,NA
-"positive_rapid","LSS, canonical HRF",0.007000000000005,0.341134044101576,NA
-"positive_rapid","LSS-N, canonical HRF",0.01400000000001,0.329336607749539,NA
-"positive_rapid","estimate_voxel_hrf + lss_with_hrf, SPMG3",16.599,0.368386820580052,NA
-"positive_rapid","lss_rank1 separate, SPMG3",0.209000000000003,0.368593993864955,0.912021235990455
-"positive_rapid","lss_rank1 separate + trial_groups, SPMG3",0.252999999999986,0.338992924753238,0.906190534225674
-"positive_rapid","lss_rank1 joint, SPMG3",47.666,0.118088296056226,0.847077223784365
-"positive_rapid","estimate_voxel_hrf + lss_with_hrf, FIR12 (error)",NA,NA,NA
-"positive_rapid","lss_rank1 separate, FIR12",0.545000000000016,0.302325400958315,0.72672282359273
-"positive_rapid","lss_rank1 separate + trial_groups, FIR12",0.913999999999987,0.269566738650179,0.724170330767368
-"positive_rapid","lss_rank1 joint, FIR12",266.394,0.0750798030990515,0.486886974297763
-"zero_mean","oracle LSS (true HRF)",NA,0.806843117881176,NA
-"zero_mean","oracle LSS-N (true HRF)",NA,0.806687983650829,NA
-"zero_mean","LSS, canonical HRF",0.00599999999997181,0.728982332082685,NA
-"zero_mean","LSS-N, canonical HRF",0.00900000000001455,0.728172753869423,NA
-"zero_mean","estimate_voxel_hrf + lss_with_hrf, SPMG3",8.36699999999996,0.452999118975499,NA
-"zero_mean","lss_rank1 separate, SPMG3",0.249000000000024,0.599707095336448,0.685861279231922
-"zero_mean","lss_rank1 separate + trial_groups, SPMG3",0.259000000000015,0.592258129214428,0.698564756025916
-"zero_mean","lss_rank1 joint, SPMG3",6.65099999999995,0.765867484248208,0.923879617154522
-"zero_mean","estimate_voxel_hrf + lss_with_hrf, FIR12 (error)",NA,NA,NA
-"zero_mean","lss_rank1 separate, FIR12",0.278999999999996,0.290942742261016,0.340957969664985
-"zero_mean","lss_rank1 separate + trial_groups, FIR12",0.599000000000046,0.299453088829958,0.371172122095447
-"zero_mean","lss_rank1 joint, FIR12",82.343,0.359371332505297,0.536738321188137
-"opposite","oracle LSS (true HRF)",NA,0.648522018189687,NA
-"opposite","oracle LSS-N (true HRF)",NA,0.879851219022114,NA
-"opposite","LSS, canonical HRF",0.00600000000008549,0.504600892997777,NA
-"opposite","LSS-N, canonical HRF",0.00900000000001455,0.691235217997316,NA
-"opposite","estimate_voxel_hrf + lss_with_hrf, SPMG3",8.55399999999997,0.146832509217644,NA
-"opposite","lss_rank1 separate, SPMG3",0.216999999999985,0.272065296804104,0.417642913729252
-"opposite","lss_rank1 separate + trial_groups, SPMG3",0.204000000000065,0.876299275231362,0.960924979072052
-"opposite","lss_rank1 joint, SPMG3",6.36099999999999,0.639812393568748,0.803491124057421
-"opposite","estimate_voxel_hrf + lss_with_hrf, FIR12 (error)",NA,NA,NA
-"opposite","lss_rank1 separate, FIR12",0.253000000000043,0.137308954496922,0.201590584245226
-"opposite","lss_rank1 separate + trial_groups, FIR12",0.528999999999996,0.82381707184416,0.819778309501243
-"opposite","lss_rank1 joint, FIR12",70.716,0.408645279810494,0.43662277241807
+"scenario","method","seconds","beta_r","hrf_r","n_degenerate"
+"positive","oracle LSS (true HRF)",NA,0.633359423657919,NA,NA
+"positive","oracle LSS-N (true HRF)",NA,0.63209984599922,NA,NA
+"positive","LSS, canonical HRF",0.00599999999999934,0.559302040960595,NA,NA
+"positive","LSS-N, canonical HRF",0.00900000000000034,0.55664229488965,NA,NA
+"positive","estimate_voxel_hrf + lss_with_hrf, SPMG3",8.996,0.620363780385805,0.950452662956048,0
+"positive","lss_rank1 separate, SPMG3",0.158999999999999,0.620493203396881,0.951096508854944,0
+"positive","lss_rank1 separate + trial_groups, SPMG3",0.185,0.616110452086177,0.950053495113603,0
+"positive","lss_rank1 joint, SPMG3",4.478,0.570511155050652,0.937821781518614,0
+"positive","estimate_voxel_hrf + lss_with_hrf, FIR12",10.249,0.559276321285475,0.837712299942276,0
+"positive","lss_rank1 separate, FIR12",0.428000000000001,0.560362264960697,0.840359168293266,0
+"positive","lss_rank1 separate + trial_groups, FIR12",0.48,0.530757240993014,0.820263506707488,0
+"positive","lss_rank1 joint, FIR12",72.494,0.376762557993503,0.664090531284642,0
+"positive_rapid","oracle LSS (true HRF)",NA,0.390472638275349,NA,NA
+"positive_rapid","oracle LSS-N (true HRF)",NA,0.374650058741848,NA,NA
+"positive_rapid","LSS, canonical HRF",0.007000000000005,0.341134044101576,NA,NA
+"positive_rapid","LSS-N, canonical HRF",0.012999999999991,0.329336607749539,NA,NA
+"positive_rapid","estimate_voxel_hrf + lss_with_hrf, SPMG3",16.588,0.368386820580052,0.91027757270284,0
+"positive_rapid","lss_rank1 separate, SPMG3",0.203000000000003,0.368593993864955,0.912021235990455,0
+"positive_rapid","lss_rank1 separate + trial_groups, SPMG3",0.271999999999991,0.338992924753238,0.906190534225674,0
+"positive_rapid","lss_rank1 joint, SPMG3",47.043,0.118088296056226,0.847077223784365,0
+"positive_rapid","estimate_voxel_hrf + lss_with_hrf, FIR12",19.415,0.29958416100277,0.719541651761054,0
+"positive_rapid","lss_rank1 separate, FIR12",0.567999999999984,0.302325400958315,0.72672282359273,1
+"positive_rapid","lss_rank1 separate + trial_groups, FIR12",0.943000000000012,0.269566738650179,0.724170330767368,1
+"positive_rapid","lss_rank1 joint, FIR12",265.179,0.0750798030990515,0.486886974297763,1
+"zero_mean","oracle LSS (true HRF)",NA,0.806843117881176,NA,NA
+"zero_mean","oracle LSS-N (true HRF)",NA,0.806687983650829,NA,NA
+"zero_mean","LSS, canonical HRF",0.00600000000002865,0.728982332082685,NA,NA
+"zero_mean","LSS-N, canonical HRF",0.00799999999998136,0.728172753869423,NA,NA
+"zero_mean","estimate_voxel_hrf + lss_with_hrf, SPMG3",8.61400000000003,0.452999118975499,0.49845343759492,0
+"zero_mean","lss_rank1 separate, SPMG3",0.228000000000009,0.599707095336448,0.685861279231922,0
+"zero_mean","lss_rank1 separate + trial_groups, SPMG3",0.259999999999991,0.592258129214428,0.698564756025916,0
+"zero_mean","lss_rank1 joint, SPMG3",6.95800000000003,0.765867484248208,0.923879617154522,0
+"zero_mean","estimate_voxel_hrf + lss_with_hrf, FIR12",9.553,0.249404761771991,0.289137349316467,5
+"zero_mean","lss_rank1 separate, FIR12",0.289999999999964,0.290942742261016,0.340957969664985,7
+"zero_mean","lss_rank1 separate + trial_groups, FIR12",0.620000000000005,0.299453088829958,0.371172122095447,15
+"zero_mean","lss_rank1 joint, FIR12",84.642,0.359371332505297,0.536738321188137,9
+"opposite","oracle LSS (true HRF)",NA,0.648522018189687,NA,NA
+"opposite","oracle LSS-N (true HRF)",NA,0.879851219022114,NA,NA
+"opposite","LSS, canonical HRF",0.00599999999997181,0.504600892997777,NA,NA
+"opposite","LSS-N, canonical HRF",0.00900000000001455,0.691235217997316,NA,NA
+"opposite","estimate_voxel_hrf + lss_with_hrf, SPMG3",8.53300000000002,0.146832509217644,0.318873719252881,0
+"opposite","lss_rank1 separate, SPMG3",0.203000000000088,0.272065296804104,0.417642913729252,0
+"opposite","lss_rank1 separate + trial_groups, SPMG3",0.198999999999955,0.876299275231362,0.960924979072052,0
+"opposite","lss_rank1 joint, SPMG3",6.66399999999999,0.639812393568748,0.803491124057421,0
+"opposite","estimate_voxel_hrf + lss_with_hrf, FIR12",9.72200000000009,0.105692056915379,0.182246612879817,2
+"opposite","lss_rank1 separate, FIR12",0.275000000000091,0.137308954496922,0.201590584245226,3
+"opposite","lss_rank1 separate + trial_groups, FIR12",0.537000000000035,0.82381707184416,0.819778309501243,0
+"opposite","lss_rank1 joint, FIR12",71.1709999999999,0.408645279810494,0.43662277241807,1

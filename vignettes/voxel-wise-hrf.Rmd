@@ -110,6 +110,16 @@ coefficients, but it is not a trial beta. With unit-amplitude impulses, the
 downstream beta is interpretable as a peak response because the supplied HRF
 shape has unit positive peak.
 
+Shapes are oriented to correlate positively with a reference HRF (`ref_hrf`,
+the canonical HRF by default). A voxel whose oriented shape has no positive
+peak, or one smaller than 5% of its largest absolute deflection, typically a
+voxel without signal, cannot be meaningfully peak-normalized: dividing by a
+noise-level peak would inflate its betas arbitrarily. It is scaled
+by its largest absolute response instead, flagged in `degenerate`, and counted
+in a warning; the rest of the fit is unaffected. `lss_with_hrf()` carries the
+flags as a `degenerate` attribute, because those voxels' betas are not in
+peak-response units. `lss_rank1()` follows the same policy.
+
 ## Separate shape calibration from trial estimation
 
 Estimating a shape and trial betas from the same response is adaptive and can

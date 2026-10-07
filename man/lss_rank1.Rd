@@ -84,7 +84,10 @@ the trial-wise models for \code{"separate"}).}
 \item{iterations, converged}{Per-voxel iteration counts and convergence
 flags.}
 \item{degenerate}{Voxels whose estimated HRF has no positive peak after
-orientation (scaled by its largest absolute value instead).}
+orientation (scaled by its largest absolute value instead, so their
+amplitudes are not in peak-response units). Also stored in \code{hrf}. The
+policy is shared with \code{\link[=estimate_voxel_hrf]{estimate_voxel_hrf()}}: such voxels are flagged
+and reported in one warning rather than failing the fit.}
 \item{model}{The fitted model.}
 }
 When prewhitening is applied the fitted plan is attached as the

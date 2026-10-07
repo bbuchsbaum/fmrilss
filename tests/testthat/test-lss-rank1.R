@@ -109,7 +109,7 @@ test_that("the objective never increases across iterations", {
 
 test_that("the joint model is exact without noise", {
   p <- make_rank1_problem(sd = 1e-6, V = 3)
-  wf <- fmrilss:::.rank1_waveforms(p$basis, fmrihrf::HRF_SPMG1, 24)
+  wf <- fmrilss:::.voxhrf_waveforms(p$basis, fmrihrf::HRF_SPMG1, 24)
   truth <- wf$H %*% p$h
   fit <- lss_rank1(p$Y, p$events, p$basis, p$sframe, nuisance_regs = p$N,
                    model = "joint")
@@ -135,7 +135,7 @@ test_that("the separate model recovers the HRF in a slow design", {
   B <- matrix(rnorm(nrow(events) * 3, 1, 0.4), nrow(events), 3)
   Y <- X %*% kronecker(B, h) + matrix(rnorm(n * 3, sd = 1e-4), n, 3)
   fit <- lss_rank1(Y, events, basis, sframe)
-  wf <- fmrilss:::.rank1_waveforms(basis, fmrihrf::HRF_SPMG1, 24)
+  wf <- fmrilss:::.voxhrf_waveforms(basis, fmrihrf::HRF_SPMG1, 24)
   expect_gt(min(apply(wf$H %*% fit$hrf$coefficients, 2, cor, wf$H %*% h)), 0.999)
   # the HRF undershoot still overlaps the next trial slightly
   expect_gt(min(vapply(1:3, function(v) cor(fit$beta[, v], B[, v]), 1)), 0.99)
@@ -178,7 +178,7 @@ test_that("trial_groups recovers the HRF when conditions have opposite signs", {
   amp <- ifelse(p$events$condition == "A", 1, -1)
   p$B <- matrix(rnorm(p$T * p$V, amp, 0.3), p$T, p$V)
   p$Y <- p$X %*% kronecker(p$B, p$h) + matrix(rnorm(p$n * p$V, sd = 0.3), p$n, p$V)
-  wf <- fmrilss:::.rank1_waveforms(p$basis, fmrihrf::HRF_SPMG1, 24)
+  wf <- fmrilss:::.voxhrf_waveforms(p$basis, fmrihrf::HRF_SPMG1, 24)
   truth <- wf$H %*% p$h
   hrf_r <- function(fit) mean(apply(wf$H %*% fit$hrf$coefficients, 2, cor, truth))
   pooled <- lss_rank1(p$Y, p$events, p$basis, p$sframe)
@@ -215,4 +215,43 @@ test_that("lss_rank1 validates its arguments", {
   expect_equal(lss_rank1(p$Y, p$events, p$basis, p$sframe, init = init)$beta,
                lss_rank1(p$Y, p$events, p$basis, p$sframe, init = "reference")$beta,
                tolerance = 1e-6)
+})
+
+test_that("estimate_voxel_hrf and lss_rank1 share the degenerate-voxel policy", {
+  basis <- fmrihrf::hrf_fir_generator(nbasis = 12, span = 24)
+  # Negative only in the undershoot window: correlates positively with the
+  # canonical HRF but has no positive peak.
+  bad <- c(rep(0, 7), -1, -1, -1, 0, 0)
+  good <- c(0, 0.5, 1, 0.8, 0.4, 0.1, 0, -0.1, -0.1, 0, 0, 0)
+  norm <- fmrilss:::.normalize_voxel_hrf_coefficients(cbind(good, bad, 0), basis, 24)
+  expect_identical(unname(norm$degenerate), c(FALSE, TRUE, TRUE))
+  wf <- fmrilss:::.voxhrf_waveforms(basis, fmrihrf::HRF_SPMG1, 24)
+  expect_equal(max(wf$H %*% norm$coefficients[, 1]), 1, tolerance = 1e-10)
+  expect_equal(max(abs(wf$H %*% norm$coefficients[, 2])), 1, tolerance = 1e-10)
+
+  set.seed(4)
+  n <- 300
+  sframe <- fmrihrf::sampling_frame(blocklens = n, TR = 1)
+  events <- data.frame(onset = seq(10, 270, by = 13), duration = 0, condition = "A")
+  X <- fmrilss:::.voxhrf_trial_basis(events, basis, sframe)$X
+  amp <- rnorm(nrow(events), 1, 0.2)
+  Y <- cbind(X %*% kronecker(amp, good), X %*% kronecker(amp, bad), X %*% kronecker(amp, good)) +
+    matrix(rnorm(n * 3, sd = 1e-3), n, 3)
+  colnames(Y) <- c("v1", "v2", "v3")
+
+  expect_warning(
+    est <- estimate_voxel_hrf(Y, events, basis, sframe = sframe),
+    "1 of 3 voxel\\(s\\) have no identifiable positive HRF peak"
+  )
+  expect_identical(est$degenerate, c(v1 = FALSE, v2 = TRUE, v3 = FALSE))
+  beta <- lss_with_hrf(Y, events, est, verbose = FALSE)
+  expect_identical(attr(beta, "degenerate"), est$degenerate)
+
+  expect_warning(
+    fit <- lss_rank1(Y, events, basis, sframe),
+    "1 of 3 voxel\\(s\\) have no identifiable positive HRF peak"
+  )
+  expect_identical(fit$degenerate, c(v1 = FALSE, v2 = TRUE, v3 = FALSE))
+  expect_identical(fit$hrf$degenerate, fit$degenerate)
+  expect_true(all(is.finite(fit$beta)))
 })
