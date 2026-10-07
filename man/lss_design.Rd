@@ -13,7 +13,8 @@ lss_design(
   prewhiten = NULL,
   blockids = NULL,
   validate = TRUE,
-  ...
+  ...,
+  diagnostics = FALSE
 )
 }
 \arguments{
@@ -57,6 +58,13 @@ per scan. If NULL, run intercepts are derived from the sampling frame.}
 design compatibility, collinearity, and temporal alignment.}
 
 \item{...}{Additional arguments passed to the underlying LSS method.}
+
+\item{diagnostics}{Logical. If TRUE, attach a \code{diagnostics} attribute with
+trial/basis and voxel identities, retained/excluded counts, non-finite
+output locations, and rank/conditioning of the assembled input design.
+The design diagnostics precede whitening and describe the full design,
+not each trial-specific LSS model. No trials or voxels are silently dropped;
+invalid inputs raise errors. This option does not change the return type.}
 }
 \value{
 Normally a trial-by-voxel beta matrix, or a

@@ -83,8 +83,9 @@ other-trials regressor in each trial's model (trials x voxels);
 the trial-wise models for \code{"separate"}).}
 \item{iterations, converged}{Per-voxel iteration counts and convergence
 flags.}
-\item{degenerate}{Voxels whose estimated HRF has no positive peak after
-orientation (scaled by its largest absolute value instead, so their
+\item{degenerate}{Voxels whose estimated HRF has no positive peak of at
+least 5\% of its largest absolute deflection after orientation (scaled
+by that deflection instead, so their
 amplitudes are not in peak-response units). Also stored in \code{hrf}. The
 policy is shared with \code{\link[=estimate_voxel_hrf]{estimate_voxel_hrf()}}: such voxels are flagged
 and reported in one warning rather than failing the fit.}
@@ -142,7 +143,7 @@ whose mean response is near zero. A K x V matrix of starting coefficients
 is also accepted.
 }
 \examples{
-\dontshow{if (requireNamespace("fmrihrf", quietly = TRUE)) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+\dontshow{if (requireNamespace("fmrihrf", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 \donttest{
 set.seed(1)
 sframe <- fmrihrf::sampling_frame(blocklens = 200, TR = 1)

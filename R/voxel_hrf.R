@@ -6,7 +6,7 @@
 #' @section Stored fields:
 #' `coefficients` contains one normalized HRF-shape column per voxel;
 #' `amplitude_scale` records the removed positive-peak scale; `degenerate`
-#' flags voxels whose shape has no positive peak of at least 5\% of its largest
+#' flags voxels whose shape has no positive peak of at least 5% of its largest
 #' absolute deflection (scaled by that deflection instead); `basis` stores the
 #' HRF basis; `conditions` records observed labels while `condition_pooling`
 #' states that all events estimate one pooled shape; `sframe` preserves physical scan
@@ -81,7 +81,7 @@ NULL
 #'   \item{amplitude_scale}{The signed scale removed from each raw pooled-fit
 #'     coefficient column.}
 #'   \item{degenerate}{Logical, one per voxel: the estimated shape has no
-#'     positive peak after orientation, or one smaller than 5\% of its largest
+#'     positive peak after orientation, or one smaller than 5% of its largest
 #'     absolute deflection (typically a voxel without signal). Such shapes are
 #'     scaled by their largest absolute value instead, and a warning reports
 #'     how many there are; estimation does not fail.}

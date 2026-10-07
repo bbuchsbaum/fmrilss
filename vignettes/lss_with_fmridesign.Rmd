@@ -651,9 +651,13 @@ voxel- or parcel-specific filtered designs.
 With `validate = TRUE`, `lss_design()` checks that the time dimensions and
 sampling frames agree. It also computes a scale-dependent condition number for
 the full assembled design and emits a warning only when that number exceeds 30
-and the effective ridge penalties are all zero; it does not return the number
-as a diagnostic. Treat the warning as screening, not as a characterization of
-every residualized LSS target model.
+and the effective ridge penalties are all zero. With `diagnostics = TRUE`,
+`attr(result, "diagnostics")` additionally records the full input design's
+SVD rank and condition number before whitening, zero columns, trial/basis and
+voxel mappings, and nonfinite beta counts. No trials or voxels are silently
+dropped. This opt-in attribute leaves the ordinary matrix or list return value
+unchanged. Treat both the warning and these input-design summaries as screening,
+not as a characterization of every residualized LSS target model.
 
 Before fitting, check the following:
 

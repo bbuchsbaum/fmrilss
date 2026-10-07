@@ -32,3 +32,19 @@ A \code{baseline_model} contributes its nuisance term (e.g. motion) as
 \code{extra_regressors}. Its drift and block terms are not used: GLMsingle
 models drift with its own per-run polynomials (\code{max_poly_deg}).
 }
+\examples{
+\dontshow{if (requireNamespace("fmridesign", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+set.seed(1)
+sf <- fmrihrf::sampling_frame(c(80L, 80L), TR = 1)
+events <- data.frame(onset = rep(c(5, 20, 35, 50), 2),
+                     run = rep(1:2, each = 4),
+                     stimulus = factor(rep(c("A", "B"), 4)))
+em <- fmridesign::event_model(
+  onset ~ fmridesign::hrf(stimulus), data = events, block = ~run,
+  sampling_frame = sf, durations = rep(2, nrow(events)))
+Y <- matrix(100 + rnorm(160 * 4), 160, 4)
+fit <- glmsingle_design(Y, em, want_denoise = FALSE,
+                        want_fracridge = FALSE, verbose = FALSE)
+dim(coef(fit, type = "b"))
+\dontshow{\}) # examplesIf}
+}

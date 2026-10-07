@@ -264,6 +264,18 @@
   Y
 }
 
+# Keep glmnet's prediction/coef methods in the caller's response units. The
+# automatic lambda coordinates stay on the shared normalized response scale.
+.stg_restore_response_scale <- function(fit, response_scale) {
+  if (response_scale == 1) return(fit)
+  fit$beta <- if (is.list(fit$beta)) {
+    lapply(fit$beta, function(b) b * response_scale)
+  } else fit$beta * response_scale
+  fit$a0 <- fit$a0 * response_scale
+  fit$nulldev <- fit$nulldev * response_scale^2
+  fit
+}
+
 .stg_fit_core <- function(y,
                           x_trial,
                           x_nuisance = NULL,
@@ -411,9 +423,23 @@
     fit_family <- if (ncol(y) > 1L) "mgaussian" else "gaussian"
   }
 
+  response_scale <- 1
+  if (fit_family %in% c("gaussian", "mgaussian")) {
+    max_response <- max(abs(y))
+    if (!is.finite(max_response) || max_response == 0) {
+      stop("stglmnet requires a non-zero finite response after nuisance projection",
+           call. = FALSE)
+    }
+    if (is.null(lambda)) {
+      # One scalar preserves relative voxel weights in the multivariate loss.
+      # Scaling columns separately would change the group penalty's estimand.
+      response_scale <- max_response * sqrt(mean((y / max_response)^2))
+    }
+  }
+
   fit <- glmnet::glmnet(
     x = x_fit,
-    y = .stg_glmnet_y(y, fit_family),
+    y = .stg_glmnet_y(y / response_scale, fit_family),
     family = fit_family,
     alpha = as.numeric(alpha),
     lambda = lambda,
@@ -421,6 +447,7 @@
     standardize = isTRUE(standardize),
     intercept = isTRUE(intercept)
   )
+  fit <- .stg_restore_response_scale(fit, response_scale)
 
   out <- list(
     fit = fit,
@@ -428,6 +455,9 @@
     X_nuisance = x_nuisance,
     x_fit = x_fit,
     y_fit = y,
+    response_scale = response_scale,
+    lambda_scale = if (is.null(lambda) && fit_family %in% c("gaussian", "mgaussian"))
+      "normalized_response" else "original_response",
     run_id = run_id,
     overlap = overlap,
     overlap_strategy = overlap_strategy,
@@ -532,7 +562,7 @@
 
     fit_i <- glmnet::glmnet(
       x = object$x_fit[train, , drop = FALSE],
-      y = .stg_glmnet_y(y[train, , drop = FALSE], object$family),
+      y = .stg_glmnet_y(y[train, , drop = FALSE] / object$response_scale, object$family),
       family = object$family,
       alpha = as.numeric(object$alpha),
       lambda = lambda,
@@ -540,6 +570,7 @@
       standardize = object$standardize,
       intercept = object$intercept
     )
+    fit_i <- .stg_restore_response_scale(fit_i, object$response_scale)
 
     if (resolved.measure == "reliability") {
       beta_i <- .stg_trial_beta_matrix(fit_i, ntrial, pool_fit = object$pooling)

@@ -41,9 +41,10 @@ with one row per basis function and one column per voxel.}
 \item{amplitude_scale}{The signed scale removed from each raw pooled-fit
 coefficient column.}
 \item{degenerate}{Logical, one per voxel: the estimated shape has no
-positive peak after orientation (typically a voxel without signal). Such
-shapes are scaled by their largest absolute value instead, and a warning
-reports how many there are; estimation does not fail.}
+positive peak after orientation, or one smaller than 5\% of its largest
+absolute deflection (typically a voxel without signal). Such shapes are
+scaled by their largest absolute value instead, and a warning reports
+how many there are; estimation does not fail.}
 \item{basis}{The HRF basis object used.}
 \item{conditions}{Observed event labels. Labels are metadata: all events
 are pooled into one shape per voxel.}

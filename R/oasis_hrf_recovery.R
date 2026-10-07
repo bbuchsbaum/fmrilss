@@ -91,19 +91,17 @@ generate_lwu_data <- function(onsets,
     amplitudes <- rep(amplitudes, n_trials)
   }
   
-  # Create event regressors and convolve with HRF
-  X <- matrix(0, n_time, n_trials)
-  for (i in seq_len(n_trials)) {
-    # Create impulse at onset
-    impulse <- rep(0, n_time)
-    onset_idx <- which.min(abs(time_points - onsets[i]))
-    impulse[onset_idx] <- amplitudes[i]
-    
-    # Convolve with HRF
-    convolved <- stats::convolve(impulse, rev(true_hrf), type = "open")[1:n_time]
-    X[, i] <- convolved
-  }
-  
+  # Use the production event builder: fractional onsets are preserved and
+  # generator, candidate scoring, and final OASIS fit share precision = 0.1.
+  sframe <- fmrihrf::sampling_frame(blocklens = n_time, TR = TR)
+  time_points <- fmrihrf::samples(sframe, global = TRUE)
+  hrf_obj <- .lwu_recovery_hrf(tau, sigma, rho)
+  X <- .oasis_build_X_from_events(list(
+    sframe = sframe,
+    cond = list(onsets = onsets, hrf = hrf_obj, span = 30,
+                amplitude = amplitudes)
+  ))$X_trials
+
   # Generate true betas (trial-specific activations)
   true_betas <- matrix(rnorm(n_trials * n_voxels, mean = 1, sd = 0.3), 
                        nrow = n_trials, ncol = n_voxels)
@@ -131,6 +129,7 @@ generate_lwu_data <- function(onsets,
     Y = Y,
     X = X,
     true_hrf = true_hrf,
+    hrf_times = hrf_times,
     true_betas = true_betas,
     onsets = onsets,
     amplitudes = amplitudes,
@@ -201,9 +200,25 @@ create_lwu_grid <- function(tau_range = c(4, 8),
   )
 }
 
+.lwu_recovery_hrf <- function(tau, sigma, rho) {
+  force(tau); force(sigma); force(rho)
+  structure(function(t) {
+    fmrihrf::hrf_lwu(t, tau = tau, sigma = sigma, rho = rho, normalize = "height")
+  }, class = c("hrf", "function"), span = 30,
+  tau = tau, sigma = sigma, rho = rho)
+}
+
 #' Fit OASIS with HRF Grid Search
 #'
-#' Fits OASIS models with different HRF parameters and selects best
+#' Selects an LWU HRF by joint-model profile fit, then estimates OASIS betas.
+#'
+#' @details Each candidate is scored by pooled R-squared from unpenalized
+#'   joint least squares with a voxel-specific intercept and all trial columns.
+#'   The denominator sums squared deviations from each voxel's own mean.
+#'   Ridge parameters affect only the final LSS estimates, not HRF selection.
+#'   Simulation, scoring, and fitting use the same event construction at
+#'   0.1-second precision. This is an in-sample selection criterion; overlapping
+#'   events can leave HRF parameters weakly identifiable.
 #'
 #' @param Y Data matrix (time x voxels)
 #' @param onsets Event onset times
@@ -224,105 +239,41 @@ create_lwu_grid <- function(tau_range = c(4, 8),
 fit_oasis_grid <- function(Y, onsets, sframe, hrf_grid,
                            ridge_x = 0.01, ridge_b = 0.01) {
   
-  n_hrfs <- length(hrf_grid$hrfs)
-  scores <- numeric(n_hrfs)
-  
-  # Test each HRF
-  for (i in seq_len(n_hrfs)) {
-    tryCatch({
-      # Create HRF object for fmrihrf using a closure
-      tau_val <- hrf_grid$parameters$tau[i]
-      sigma_val <- hrf_grid$parameters$sigma[i]  
-      rho_val <- hrf_grid$parameters$rho[i]
-      
-      hrf_obj <- structure(
-        function(t) {
-          fmrihrf::hrf_lwu(t, tau = tau_val, sigma = sigma_val, rho = rho_val, normalize = "height")
-        },
-        class = c("hrf", "function"),
-        span = 30,
-        tau = tau_val,
-        sigma = sigma_val,
-        rho = rho_val
-      )
-      
-      # Fit OASIS with this HRF
-      beta <- lss(
-        Y = Y,
-        X = NULL,
-        method = "oasis",
-        oasis = list(
-          design_spec = list(
-            sframe = sframe,
-            cond = list(
-              onsets = onsets,
-              hrf = hrf_obj,
-              span = 30
-            )
-          ),
-          ridge_mode = "fractional",
-          ridge_x = ridge_x,
-          ridge_b = ridge_b
-        )
-      )
-      
-      # Calculate fit score (mean R-squared across voxels)
-      # Skip if dimensions don't match
-      if (nrow(beta) != length(onsets)) {
-        scores[i] <- -Inf
-        next
-      }
-      
-      # Reconstruct fitted values using evaluated regressors.
-      # For multi-basis HRFs, collapse basis columns to a single per-trial regressor (rowSums),
-      # matching OASIS's summed-basis trial design used in .oasis_build_X_from_events.
-      times <- fmrihrf::samples(sframe, global = TRUE)
-      X_trial <- matrix(0, length(times), length(onsets))
-      for (j in seq_along(onsets)) {
-        reg    <- fmrihrf::regressor(onsets = onsets[j], hrf = hrf_obj, duration = 0, span = 30)
-        x_eval <- fmrihrf::evaluate(reg, times)
-        if (inherits(x_eval, "Matrix")) x_eval <- as.matrix(x_eval)
-        X_trial[, j] <- if (is.matrix(x_eval)) rowSums(x_eval) else as.numeric(x_eval)
-      }
-      
-      # Check dimensions match
-      if (nrow(X_trial) != nrow(Y) || ncol(X_trial) != nrow(beta)) {
-        scores[i] <- -Inf
-        next
-      }
-      
-      fitted <- X_trial %*% beta
-      residuals <- Y - fitted
-      
-      # Calculate R-squared
-      ss_res <- sum(residuals^2)
-      ss_tot <- sum((Y - mean(Y))^2)
-      r_squared <- 1 - (ss_res / ss_tot)
-      
-      scores[i] <- r_squared
-      
-    }, error = function(e) {
-      scores[i] <- -Inf
-    })
+  if (!is.matrix(Y) || !is.numeric(Y) || !all(is.finite(Y)) ||
+      !ncol(Y) || nrow(Y) != length(fmrihrf::samples(sframe, global = TRUE))) {
+    stop("Y must be a finite numeric matrix matching the sampling frame", call. = FALSE)
   }
-  
-  # Select best HRF
+  ss_tot <- sum(sweep(Y, 2L, colMeans(Y))^2)
+  if (!is.finite(ss_tot) || ss_tot <= 0) {
+    stop("Y must have positive finite within-voxel variation", call. = FALSE)
+  }
+  n_hrfs <- length(hrf_grid$hrfs)
+  if (!n_hrfs || nrow(hrf_grid$parameters) != n_hrfs) {
+    stop("hrf_grid must contain matching non-empty HRFs and parameters", call. = FALSE)
+  }
+  scores <- rep(-Inf, n_hrfs)
+  for (i in seq_len(n_hrfs)) {
+    scores[i] <- tryCatch({
+      params <- hrf_grid$parameters[i, ]
+      hrf_obj <- .lwu_recovery_hrf(params$tau, params$sigma, params$rho)
+      X_trial <- .oasis_build_X_from_events(list(
+        sframe = sframe,
+        cond = list(onsets = onsets, hrf = hrf_obj, span = 30)
+      ))$X_trials
+      # LSS coefficients come from separate trial models. Select HRFs using
+      # a joint-model profile residual, then estimate LSS betas for the winner.
+      residuals <- stats::lm.fit(cbind(1, X_trial), Y)$residuals
+      1 - sum(residuals^2) / ss_tot
+    }, error = function(e) -Inf)
+  }
+  if (!any(is.finite(scores))) {
+    stop("No HRF candidate produced a finite profile score", call. = FALSE)
+  }
+  scores[!is.finite(scores)] <- -Inf
   best_idx <- which.max(scores)
   best_params <- hrf_grid$parameters[best_idx, ]
-  
-  # Create best HRF object
-  best_hrf <- structure(
-    function(t) {
-      fmrihrf::hrf_lwu(t, tau = best_params$tau, sigma = best_params$sigma, 
-                       rho = best_params$rho, normalize = "height")
-    },
-    class = c("hrf", "function"),
-    span = 30,
-    tau = best_params$tau,
-    sigma = best_params$sigma,
-    rho = best_params$rho
-  )
-  
+  best_hrf <- .lwu_recovery_hrf(best_params$tau, best_params$sigma, best_params$rho)
+
   # Refit with best HRF
   best_beta <- lss(
     Y = Y,
@@ -443,7 +394,11 @@ compare_hrf_recovery <- function(data, hrf_grid = NULL) {
   # Add ground truth for comparison
   results$true_hrf <- data$true_hrf
   results$true_params <- data$hrf_params
-  results$true_betas <- data$true_betas
+  results$hrf_times <- data$hrf_times %||% data$time_points[
+    data$time_points <= 30]
+  # Fits use unit-amplitude event columns; include simulated event amplitudes
+  # in the coefficient truth on that scale.
+  results$true_betas <- data$true_betas * data$amplitudes
   
   return(results)
 }
@@ -453,7 +408,8 @@ compare_hrf_recovery <- function(data, hrf_grid = NULL) {
 #' Evaluates how well each method recovered the true HRF
 #'
 #' @param results Output from compare_hrf_recovery
-#' @param true_hrf Ground truth HRF
+#' @param true_hrf Ground truth HRF sampled on `results$hrf_times`. Shape
+#'   comparisons normalize each curve to unit maximum absolute height.
 #' @return Data frame with recovery metrics
 #' @examplesIf requireNamespace("fmrihrf", quietly = TRUE)
 #' \donttest{
@@ -466,16 +422,13 @@ compare_hrf_recovery <- function(data, hrf_grid = NULL) {
 #' @export
 calculate_recovery_metrics <- function(results, true_hrf) {
 
-  # Time grid for HRF evaluation
-  hrf_times <- seq(0, 30, by = 1)
-  true_hrf_eval <- fmrihrf::hrf_lwu(
-    hrf_times,
-    tau = results$true_params$tau,
-    sigma = results$true_params$sigma,
-    rho = results$true_params$rho,
-    normalize = "height"
-  )
-  
+  hrf_times <- results$hrf_times %||% seq(0, 30, length.out = length(true_hrf))
+  if (length(hrf_times) != length(true_hrf)) {
+    stop("true_hrf must match the stored HRF time grid", call. = FALSE)
+  }
+  unit_height <- function(x) as.numeric(x) / max(abs(x))
+  true_hrf_eval <- unit_height(true_hrf)
+
   metrics <- data.frame(
     method = character(),
     mse = numeric(),
@@ -484,16 +437,6 @@ calculate_recovery_metrics <- function(results, true_hrf) {
     width_error = numeric(),
     stringsAsFactors = FALSE
   )
-  
-  # Helper function to extract HRF from model
-  extract_hrf <- function(hrf_model, times) {
-    if (is.function(hrf_model)) {
-      return(hrf_model(times))
-    } else {
-      # For HRF objects
-      return(fmrihrf::evaluate(hrf_model, times))
-    }
-  }
   
   # 1. OASIS recovered HRF
   oasis_hrf_eval <- fmrihrf::hrf_lwu(
@@ -508,34 +451,36 @@ calculate_recovery_metrics <- function(results, true_hrf) {
     method = "OASIS",
     mse = mean((oasis_hrf_eval - true_hrf_eval)^2),
     correlation = cor(oasis_hrf_eval, true_hrf_eval),
-    peak_time_error = abs(results$oasis$best_params$tau - results$true_params$tau),
+    peak_time_error = abs(hrf_times[which.max(oasis_hrf_eval)] -
+                          hrf_times[which.max(true_hrf_eval)]),
     width_error = abs(results$oasis$best_params$sigma - results$true_params$sigma)
   )
   metrics <- rbind(metrics, oasis_metrics)
   
   # 2. SPMG1 HRF
-  spmg1_hrf_eval <- fmrihrf::evaluate(fmrihrf::HRF_SPMG1, hrf_times)
+  spmg1_hrf_eval <- unit_height(fmrihrf::evaluate(fmrihrf::HRF_SPMG1, hrf_times))
   spmg1_metrics <- list(
     method = "SPMG1",
     mse = mean((spmg1_hrf_eval - true_hrf_eval)^2),
     correlation = cor(spmg1_hrf_eval, true_hrf_eval),
-    peak_time_error = abs(which.max(spmg1_hrf_eval) - which.max(true_hrf_eval)),
+    peak_time_error = abs(hrf_times[which.max(spmg1_hrf_eval)] - hrf_times[which.max(true_hrf_eval)]),
     width_error = NA  # Can't directly extract width from SPMG1
   )
   metrics <- rbind(metrics, spmg1_metrics)
   
   # 3. SPMG3 HRF (canonical component)
-  spmg3_hrf_eval <- fmrihrf::evaluate(fmrihrf::HRF_SPMG3, hrf_times)[, 1]  # First basis = canonical
+  spmg3_hrf_eval <- unit_height(fmrihrf::evaluate(fmrihrf::HRF_SPMG3, hrf_times)[, 1])  # First basis = canonical
   spmg3_metrics <- list(
     method = "SPMG3",
     mse = mean((spmg3_hrf_eval - true_hrf_eval)^2),
     correlation = cor(spmg3_hrf_eval, true_hrf_eval),
-    peak_time_error = abs(which.max(spmg3_hrf_eval) - which.max(true_hrf_eval)),
+    peak_time_error = abs(hrf_times[which.max(spmg3_hrf_eval)] - hrf_times[which.max(true_hrf_eval)]),
     width_error = NA
   )
   metrics <- rbind(metrics, spmg3_metrics)
   
   # 4. Beta recovery metrics
+  metrics$beta_correlation <- NA_real_
   if (!is.null(results$true_betas)) {
     # Calculate beta correlations
     for (method in c("oasis", "spmg1")) {
@@ -606,6 +551,8 @@ plot_hrf_comparison <- function(results, save_path = NULL) {
   # Standard models
   spmg1_hrf <- fmrihrf::evaluate(fmrihrf::HRF_SPMG1, hrf_times)
   spmg3_hrf <- fmrihrf::evaluate(fmrihrf::HRF_SPMG3, hrf_times)[, 1]
+  spmg1_hrf <- spmg1_hrf / max(abs(spmg1_hrf))
+  spmg3_hrf <- spmg3_hrf / max(abs(spmg3_hrf))
   
   # Create data frame for plotting
   plot_data <- data.frame(

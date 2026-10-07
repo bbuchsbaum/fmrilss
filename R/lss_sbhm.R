@@ -118,6 +118,13 @@
 #'   names(out)
 #' }
 #'
+#' @details Active prewhitening records the fitted `fmriAR_plan` in the
+#'   `whiten_plan` attribute on the result and its returned amplitude/coefficient
+#'   arrays. `diag$prewhitening` distinguishes requested and applied whitening,
+#'   records the residual model, and reports whether filtering changed `Y`
+#'   exactly. An applied identity filter can leave the response unchanged; inspect
+#'   the recorded plan's order and coefficients before interpreting that case.
+#'
 #' @seealso [lss_sbhm_design()], [sbhm_prepass()], [sbhm_match()]
 #'
 #' @export
@@ -307,7 +314,13 @@ lss_sbhm <- function(Y, sbhm, design_spec,
   nuisance_all <- cbind(built$intercepts, Nuisance, built$X_other)
   if (is.null(nuisance_all) || ncol(nuisance_all) == 0L) nuisance_all <- NULL
 
-  # Estimate one whitening operator from the complete fitted design and reuse
+  whiten_plan <- NULL
+  whitening_diagnostics <- list(
+    requested = !is.null(prewhiten) && prewhiten$method != "none",
+    applied = FALSE, response_changed = FALSE,
+    residual_model = if (is.null(prewhiten)) NULL else prewhiten$residual_model
+  )
+  # Estimate one whitening operator from the selected noise-residual design and reuse
   # it in OASIS, shape matching, diagnostics, and scalar-amplitude stages.
   if (!is.null(prewhiten) &&
       !identical(prewhiten$method %||% "none", "none")) {
@@ -318,6 +331,10 @@ lss_sbhm <- function(Y, sbhm, design_spec,
     master_whitening <- .prewhiten_data(
       Y, built$X_trials, NULL, nuisance_all, prewhiten, X_noise = built$A_agg
     )
+    whiten_plan <- master_whitening$whiten_plan
+    whitening_diagnostics$applied <- master_whitening$applied
+    whitening_diagnostics$response_changed <-
+      !identical(unname(Y), unname(master_whitening$Y_whitened))
     prewhiten$.whiten_plan <- master_whitening$whiten_plan
     class(prewhiten) <- c("fmrilss_internal_prewhiten", "list")
   }
@@ -622,6 +639,7 @@ lss_sbhm <- function(Y, sbhm, design_spec,
     ),
     diag        = list(r = r, ntrials = ntrials, times = sbhm$tgrid,
                        alpha_source = alpha_source,
+                       prewhitening = whitening_diagnostics,
                        prepass_fallback_n = sum(prepass_fallback),
                        fallback_low_conf_n = sum(fallback_low_conf),
                        method_used = method_used, rho_max = diag_rho, kappa = diag_kappa,
@@ -648,7 +666,11 @@ lss_sbhm <- function(Y, sbhm, design_spec,
   if (return %in% c("amplitude", "both")) out$amplitude <- amps
   if (return %in% c("coefficients", "both")) out$coeffs_r <- beta_rt
 
-  out
+  if (!is.null(whiten_plan)) {
+    if (!is.null(out$amplitude)) attr(out$amplitude, "whiten_plan") <- whiten_plan
+    if (!is.null(out$coeffs_r)) attr(out$coeffs_r, "whiten_plan") <- whiten_plan
+  }
+  .attach_whiten_plan(out, whiten_plan)
 }
 
 # Extract a robust shape proxy from trialwise SBHM coefficients.

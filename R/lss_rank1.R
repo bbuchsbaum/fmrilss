@@ -95,7 +95,7 @@
 #'   \item{iterations, converged}{Per-voxel iteration counts and convergence
 #'     flags.}
 #'   \item{degenerate}{Voxels whose estimated HRF has no positive peak of at
-#'     least 5\% of its largest absolute deflection after orientation (scaled
+#'     least 5% of its largest absolute deflection after orientation (scaled
 #'     by that deflection instead, so their
 #'     amplitudes are not in peak-response units). Also stored in `hrf`. The
 #'     policy is shared with [estimate_voxel_hrf()]: such voxels are flagged

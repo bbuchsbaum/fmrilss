@@ -27,7 +27,14 @@ lambda when no scalar is provided.}
 
 \item{alpha}{Elastic-net mixing parameter passed to \code{glmnet}.}
 
-\item{lambda}{Optional lambda sequence (or scalar in fixed mode).}
+\item{lambda}{Optional lambda sequence (or scalar in fixed mode), in the
+original response coordinates used by \code{glmnet}. When \code{NULL}, Gaussian
+responses are divided by one pooled RMS after nuisance projection before
+fitting the automatic path. The same scale is reused in every CV fold;
+coefficients, predictions and MSE are returned in original response units.
+Automatic lambda values use normalized-response coordinates, recorded in
+\code{fit$lambda_scale} and \code{fit$response_scale} when \code{return_fit = TRUE}.
+They are not interchangeable with explicitly supplied raw-response lambdas.}
 
 \item{overlap_strategy}{Trial-overlap penalty mapping. One of \code{"none"},
 \code{"multiplicative"}, \code{"additive"}, \code{"hybrid"}, or \code{"threshold"}.}
@@ -63,6 +70,12 @@ Convenience constructor for the \verb{stglmnet=} list accepted by
 \code{lss(method = "stglmnet")}.
 Advanced fields accepted through \code{...} are validated; unknown fields are
 rejected so misspelled scientific controls cannot be silently ignored.
+}
+\details{
+The internal cross-validation scores tune the estimator. They use
+a shared response scale and full-data nuisance projection; reliability also
+compares fold estimates with the full-data fit. These scores are not an
+unbiased held-out assessment of predictive performance.
 }
 \examples{
 stglmnet_options(mode = "fixed", lambda = 0.05, alpha = 0.5)

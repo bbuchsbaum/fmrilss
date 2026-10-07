@@ -2,6 +2,21 @@
 
 ## fmrilss (development version)
 
+### Correctness and diagnostics
+
+- Normalize automatic Gaussian stglmnet paths by a common response RMS to
+  prevent scale-dependent path collapse. Betas, predictions, and CV errors
+  retain input units; explicit lambda values keep their existing semantics.
+- Preserve the fitted whitening plan on SBHM outputs and report whether it
+  changed the response. Infer run IDs before validating run-pooled prepasses.
+- Add opt-in `lss_design(diagnostics = TRUE)` input-design rank/conditioning,
+  trial and voxel mappings, and nonfinite-beta summaries.
+- Score `fit_oasis_grid()` HRF candidates using joint least-squares profile
+  residuals with voxel intercepts; use the production event builder for both
+  simulation and selection. Preserve fractional onsets and sample times.
+  Compare normalized HRF shapes on their actual time grid, incorporate event
+  amplitudes in beta truth, and leave unavailable beta correlations as `NA`.
+
 ### GLMsingle fixes
 
 - Match event run IDs to matrix data in run order, including nonascending IDs.
