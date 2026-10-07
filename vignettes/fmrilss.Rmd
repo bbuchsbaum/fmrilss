@@ -549,6 +549,46 @@ Start with the default backend while developing the analysis, then switch when
 runtime or memory justifies it. Backend agreement is a useful regression check,
 but agreement alone does not validate the scientific model.
 
+Three options refine the trial-wise model itself. They are supported by the
+`r_optimized`, `cpp_optimized`, and `cpp` backends (and the `naive` reference
+for the first two), and combine freely:
+
+- `trial_groups` gives one summed "other trials" regressor per condition
+  (LSS-N; Turner et al., 2012) instead of pooling every other trial. Use it
+  when conditions are expected to evoke different responses.
+- `ridge` adds a fractional ridge penalty to each trial model, shrinking trial
+  estimates toward zero. In rapid designs, where neighbouring trials overlap,
+  this can trade a little bias for a large reduction in variance; choose the
+  amount by validation on your design.
+- `prewhiten_options(pooling = "voxel")` fits a voxel-adaptive noise model:
+  voxels are binned by residual autocorrelation and each bin is fitted with its
+  own filtered design.
+
+```{r refined-models}
+conditions <- rep(c("A", "B"), length.out = ncol(X))
+beta_lss_n <- lss(Y, X, Z = Z, Nuisance = Nuisance, trial_groups = conditions)
+beta_ridge <- lss(
+  Y, X, Z = Z, Nuisance = Nuisance,
+  trial_groups = conditions,
+  ridge = c(0.5, 0),
+  prewhiten = prewhiten_options(method = "ar", p = 1, pooling = "voxel",
+                                voxel_bins = 4)
+)
+dim(beta_ridge)
+```
+
+```{r refined-models-check, include=FALSE}
+beta_lss_n_reference <- lss(
+  Y, X, Z = Z, Nuisance = Nuisance, method = "naive",
+  trial_groups = conditions
+)
+stopifnot(
+  max(abs(beta_lss_n - beta_lss_n_reference)) < 1e-8,
+  identical(dim(beta_ridge), dim(beta_lss)),
+  all(is.finite(beta_ridge))
+)
+```
+
 ## What are the important limits?
 
 - `X` must already encode the HRF-convolved response for each trial. Use a

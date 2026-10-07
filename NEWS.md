@@ -1,5 +1,52 @@
 # fmrilss News
 
+## fmrilss (development version)
+
+### Performance
+- The optimized LSS backends (`r_optimized`, `cpp_optimized`, `cpp`) now
+  build the n x T LSS weight matrix from the residualized trial design and
+  compute every trial beta with one matrix product. The data matrix is no
+  longer residualized or copied, the per-voxel R loop is gone, and
+  `cpp_optimized` only splits voxels across OpenMP threads when the linked
+  BLAS is single-threaded. Default `lss()` on 600 scans x 20,000 voxels with
+  150 trials: 1.9 s -> 0.07 s.
+- Prewhitening fits AR models with global or run pooling from an n-column
+  factor of the residual Gram matrix instead of the n x V residuals (exact),
+  and computes noise residuals with BLAS-3 projections. AR(1) `lss()` on the
+  same problem: 4.9 s -> 0.7 s.
+- Non-allocating finiteness check for `Y`.
+
+### New features
+- `lss(trial_groups = )` fits LSS-N (Turner et al., 2012): one summed
+  "other trials" regressor per condition, the model used by Nilearn's and
+  NiBetaSeries' beta series.
+- `lss(ridge = )` adds a fractional ridge penalty to each trial model (the
+  OASIS `ridge_mode = "fractional"` convention), composable with
+  `trial_groups` and prewhitening. In rapid designs with overlapping trials
+  it lowers beta RMSE substantially (about a third in the benchmark) without
+  changing pattern correlations.
+- `prewhiten = list(pooling = "voxel")` and `pooling = "parcel"` now work
+  with a shared design for `r_optimized`, `cpp_optimized` and `cpp`: each
+  whitening operator gets its own filtered design. Voxel pooling bins voxels
+  by residual autocorrelation (`voxel_bins`, default 50) and refits an AR
+  model per bin, as in Nilearn's AR(1) GLM.
+
+### Bug fixes
+- The noise model was estimated from residuals of the full trial-wise (LSA)
+  design. In rapid designs with many trials this biased the AR estimate
+  strongly downward (e.g. -0.32 for data with AR(1) ~ 0.35), making
+  prewhitened betas less accurate than OLS. The new
+  `prewhiten$residual_model` defaults to `"aggregate"` (confounds plus one
+  summed regressor per trial group or basis function); `"full"` restores the
+  previous behaviour and is implied by the residual-bias correction.
+
+### Benchmarks
+- `bench/python_comparison/` compares fmrilss with Nilearn (per-trial
+  `run_glm`, OLS and AR(1)) and NumPy LSS implementations on a shared
+  simulation: fmrilss reproduces the Python OLS estimates to < 5e-13, is
+  ~200x faster than the Nilearn per-trial loop at 20k voxels, and its
+  voxel-adaptive AR(1) matches Nilearn's AR(1) accuracy.
+
 ## fmrilss 0.2.0
 
 ### Major Enhancements

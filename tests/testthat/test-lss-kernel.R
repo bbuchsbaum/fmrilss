@@ -295,17 +295,18 @@ test_that("ridge composes with prewhitening", {
 
 test_that("ridge reduces error for overlapping rapid-design trials", {
   set.seed(31)
-  n <- 300
+  n <- 400
   n_trials <- 100
-  onsets <- cumsum(c(5, sample(2:4, n_trials - 1, replace = TRUE)))
+  onsets <- cumsum(c(20, sample(2:4, n_trials - 1, replace = TRUE)))
   h <- dgamma(0:15, 6, 1) - dgamma(0:15, 16, 1) / 6
   X <- vapply(onsets, function(o) {
-    s <- numeric(n)
-    s[o] <- 1
-    out <- stats::filter(s, h, sides = 1)
-    out[is.na(out)] <- 0
-    as.numeric(out)
+    out <- numeric(n)
+    idx <- o + seq_along(h) - 1L
+    keep <- idx <= n
+    out[idx[keep]] <- h[keep]
+    out
   }, numeric(n))
+  expect_gt(min(colSums(X^2)), 0.9 * sum(h^2))
   V <- 50
   B <- matrix(rnorm(n_trials * V, 1, 0.5), n_trials, V)
   Y <- X %*% B + matrix(rnorm(n * V), n, V)
