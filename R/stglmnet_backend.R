@@ -424,7 +424,8 @@
   }
 
   response_scale <- 1
-  if (fit_family %in% c("gaussian", "mgaussian")) {
+  gaussian_path <- identical(fit_family, "gaussian") || identical(fit_family, "mgaussian")
+  if (gaussian_path) {
     max_response <- max(abs(y))
     if (!is.finite(max_response) || max_response == 0) {
       stop("stglmnet requires a non-zero finite response after nuisance projection",
@@ -456,7 +457,7 @@
     x_fit = x_fit,
     y_fit = y,
     response_scale = response_scale,
-    lambda_scale = if (is.null(lambda) && fit_family %in% c("gaussian", "mgaussian"))
+    lambda_scale = if (is.null(lambda) && gaussian_path)
       "normalized_response" else "original_response",
     run_id = run_id,
     overlap = overlap,

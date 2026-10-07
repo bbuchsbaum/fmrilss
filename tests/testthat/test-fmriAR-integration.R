@@ -350,7 +350,12 @@ test_that("prewhiten parameter works with all LSS methods", {
   methods <- c("r_optimized", "r_vectorized", "naive")
 
   for (m in methods) {
-    result <- lss(Y, X, method = m, prewhiten = prewhiten_opts)
+    if (m == "r_vectorized") {
+      expect_warning(result <- lss(Y, X, method = m, prewhiten = prewhiten_opts),
+                     "No intercept detected")
+    } else {
+      result <- lss(Y, X, method = m, prewhiten = prewhiten_opts)
+    }
     expect_true(is.matrix(result))
     expect_equal(nrow(result), n_trials)
     expect_equal(ncol(result), n_voxels)

@@ -102,3 +102,17 @@ test_that("structured run drifts do not collapse automatic paths at BOLD scales"
     expect_equal(length(result$fit$fit$lambda), length(reference$fit$fit$lambda))
   }
 })
+
+
+test_that("glmnet family objects retain their existing explicit-lambda behavior", {
+  set.seed(1722)
+  X <- matrix(rnorm(120 * 6), 120, 6)
+  Y <- matrix(rnorm(120), 120, 1)
+  family <- stats::gaussian()
+  fit <- fmrilss:::.stg_fit_core(Y, X, family = family, lambda = .1)
+  direct <- glmnet::glmnet(X, Y, family = family, alpha = .2, lambda = .1,
+                           standardize = FALSE, intercept = FALSE)
+  expect_equal(fit$fit$beta, direct$beta)
+  expect_identical(fit$response_scale, 1)
+  expect_identical(fit$lambda_scale, "original_response")
+})

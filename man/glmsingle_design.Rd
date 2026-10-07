@@ -43,7 +43,7 @@ em <- fmridesign::event_model(
   onset ~ fmridesign::hrf(stimulus), data = events, block = ~run,
   sampling_frame = sf, durations = rep(2, nrow(events)))
 Y <- matrix(100 + rnorm(160 * 4), 160, 4)
-fit <- glmsingle_design(Y, em, want_denoise = FALSE,
+fit <- glmsingle_design(Y, em, want_glmdenoise = FALSE,
                         want_fracridge = FALSE, verbose = FALSE)
 dim(coef(fit, type = "b"))
 \dontshow{\}) # examplesIf}

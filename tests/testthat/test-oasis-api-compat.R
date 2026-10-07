@@ -46,7 +46,7 @@ test_that("fmrilss::lss(method='oasis') returns matrix by default and matches .l
   # By default lss returns a bare matrix
   expect_true(is.matrix(res))
   expect_equal(dim(res), dim(B_ref))
-  expect_equal(res, B_ref, tolerance = 1e-10, scale = 1)
+  expect_equal(res, B_ref, tolerance = 1e-10)
 })
 
 test_that("fmrilss::lss(method='oasis', return_se=TRUE) returns a list with beta & se", {
