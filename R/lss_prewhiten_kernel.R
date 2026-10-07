@@ -262,7 +262,7 @@
   if (n_bins <= 1L) return(rep(1L, V))
   # Quantile initialization along the leading feature direction.
   score <- if (ncol(feats) > 1L) {
-    drop(scale(feats, scale = FALSE) %*% prcomp(feats, rank. = 1L)$rotation)
+    drop(scale(feats, scale = FALSE) %*% stats::prcomp(feats, rank. = 1L)$rotation)
   } else {
     feats[, 1L]
   }
