@@ -174,6 +174,18 @@ oasisk_betas_se <- function(D, C, E, N1, SY, RY_norm2, dof, ridge_x = 0.0, ridge
     .Call(`_fmrilss_oasisk_betas_se`, D, C, E, N1, SY, RY_norm2, dof, ridge_x, ridge_b)
 }
 
+r1glms_fit_cpp <- function(U, Gii, S, GA, groups, yy, H0, max_iter = 100L, tol = 1e-7) {
+    .Call(`_fmrilss_r1glms_fit_cpp`, U, Gii, S, GA, groups, yy, H0, max_iter, tol)
+}
+
+r1glm_fit_cpp <- function(U, G, yy, H0, max_iter = 100L, tol = 1e-7) {
+    .Call(`_fmrilss_r1glm_fit_cpp`, U, G, yy, H0, max_iter, tol)
+}
+
+r1glms_lbfgs_cpp <- function(U, Gii, S, GTT, yy, H0, B0, R0, maxit = 1000L, factr = 1e7, pgtol = 0.0) {
+    .Call(`_fmrilss_r1glms_lbfgs_cpp`, U, Gii, S, GTT, yy, H0, B0, R0, maxit, factr, pgtol)
+}
+
 estimate_hrf_cpp <- function(X, Y) {
     .Call(`_fmrilss_estimate_hrf_cpp`, X, Y)
 }

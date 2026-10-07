@@ -707,5 +707,8 @@ knitr::kable(
 
 ## Next step
 
+`vignette("rank1_hrf")` estimates each voxel's HRF jointly with the trial
+amplitudes (the rank-1 GLM of Pedregosa et al., 2015) instead of from one
+pooled amplitude, which matters when conditions differ in their mean response.
 `vignette("sbhm")` presents a library-constrained alternative for estimating
 voxel-specific shapes, score margins, and trial event-design coefficients.

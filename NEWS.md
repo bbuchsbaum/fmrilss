@@ -31,6 +31,17 @@
   by residual autocorrelation (`voxel_bins`, default 50) and refits an AR
   model per bin, as in Nilearn's AR(1) GLM.
 
+- New `lss_rank1()`: the rank-1 GLM of Pedregosa et al. (2015), which
+  learns one HRF per voxel (in any fmrihrf basis) jointly with per-trial
+  amplitudes, as least-squares-separate (`model = "separate"`, R1-GLMS,
+  optionally with LSS-N `trial_groups`) or least-squares-all
+  (`model = "joint"`, R1-GLM). It is fitted by exact alternating least
+  squares on K x K Gram blocks, which is monotone, parallel over voxels and,
+  in benchmarks, reaches the same optimum as the paper's L-BFGS approach
+  (also available as `solver = "lbfgs"`) 2.5-200x faster. The learned HRFs
+  are returned as a `VoxelHRF` for `lss_with_hrf()` on new data. See
+  `vignette("rank1_hrf")`.
+
 ### Bug fixes
 - The noise model was estimated from residuals of the full trial-wise (LSA)
   design. In rapid designs with many trials this biased the AR estimate

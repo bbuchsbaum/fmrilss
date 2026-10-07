@@ -333,6 +333,62 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// r1glms_fit_cpp
+Rcpp::List r1glms_fit_cpp(const arma::mat& U, const arma::cube& Gii, const arma::cube& S, const arma::mat& GA, const arma::uvec& groups, const arma::vec& yy, const arma::mat& H0, int max_iter, double tol);
+RcppExport SEXP _fmrilss_r1glms_fit_cpp(SEXP USEXP, SEXP GiiSEXP, SEXP SSEXP, SEXP GASEXP, SEXP groupsSEXP, SEXP yySEXP, SEXP H0SEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type U(USEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type Gii(GiiSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type S(SSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type GA(GASEXP);
+    Rcpp::traits::input_parameter< const arma::uvec& >::type groups(groupsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type yy(yySEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type H0(H0SEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(r1glms_fit_cpp(U, Gii, S, GA, groups, yy, H0, max_iter, tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// r1glm_fit_cpp
+Rcpp::List r1glm_fit_cpp(const arma::mat& U, const arma::mat& G, const arma::vec& yy, const arma::mat& H0, int max_iter, double tol);
+RcppExport SEXP _fmrilss_r1glm_fit_cpp(SEXP USEXP, SEXP GSEXP, SEXP yySEXP, SEXP H0SEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type U(USEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type G(GSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type yy(yySEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type H0(H0SEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(r1glm_fit_cpp(U, G, yy, H0, max_iter, tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// r1glms_lbfgs_cpp
+Rcpp::List r1glms_lbfgs_cpp(const arma::mat& U, const arma::cube& Gii, const arma::cube& S, const arma::mat& GTT, const arma::vec& yy, const arma::mat& H0, const arma::mat& B0, const arma::mat& R0, int maxit, double factr, double pgtol);
+RcppExport SEXP _fmrilss_r1glms_lbfgs_cpp(SEXP USEXP, SEXP GiiSEXP, SEXP SSEXP, SEXP GTTSEXP, SEXP yySEXP, SEXP H0SEXP, SEXP B0SEXP, SEXP R0SEXP, SEXP maxitSEXP, SEXP factrSEXP, SEXP pgtolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type U(USEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type Gii(GiiSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type S(SSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type GTT(GTTSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type yy(yySEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type H0(H0SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type B0(B0SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type R0(R0SEXP);
+    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
+    Rcpp::traits::input_parameter< double >::type factr(factrSEXP);
+    Rcpp::traits::input_parameter< double >::type pgtol(pgtolSEXP);
+    rcpp_result_gen = Rcpp::wrap(r1glms_lbfgs_cpp(U, Gii, S, GTT, yy, H0, B0, R0, maxit, factr, pgtol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // estimate_hrf_cpp
 arma::mat estimate_hrf_cpp(const arma::mat& X, const arma::mat& Y);
 RcppExport SEXP _fmrilss_estimate_hrf_cpp(SEXP XSEXP, SEXP YSEXP) {
@@ -388,6 +444,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_fmrilss_oasisk_betas", (DL_FUNC) &_fmrilss_oasisk_betas, 8},
     {"_fmrilss_oasisk_compute_RY_norm2", (DL_FUNC) &_fmrilss_oasisk_compute_RY_norm2, 2},
     {"_fmrilss_oasisk_betas_se", (DL_FUNC) &_fmrilss_oasisk_betas_se, 9},
+    {"_fmrilss_r1glms_fit_cpp", (DL_FUNC) &_fmrilss_r1glms_fit_cpp, 9},
+    {"_fmrilss_r1glm_fit_cpp", (DL_FUNC) &_fmrilss_r1glm_fit_cpp, 6},
+    {"_fmrilss_r1glms_lbfgs_cpp", (DL_FUNC) &_fmrilss_r1glms_lbfgs_cpp, 11},
     {"_fmrilss_estimate_hrf_cpp", (DL_FUNC) &_fmrilss_estimate_hrf_cpp, 2},
     {"_fmrilss_lss_engine_vox_hrf", (DL_FUNC) &_fmrilss_lss_engine_vox_hrf, 10},
     {NULL, NULL, 0}

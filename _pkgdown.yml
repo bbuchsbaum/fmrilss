@@ -22,4 +22,5 @@ articles:
   - lss_with_fmridesign
   - prewhitening
   - voxel-wise-hrf
+  - rank1_hrf
   - sbhm
