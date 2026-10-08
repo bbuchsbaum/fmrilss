@@ -2,6 +2,8 @@
 
 [![R-CMD-check](https://github.com/bbuchsbaum/fmrilss/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/bbuchsbaum/fmrilss/actions/workflows/R-CMD-check.yaml)
 [![pkgdown](https://github.com/bbuchsbaum/fmrilss/actions/workflows/pkgdown.yaml/badge.svg)](https://bbuchsbaum.github.io/fmrilss/)
+[![test-coverage](https://github.com/bbuchsbaum/fmrilss/actions/workflows/test-coverage.yaml/badge.svg)](https://github.com/bbuchsbaum/fmrilss/actions/workflows/test-coverage.yaml)
+[![Codecov test coverage](https://codecov.io/gh/bbuchsbaum/fmrilss/branch/main/graph/badge.svg)](https://app.codecov.io/gh/bbuchsbaum/fmrilss?branch=main)
 
 Least Squares Separate (LSS) Analysis for fMRI Data.
 
