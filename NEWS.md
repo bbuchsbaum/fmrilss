@@ -41,8 +41,12 @@
   scenarios: all HRF, noise-component and ridge-fraction choices match, and
   betas agree to single-precision accuracy.
 - Defaults differ from GLMsingle only where GLMsingle is internally
-  inconsistent (`extras_in_denoise`, `zero_sd_cv`); the alternative argument
-  values reproduce GLMsingle.
+  inconsistent (`nuisance_in_denoise`, `cv_zero_variance`); the alternative
+  argument values reproduce GLMsingle.
+- Arguments use R-style names grouped by stage (`fit_hrf`, `denoise`,
+  `max_pcs`, `n_pcs`, `pc_stop`, `noise_pool_*`, `ridge`, `ridge_*`,
+  `cv_folds`, `sessions`, `nuisance`, `percent_signal`); `?glmsingle` maps
+  each to its GLMsingle option.
 - `glmsingle_design()` fits from an fmridesign event model;
   `glmsingle_hrf()` and `glmsingle_hrf_library()` return GLMsingle's HRFs.
 - New vignette: `vignette("glmsingle")`.

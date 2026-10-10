@@ -40,9 +40,9 @@ test_that("compiled cross-validation equals literal calcbadness", {
                trial_run = rep(seq_len(runs), each = per))
   schemes <- list(as.list(seq_len(runs)), list(1:2, 3:4, 5:6))
   for (xv in schemes) {
-    geom$xval_scheme <- xv
-    for (mode in c("python", "zero")) {
-      ref <- ref_calcbadness(xv, validcolumns, stimix, res, session, python = mode == "python")
+    geom$cv_folds <- xv
+    for (mode in c("glmsingle", "ignore")) {
+      ref <- ref_calcbadness(xv, validcolumns, stimix, res, session, python = mode == "glmsingle")
       cv <- .glms_cv_compile(geom, t(res[[1]]), mode)
       got <- cbind(.glms_cv_loss_ref(cv, t(res[[1]])[cv$used, , drop = FALSE]),
                    vapply(res[-1], function(r) .glms_cv_loss(cv, t(r)[cv$used, , drop = FALSE]),

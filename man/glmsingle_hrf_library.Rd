@@ -5,12 +5,12 @@
 \alias{glmsingle_hrf}
 \title{GLMsingle canonical HRF and HRF library}
 \usage{
-glmsingle_hrf_library(stimdur, tr)
+glmsingle_hrf_library(stim_dur, tr)
 
-glmsingle_hrf(stimdur, tr)
+glmsingle_hrf(stim_dur, tr)
 }
 \arguments{
-\item{stimdur}{Stimulus duration in seconds (rounded to 0.1 s).}
+\item{stim_dur}{Stimulus duration in seconds (rounded to 0.1 s).}
 
 \item{tr}{Repetition time in seconds.}
 }
@@ -20,12 +20,12 @@ returns a time x 20 matrix.
 }
 \description{
 Reproduces GLMsingle's canonical HRF (\code{getcanonicalhrf}) and its library
-of 20 HRFs (\code{getcanonicalhrflibrary}) for a stimulus of duration \code{stimdur}
+of 20 HRFs (\code{getcanonicalhrflibrary}) for a stimulus of duration \code{stim_dur}
 sampled at \code{tr}. Each HRF is peak-normalised to 1, and the first sample is
 coincident with stimulus onset.
 }
 \examples{
-lib <- glmsingle_hrf_library(stimdur = 3, tr = 1)
+lib <- glmsingle_hrf_library(stim_dur = 3, tr = 1)
 dim(lib)
 }
 \references{

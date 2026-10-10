@@ -88,7 +88,7 @@
 }
 
 # Build the trial/run/condition geometry used by every stage.
-.glms_geometry <- function(parsed, n_time, tr, session_indicator, xval_scheme) {
+.glms_geometry <- function(parsed, n_time, tr, sessions, cv_folds) {
   R <- length(n_time)
   n_per_run <- lengths(parsed$onsets)
   ends <- cumsum(n_per_run)
@@ -97,18 +97,18 @@
     if (n_per_run[r]) seq.int(starts[r], ends[r]) else integer(0)
   })
   stimorder <- unlist(parsed$conds, use.names = FALSE)
-  session_indicator <- if (is.null(session_indicator)) rep(1L, R) else {
-    s <- .as_integer_ids(session_indicator, "session_indicator")
-    if (length(s) != R) stop("session_indicator needs one entry per run", call. = FALSE)
+  sessions <- if (is.null(sessions)) rep(1L, R) else {
+    s <- .as_integer_ids(sessions, "sessions")
+    if (length(s) != R) stop("sessions needs one entry per run", call. = FALSE)
     s
   }
-  if (is.null(xval_scheme)) {
-    xval_scheme <- as.list(seq_len(R))
+  if (is.null(cv_folds)) {
+    cv_folds <- as.list(seq_len(R))
   } else {
-    if (!is.list(xval_scheme)) xval_scheme <- as.list(xval_scheme)
-    xval_scheme <- lapply(xval_scheme, function(f) {
+    if (!is.list(cv_folds)) cv_folds <- as.list(cv_folds)
+    cv_folds <- lapply(cv_folds, function(f) {
       f <- as.integer(f)
-      if (!length(f) || any(f < 1L | f > R)) stop("xval_scheme entries must be run indices in 1..number of runs", call. = FALSE)
+      if (!length(f) || any(f < 1L | f > R)) stop("cv_folds entries must be run indices in 1..number of runs", call. = FALSE)
       f
     })
   }
@@ -121,7 +121,7 @@
     n_trials = sum(n_per_run), n_per_run = n_per_run,
     validcolumns = validcolumns, stimorder = stimorder,
     trial_run = rep(seq_len(R), n_per_run),
-    session = session_indicator, xval_scheme = xval_scheme,
+    session = sessions, cv_folds = cv_folds,
     cond_in_runs = cond_in_runs,
     cond_trials = split(seq_along(stimorder) - 1L, stimorder)
   )

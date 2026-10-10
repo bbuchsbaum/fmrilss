@@ -60,55 +60,56 @@
 
 # GLMdenoise: noise pool, PCs, and the number of PCs by cross-validation.
 .glms_denoise <- function(Ylist, geom, library, hrf_index, onoff_r2, meanvol,
-                          nuis, max_poly_deg, extras, n_pcs, pcstop,
-                          brain_thresh, brain_r2, brain_exclude, pc_r2_cutoff,
-                          pc_r2_cutoff_mask, full_glmbadness, extras_in_denoise,
-                          zero_sd_cv, singular, chunk_size, say) {
+                          nuis, poly_degree, extras, max_pcs, pc_stop,
+                          noise_pool_brightness, noise_pool_r2, noise_pool_mask, pc_voxel_r2,
+                          pc_voxel_mask, pc_cv_all_voxels, nuisance_in_denoise,
+                          cv_zero_variance, singular, chunk_size, say) {
   R <- length(Ylist)
   n_vox <- ncol(Ylist[[1]])
-  bright <- meanvol > .glms_percentile(meanvol, brain_thresh[1]) * brain_thresh[2]
-  noisepool <- bright & !is.na(onoff_r2) & onoff_r2 < brain_r2
-  if (!is.null(brain_exclude)) noisepool <- noisepool & as.logical(brain_exclude)
+  bright <- meanvol > .glms_percentile(meanvol, noise_pool_brightness[1]) * noise_pool_brightness[2]
+  noisepool <- bright & !is.na(onoff_r2) & onoff_r2 < noise_pool_r2
+  if (!is.null(noise_pool_mask)) noisepool <- noisepool & as.logical(noise_pool_mask)
   pcs <- lapply(seq_len(R), function(r) {
-    .glms_noise_pcs(Ylist[[r]], noisepool, nuis[[r]]$Qp, n_pcs, chunk_size)
+    .glms_noise_pcs(Ylist[[r]], noisepool, nuis[[r]]$Qp, max_pcs, chunk_size)
   })
   out <- list(pcregressors = pcs, noisepool = noisepool, pcnum = 0L,
               xvaltrend = NULL, glmbadness = NULL, pcvoxels = NULL)
   available <- min(vapply(pcs, ncol, integer(1)))
-  if (n_pcs > available) {
-    warning(sprintf("Limiting n_pcs to %d (noise-pool rank across runs).", available),
+  requested <- if (pc_stop <= 0) -pc_stop else max_pcs
+  if (requested > available) {
+    warning(sprintf("Limiting the number of noise PCs to %d (noise-pool rank across runs).", available),
             call. = FALSE)
-    n_pcs <- available
+    max_pcs <- available
   }
   if (!available) return(out)
-  if (pcstop <= 0) {
-    out$pcnum <- as.integer(min(-pcstop, n_pcs))
+  if (pc_stop <= 0) {
+    out$pcnum <- as.integer(min(-pc_stop, max_pcs))
     return(out)
   }
   say("Cross-validating the number of noise regressors")
-  mask <- if (is.null(pc_r2_cutoff_mask)) rep(TRUE, n_vox) else as.logical(pc_r2_cutoff_mask)
-  ix <- which(!is.na(onoff_r2) & onoff_r2 > pc_r2_cutoff & mask)
+  mask <- if (is.null(pc_voxel_mask)) rep(TRUE, n_vox) else as.logical(pc_voxel_mask)
+  ix <- which(!is.na(onoff_r2) & onoff_r2 > pc_voxel_r2 & mask)
   if (!length(ix)) {
-    warning("No voxels passed pc_r2_cutoff; using the best 100 voxels.", call. = FALSE)
+    warning("No voxels passed pc_voxel_r2; using the best 100 voxels.", call. = FALSE)
     ix2 <- which(mask)
-    if (!length(ix2)) stop("no voxels are in pc_r2_cutoff_mask", call. = FALSE)
+    if (!length(ix2)) stop("no voxels are in pc_voxel_mask", call. = FALSE)
     ix <- ix2[order(onoff_r2[ix2], decreasing = TRUE, na.last = TRUE)][seq_len(min(100L, length(ix2)))]
   }
-  cv_vox <- if (full_glmbadness) seq_len(n_vox) else ix
-  bad <- matrix(NA_real_, n_vox, n_pcs + 1L)
+  cv_vox <- if (pc_cv_all_voxels) seq_len(n_vox) else ix
+  bad <- matrix(NA_real_, n_vox, max_pcs + 1L)
   bad[cv_vox, ] <- .glms_pc_badness(Ylist, geom, library, hrf_index, cv_vox,
-                                    max_poly_deg, extras, pcs, n_pcs,
-                                    extras_in_denoise, zero_sd_cv, singular,
+                                    poly_degree, extras, pcs, max_pcs,
+                                    nuisance_in_denoise, cv_zero_variance, singular,
                                     chunk_size)
   out$xvaltrend <- -apply(bad[ix, , drop = FALSE], 2L, stats::median)
   out$glmbadness <- bad
   out$pcvoxels <- seq_len(n_vox) %in% ix
-  out$pcnum <- .glms_select_pcs(out$xvaltrend, pcstop)
+  out$pcnum <- .glms_select_pcs(out$xvaltrend, pc_stop)
   out
 }
 
-.glms_extras_rule <- function(extras_in_denoise) {
-  if (identical(extras_in_denoise, "always")) function(k) TRUE else function(k) k > 0L
+.glms_extras_rule <- function(nuisance_in_denoise) {
+  if (identical(nuisance_in_denoise, "always")) function(k) TRUE else function(k) k > 0L
 }
 
 # numpy.argmin semantics per row: first minimum; a NaN wins at its position.
@@ -127,17 +128,17 @@
   out
 }
 
-# Cross-validation loss (voxels x (n_pcs + 1)) of OLS fits with 0..n_pcs
+# Cross-validation loss (voxels x (max_pcs + 1)) of OLS fits with 0..max_pcs
 # noise PCs, scored against the 0-PC fit, for the voxels in `cv_vox`.
 .glms_pc_badness <- function(Ylist, geom, library, hrf_index, cv_vox,
-                             max_poly_deg, extras, pcs, n_pcs,
-                             extras_in_denoise, zero_sd_cv, singular,
+                             poly_degree, extras, pcs, max_pcs,
+                             nuisance_in_denoise, cv_zero_variance, singular,
                              chunk_size) {
   R <- length(Ylist)
-  ks <- 0:n_pcs
-  rule <- .glms_extras_rule(extras_in_denoise)
+  ks <- 0:max_pcs
+  rule <- .glms_extras_rule(nuisance_in_denoise)
   nuis <- lapply(seq_len(R), function(r) {
-    .glms_nuisance_run(geom$n_time[r], max_poly_deg[r], extras[[r]], pcs[[r]], ks, rule)
+    .glms_nuisance_run(geom$n_time[r], poly_degree[r], extras[[r]], pcs[[r]], ks, rule)
   })
   knames <- paste0("k", ks)
   out <- matrix(NA_real_, length(cv_vox), length(ks))
@@ -152,7 +153,7 @@
     stats_k <- stats_cache[[key]]
     dats <- lapply(seq_len(R), function(r) .glms_data_stats(.glms_cols(Ylist[[r]], grp$vox), nuis[[r]]))
     ref <- .glms_fit_ols(stats_k[[1L]], dats)$beta
-    cv <- .glms_cv_compile(geom, ref, zero_sd_cv)
+    cv <- .glms_cv_compile(geom, ref, cv_zero_variance)
     rows <- match(grp$vox, cv_vox)
     out[rows, 1L] <- .glms_cv_loss_ref(cv, ref[cv$used, , drop = FALSE])
     for (j in seq_along(ks)[-1L]) {
@@ -191,16 +192,16 @@
 }
 
 # Types C (GLMdenoise, unregularised) and D (fractional ridge) for all voxels.
-.glms_fit_cd <- function(Ylist, geom, library, hrf_index, max_poly_deg, extras,
-                         pcs, pcnum, extras_in_denoise, fracstouse, fracs,
-                         want_fracridge, want_autoscale, zero_sd_cv,
-                         frac_alpha, chunk_size) {
+.glms_fit_cd <- function(Ylist, geom, library, hrf_index, poly_degree, extras,
+                         pcs, pcnum, nuisance_in_denoise, fracstouse, fracs,
+                         ridge, ridge_rescale, cv_zero_variance,
+                         ridge_alpha, chunk_size) {
   R <- length(Ylist)
   n_vox <- length(hrf_index)
   N <- geom$n_trials
-  rule <- .glms_extras_rule(extras_in_denoise)
+  rule <- .glms_extras_rule(nuisance_in_denoise)
   nuis <- lapply(seq_len(R), function(r) {
-    .glms_nuisance_run(geom$n_time[r], max_poly_deg[r], extras[[r]],
+    .glms_nuisance_run(geom$n_time[r], poly_degree[r], extras[[r]],
                        if (pcnum > 0L) pcs[[r]] else NULL, pcnum, rule)
   })
   kname <- paste0("k", pcnum)
@@ -208,9 +209,9 @@
   r2_c <- r2_d <- rep(NA_real_, n_vox)
   r2run_c <- r2run_d <- matrix(NA_real_, n_vox, R)
   frac_value <- rep(NA_real_, n_vox)
-  cv_select <- want_fracridge && length(fracs) > 1L
+  cv_select <- ridge && length(fracs) > 1L
   rrbadness <- if (cv_select) matrix(NA_real_, n_vox, length(fracs)) else NULL
-  autoscale <- want_fracridge && want_autoscale && !(length(fracs) == 1L && fracs == 1)
+  autoscale <- ridge && ridge_rescale && !(length(fracs) == 1L && fracs == 1)
   scaleoffset <- if (autoscale) matrix(NA_real_, n_vox, 2L,
                                        dimnames = list(NULL, c("scale", "offset"))) else NULL
   prepended <- fracs[1L] != 1
@@ -233,11 +234,11 @@
     beta_c[, v] <- b1
     r2_c[v] <- .glms_r2(colSums(q$sse), colSums(q$s))
     r2run_c[v, ] <- t(.glms_r2(q$sse, q$s))
-    if (!want_fracridge) next
+    if (!ridge) next
 
-    alphas <- .glms_frac_alphas(sp, fracstouse, frac_alpha)
+    alphas <- .glms_frac_alphas(sp, fracstouse, ridge_alpha)
     if (cv_select) {
-      cv <- .glms_cv_compile(geom, b1, zero_sd_cv)
+      cv <- .glms_cv_compile(geom, b1, cv_zero_variance)
       bad <- matrix(NA_real_, length(v), length(fracstouse))
       bad[, 1L] <- .glms_cv_loss_ref(cv, b1[cv$used, , drop = FALSE])
       if (length(fracstouse) > 1L) {

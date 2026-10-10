@@ -6,13 +6,13 @@
 #' cross-validation). Onsets must lie on the TR grid.
 #'
 #' A `baseline_model` contributes its nuisance term (e.g. motion) as
-#' `extra_regressors`. Its drift and block terms are not used: GLMsingle
-#' models drift with its own per-run polynomials (`max_poly_deg`).
+#' `nuisance`. Its drift and block terms are not used: GLMsingle
+#' models drift with its own per-run polynomials (`poly_degree`).
 #'
 #' @param Y Time x voxel data matrix covering all runs of the sampling frame.
 #' @param event_model An `event_model` from fmridesign.
 #' @param baseline_model Optional `baseline_model` from fmridesign.
-#' @param stimdur Trial duration in seconds. Default: the event durations,
+#' @param stim_dur Trial duration in seconds. Default: the event durations,
 #'   which must then be a single positive value.
 #' @param ... Further arguments passed to [glmsingle()].
 #' @return A `glmsingle_fit`; see [glmsingle()].
@@ -26,11 +26,11 @@
 #'   onset ~ fmridesign::hrf(stimulus), data = events, block = ~run,
 #'   sampling_frame = sf, durations = rep(2, nrow(events)))
 #' Y <- matrix(100 + rnorm(160 * 4), 160, 4)
-#' fit <- glmsingle_design(Y, em, want_glmdenoise = FALSE,
-#'                         want_fracridge = FALSE, verbose = FALSE)
+#' fit <- glmsingle_design(Y, em, denoise = FALSE,
+#'                         ridge = FALSE, verbose = FALSE)
 #' dim(coef(fit, type = "b"))
 #' @export
-glmsingle_design <- function(Y, event_model, baseline_model = NULL, stimdur = NULL, ...) {
+glmsingle_design <- function(Y, event_model, baseline_model = NULL, stim_dur = NULL, ...) {
   if (!requireNamespace("fmridesign", quietly = TRUE)) {
     stop("Package 'fmridesign' is required for glmsingle_design()", call. = FALSE)
   }
@@ -54,10 +54,10 @@ glmsingle_design <- function(Y, event_model, baseline_model = NULL, stimdur = NU
     stop(sprintf("Y has %d rows but the sampling frame has %d scans", nrow(Y), sum(blocklens)),
          call. = FALSE)
   }
-  if (is.null(stimdur)) {
-    stimdur <- unique(term$durations)
-    if (length(stimdur) != 1L || stimdur <= 0) {
-      stop("supply stimdur: event durations are not a single positive value", call. = FALSE)
+  if (is.null(stim_dur)) {
+    stim_dur <- unique(term$durations)
+    if (length(stim_dur) != 1L || stim_dur <= 0) {
+      stop("supply stim_dur: event durations are not a single positive value", call. = FALSE)
     }
   }
   events <- data.frame(run = match(term$blockids, unique(event_model$blockids)),
@@ -74,8 +74,8 @@ glmsingle_design <- function(Y, event_model, baseline_model = NULL, stimdur = NU
       })
     }
   }
-  glmsingle(Y, events, tr = tr, stimdur = stimdur, runs = runs,
-            extra_regressors = extras, ...)
+  glmsingle(Y, events, tr = tr, stim_dur = stim_dur, runs = runs,
+            nuisance = extras, ...)
 }
 
 #' @export

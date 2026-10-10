@@ -29,7 +29,7 @@ read_glms_fixture <- function(name) {
     arr <- array(x, rev(shape))
     aperm(arr, rev(seq_along(shape)))
   })
-  list(tr = man$tr, stimdur = man$stimdur, params = man$params,
+  list(tr = man$tr, stim_dur = man$stimdur, params = man$params,
        variants = unlist(man$variants), a = arrays)
 }
 
@@ -48,19 +48,21 @@ run_glms_fixture <- function(fx, variant = c("upstream", "fmrilss"), ...) {
   inp <- glms_fixture_inputs(fx)
   p <- fx$params
   args <- list(
-    Y = inp$Y, design = inp$design, tr = fx$tr, stimdur = fx$stimdur,
-    extra_regressors = inp$extras,
-    brain_r2 = p$brainR2, pc_r2_cutoff = p$pcR2cutoff,
+    Y = inp$Y, design = inp$design, tr = fx$tr, stim_dur = fx$stim_dur,
+    nuisance = inp$extras,
+    noise_pool_r2 = p$brainR2, pc_voxel_r2 = p$pcR2cutoff,
     verbose = FALSE
   )
-  if (!is.null(p$pcstop)) args$pcstop <- p$pcstop
-  if (!is.null(p$fracs)) args$fracs <- unlist(p$fracs)
-  if (!is.null(p$wantlibrary)) args$want_library <- as.logical(p$wantlibrary)
-  if (!is.null(p$sessionindicator)) args$session_indicator <- unlist(p$sessionindicator)
-  if (!is.null(p$xvalscheme)) args$xval_scheme <- lapply(p$xvalscheme, function(f) unlist(f) + 1L)
+  if (!is.null(p$pcstop)) {
+    if (p$pcstop <= 0) args$n_pcs <- -p$pcstop else args$pc_stop <- p$pcstop
+  }
+  if (!is.null(p$fracs)) args$ridge_fracs <- unlist(p$fracs)
+  if (!is.null(p$wantlibrary)) args$fit_hrf <- as.logical(p$wantlibrary)
+  if (!is.null(p$sessionindicator)) args$sessions <- unlist(p$sessionindicator)
+  if (!is.null(p$xvalscheme)) args$cv_folds <- lapply(p$xvalscheme, function(f) unlist(f) + 1L)
   if (variant == "upstream") {
-    args$extras_in_denoise <- "with_pcs"
-    args$zero_sd_cv <- "python"
+    args$nuisance_in_denoise <- "with_pcs"
+    args$cv_zero_variance <- "glmsingle"
   }
   do.call(glmsingle, c(args, list(...)))
 }
@@ -216,11 +218,11 @@ ref_calcbadness <- function(xvals, validcolumns, stimix, results, session, pytho
 # Small simulator with TR-locked onsets, repeated conditions, voxel-specific
 # library HRFs, shared structured noise and drift. Uses its own RNG state.
 sim_glms <- function(seed = 1, n_runs = 4, n_time = 90, n_vox = 24, n_cond = 8,
-                     tr = 1, stimdur = 3, isi = c(3, 5), n_extras = 0) {
+                     tr = 1, stim_dur = 3, isi = c(3, 5), n_extras = 0) {
   old <- if (exists(".Random.seed", envir = globalenv())) get(".Random.seed", envir = globalenv()) else NULL
   on.exit(if (is.null(old)) rm(".Random.seed", envir = globalenv()) else assign(".Random.seed", old, envir = globalenv()))
   set.seed(seed)
-  lib <- glmsingle_hrf_library(stimdur, tr)
+  lib <- glmsingle_hrf_library(stim_dur, tr)
   hidx <- sample(ncol(lib), n_vox, replace = TRUE)
   mu <- matrix(rnorm(n_cond * n_vox, 1, 0.8), n_cond)
   load <- matrix(rnorm(3 * n_vox), 3)
@@ -247,7 +249,7 @@ sim_glms <- function(seed = 1, n_runs = 4, n_time = 90, n_vox = 24, n_cond = 8,
     }
     design[[r]] <- D; Y[[r]] <- Yr
   }
-  list(Y = Y, design = design, extras = if (n_extras) extras else NULL, tr = tr, stimdur = stimdur)
+  list(Y = Y, design = design, extras = if (n_extras) extras else NULL, tr = tr, stim_dur = stim_dur)
 }
 
 # Condition number of each library HRF's residualised design (max over runs).
@@ -255,7 +257,7 @@ glms_kappa <- function(fit, extras = NULL) {
   g <- fit$design
   vapply(seq_len(ncol(fit$hrf_library)), function(h) {
     max(vapply(seq_along(g$onsets), function(r) {
-      nu <- .glms_nuisance_run(g$n_time[r], fit$settings$max_poly_deg[r], extras[[r]], NULL, 0L, function(k) TRUE)
+      nu <- .glms_nuisance_run(g$n_time[r], fit$settings$poly_degree[r], extras[[r]], NULL, 0L, function(k) TRUE)
       e <- eigen(.glms_design_stats(g$onsets[[r]], g$n_time[r], fit$hrf_library[, h], nu, "k0")$G,
                  symmetric = TRUE, only.values = TRUE)$values
       sqrt(max(e) / min(e))

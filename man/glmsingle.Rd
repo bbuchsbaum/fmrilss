@@ -8,143 +8,177 @@ glmsingle(
   Y,
   design,
   tr,
-  stimdur,
+  stim_dur,
   runs = NULL,
+  nuisance = NULL,
+  poly_degree = NULL,
+  fit_hrf = TRUE,
   hrf_library = NULL,
-  want_library = TRUE,
-  want_glmdenoise = TRUE,
-  want_fracridge = TRUE,
-  fracs = seq(1, 0.05, by = -0.05),
-  n_pcs = 10L,
-  pcstop = 1.05,
-  xval_scheme = NULL,
-  session_indicator = NULL,
-  extra_regressors = NULL,
-  max_poly_deg = NULL,
-  brain_thresh = c(99, 0.1),
-  brain_r2 = NULL,
-  brain_exclude = NULL,
-  pc_r2_cutoff = NULL,
-  pc_r2_cutoff_mask = NULL,
-  want_percent_bold = TRUE,
-  want_autoscale = TRUE,
-  extras_in_denoise = c("always", "with_pcs"),
-  zero_sd_cv = c("zero", "python"),
+  denoise = TRUE,
+  max_pcs = 10L,
+  n_pcs = NULL,
+  pc_stop = 1.05,
+  pc_voxel_r2 = NULL,
+  pc_voxel_mask = NULL,
+  noise_pool_r2 = NULL,
+  noise_pool_brightness = c(99, 0.1),
+  noise_pool_mask = NULL,
+  ridge = TRUE,
+  ridge_fracs = seq(1, 0.05, by = -0.05),
+  ridge_rescale = TRUE,
+  ridge_alpha = c("grid", "exact"),
+  cv_folds = NULL,
+  sessions = NULL,
+  percent_signal = TRUE,
+  nuisance_in_denoise = c("always", "with_pcs"),
+  cv_zero_variance = c("ignore", "glmsingle"),
   singular = c("error", "pinv"),
-  frac_alpha = c("fracridge", "exact"),
-  full_glmbadness = FALSE,
+  pc_cv_all_voxels = FALSE,
   chunk_size = 50000L,
   n_threads = 1L,
   verbose = TRUE
 )
 }
 \arguments{
-\item{Y}{Data: a list of time x voxel matrices (one per run), or one time
-x voxel matrix with \code{runs} giving the run of each row.}
+\item{Y}{Data: a list of time x voxel matrices (one per run), or a single
+time x voxel matrix with \code{runs} giving the run of each row. Runs may
+differ in length but must share the voxels.}
 
 \item{design}{Either a list of time x condition 0/1 matrices, one per run
 (GLMsingle's format; a 1 marks a trial onset), or a data frame with
-columns \code{run}, \code{onset} (seconds; must be on the TR grid) and
-\code{condition}. Repeated conditions drive the cross-validation.
-For matrix \code{Y}, event run IDs are matched to \code{runs} in data order.
-For list \code{Y}, ascending event run IDs correspond to the list order.}
+columns \code{run}, \code{onset} (seconds from the start of the run; must lie on
+the TR grid) and \code{condition}. Conditions that occur in more than one run
+drive the cross-validation; with no repeats, noise-PC and ridge
+selection are switched off with a warning. For matrix \code{Y}, event run
+IDs are matched to \code{runs} in data order; for list \code{Y}, ascending event
+run IDs correspond to the list order.}
 
 \item{tr}{Repetition time in seconds.}
 
-\item{stimdur}{Trial duration in seconds.}
+\item{stim_dur}{Trial duration in seconds (sets the duration of the
+canonical HRF and of the HRF library).}
 
-\item{runs}{Run identifier per row of \code{Y} when \code{Y} is a single matrix.}
+\item{runs}{Run identifier for each row of \code{Y} when \code{Y} is a single
+matrix; ignored when \code{Y} is a list.}
+
+\item{nuisance}{Optional nuisance regressors (e.g. motion, physiology):
+a list with one time x regressor matrix (or \code{NULL}) per run. They are
+included in every model; see \code{nuisance_in_denoise}.}
+
+\item{poly_degree}{Degree of the per-run polynomial drift model: a single
+integer or one per run. Default (\code{NULL}): \code{round(run_minutes / 2)}, as in
+GLMsingle.}
+
+\item{fit_hrf}{If \code{TRUE} (default), choose the best-fitting HRF from
+\code{hrf_library} for each voxel. If \code{FALSE}, use the canonical HRF
+(\code{\link[=glmsingle_hrf]{glmsingle_hrf()}}) for every voxel.}
 
 \item{hrf_library}{Optional time x HRF matrix sampled at the TR (first row
-at onset). Default: \code{\link[=glmsingle_hrf_library]{glmsingle_hrf_library()}}.}
+at trial onset); columns are scaled to unit peak. Default (\code{NULL}): the
+20-HRF GLMsingle library, \code{\link[=glmsingle_hrf_library]{glmsingle_hrf_library()}}. Ignored when
+\code{fit_hrf = FALSE}.}
 
-\item{want_library}{Fit the HRF library per voxel (otherwise the canonical
-HRF is used for every voxel).}
+\item{denoise}{If \code{TRUE} (default), derive GLMdenoise noise regressors
+(principal components of a noise pool of voxels) and return the type C
+model.}
 
-\item{want_glmdenoise}{Derive and select GLMdenoise noise regressors.}
+\item{max_pcs}{Largest number of noise PCs considered (default 10).
+Capped, with a warning, at the noise pool's rank across runs; an empty
+or rank-zero pool uses zero PCs and skips the PC-count cross-validation.}
 
-\item{want_fracridge}{Fit the fractional ridge model (type D).}
+\item{n_pcs}{Use exactly this many noise PCs instead of choosing the count
+by cross-validation. Default (\code{NULL}): choose by cross-validation.}
 
-\item{fracs}{Ridge fractions in (0, 1] to evaluate. A single value skips
-cross-validation and uses that fraction.}
+\item{pc_stop}{Stopping factor for the cross-validated PC count (default
+1.05): the smallest count whose improvement over zero PCs is at least
+\code{1 / pc_stop} of the best improvement is chosen. Larger values choose
+fewer PCs.}
 
-\item{n_pcs}{Maximum number of noise PCs to evaluate. Capped, with a
-warning, at the available noise-pool rank across runs. Empty or
-rank-zero pools use zero PCs and skip PC-count cross-validation.}
+\item{pc_voxel_r2}{ON-OFF R^2 (percent) above which a voxel contributes to
+choosing the PC count. Default (\code{NULL}): a data-driven threshold from a
+two-Gaussian fit to the ON-OFF R^2 distribution (also stored in
+\code{settings$tail_threshold}).}
 
-\item{pcstop}{Stopping factor for choosing the number of PCs. A value
-\verb{<= 0} uses \code{-pcstop} PCs without cross-validation.}
+\item{pc_voxel_mask}{Optional logical vector (one per voxel); only \code{TRUE}
+voxels may contribute to choosing the PC count.}
 
-\item{xval_scheme}{List of integer vectors of runs held out together in
-each cross-validation fold. Default: leave one run out.}
+\item{noise_pool_r2}{ON-OFF R^2 (percent) below which a voxel may enter the
+noise pool. Default (\code{NULL}): the same data-driven threshold as
+\code{pc_voxel_r2}. The threshold is only estimated when \code{denoise = TRUE};
+with fewer than two distinct finite ON-OFF R^2 values it is their common
+value (or zero if none is finite).}
 
-\item{session_indicator}{Integer session per run, used to z-score betas
-within session for cross-validation. Default: one session.}
+\item{noise_pool_brightness}{Two numbers \code{c(p, f)}: only voxels whose mean
+signal exceeds \code{f} times the \code{p}-th percentile of the mean volume may
+enter the noise pool (excludes out-of-brain voxels). Default \code{c(99, 0.1)}.}
 
-\item{extra_regressors}{Optional list (one per run) of time x regressor
-nuisance matrices (e.g. motion), or \code{NULL}.}
+\item{noise_pool_mask}{Optional logical vector (one per voxel); only \code{TRUE}
+voxels may enter the noise pool.}
 
-\item{max_poly_deg}{Polynomial drift degree, scalar or one per run.
-Default: \code{round(run_seconds / 120)} as in GLMsingle.}
+\item{ridge}{If \code{TRUE} (default), fit voxel-wise fractional ridge
+regression and return the type D model.}
 
-\item{brain_thresh}{Two numbers: a percentile of the mean volume and a
-fraction of it; voxels brighter than their product may enter the noise
-pool.}
+\item{ridge_fracs}{Ridge fractions in (0, 1] to choose from by
+cross-validation; a fraction is the length of the ridge solution relative
+to the OLS solution (1 = no shrinkage). A single value skips
+cross-validation and uses that fraction everywhere. Default: 1 to 0.05 in
+steps of 0.05.}
 
-\item{brain_r2}{ON-OFF R^2 (percent) below which bright voxels enter the
-noise pool. Default: estimated tail threshold. With fewer than two
-distinct finite ON-OFF R^2 values, uses the common value (or zero if
-none are finite). Thresholds are only estimated when denoising is used.}
+\item{ridge_rescale}{If \code{TRUE} (default), rescale each voxel's ridge betas
+with the linear fit (slope, offset) that best matches its unregularised
+betas, undoing the overall shrinkage while keeping the ridge pattern.}
 
-\item{brain_exclude}{Optional logical vector of voxels to exclude from the
-noise pool (\code{FALSE} excludes).}
+\item{ridge_alpha}{How fractions are converted to ridge penalties:
+\code{"grid"} (default; fracridge's interpolation on a log-spaced penalty
+grid, as GLMsingle) or \code{"exact"} (solve for the penalty that gives the
+fraction exactly; experimental).}
 
-\item{pc_r2_cutoff}{ON-OFF R^2 above which voxels summarise the PC-count
-cross-validation. Default: estimated tail threshold.}
+\item{cv_folds}{Cross-validation folds: a list of integer vectors of runs
+held out together. Default (\code{NULL}): leave one run out.}
 
-\item{pc_r2_cutoff_mask}{Optional logical vector restricting those voxels.}
+\item{sessions}{Session of each run (one entry per run). Betas are
+z-scored within session before cross-validation, removing
+session-level gain differences. Default (\code{NULL}): one session.}
 
-\item{want_percent_bold}{Express betas as percent signal change of the mean
-volume.}
+\item{percent_signal}{If \code{TRUE} (default), express betas as percent signal
+change of each voxel's mean; if \code{FALSE}, in raw data units.}
 
-\item{want_autoscale}{Rescale ridge betas to best match the unregularised
-betas (type D).}
+\item{nuisance_in_denoise}{How \code{nuisance} regressors enter the GLMdenoise
+and ridge fits: \code{"always"} (default, recommended) or \code{"with_pcs"}, which
+drops them when zero PCs are used (GLMsingle's behaviour).}
 
-\item{extras_in_denoise}{How user extra regressors enter the GLMdenoise and
-ridge fits: \code{"always"} (default, recommended) or \code{"with_pcs"} (only when
-at least one PC is used; GLMsingle's behaviour).}
-
-\item{zero_sd_cv}{Treatment of voxels whose reference betas have zero
-variance within a session during cross-validation: \code{"zero"} (default) or
-\code{"python"} (reproduce GLMsingle's Python behaviour).}
+\item{cv_zero_variance}{Treatment, in cross-validation, of voxels whose
+reference betas have zero variance within a session (e.g. all-zero
+voxels): \code{"ignore"} (default; they carry no weight) or \code{"glmsingle"}
+(reproduce GLMsingle's Python behaviour).}
 
 \item{singular}{What to do when a run's trial regressors are linearly
-dependent: \code{"error"} (default, as GLMsingle) or \code{"pinv"}
-(minimum-norm solution with a warning).}
+dependent (e.g. two trials with the same onset): \code{"error"} (default, as
+GLMsingle) or \code{"pinv"} (minimum-norm solution with a warning).}
 
-\item{frac_alpha}{How fractions map to ridge penalties: \code{"fracridge"}
-(default; GLMsingle's grid interpolation) or \code{"exact"} (solve the
-fraction equation exactly; experimental).}
+\item{pc_cv_all_voxels}{If \code{TRUE}, run the PC-count cross-validation for
+every voxel rather than only those that decide the count. Estimates are
+identical; only the \code{glmbadness} diagnostic is filled for all voxels.
+Default \code{FALSE} (faster).}
 
-\item{full_glmbadness}{Compute the PC-count cross-validation for every
-voxel instead of only the voxels that decide the PC count. Estimates are
-identical; only the \code{glmbadness} diagnostic is filled for all voxels.}
+\item{chunk_size}{Number of voxels processed at a time (default 50000).
+Lower it to reduce peak memory; results do not depend on it.}
 
-\item{chunk_size}{Number of voxels processed at a time (GLMsingle's
-\code{chunklen}). Lower it to reduce peak memory.}
+\item{n_threads}{Threads for the per-voxel C++ loops (default 1; \code{0} =
+OpenMP default). Results do not depend on the thread count. Matrix
+products use the BLAS library's own threads; use \code{n_threads > 1} only
+with a single-threaded BLAS, because the two thread pools compete for
+cores.}
 
-\item{n_threads}{Threads for the per-voxel C++ loops (\code{0} = OpenMP
-default). Results do not depend on the thread count. Matrix products use
-the BLAS library's own threads; use \code{n_threads > 1} only with a
-single-threaded BLAS, because the two thread pools compete for cores.}
-
-\item{verbose}{Print progress messages.}
+\item{verbose}{Print progress messages (default \code{TRUE}).}
 }
 \value{
 An object of class \code{glmsingle_fit}: a list with elements \code{typea},
 \code{typeb}, \code{typec}, \code{typed} (each a list using GLMsingle's field names;
-betas are trials x voxels), \code{meanvol}, \code{hrf_library}, \code{design}
-(trial bookkeeping), \code{settings} and \code{timing}.
+betas are trials x voxels; \code{typec}/\code{typed} are \code{NULL} when \code{denoise}/
+\code{ridge} is \code{FALSE}), \code{meanvol}, \code{hrf_library}, \code{hrf_assumed}, \code{design}
+(trial bookkeeping), \code{settings} (the resolved settings, including
+data-driven thresholds) and \code{timing}.
 }
 \description{
 Estimates single-trial response amplitudes with the GLMsingle procedure
@@ -164,34 +198,45 @@ Four models are returned, matching GLMsingle:
 \item{typec}{Type B plus GLMdenoise noise regressors.}
 \item{typed}{Type C plus voxel-wise fractional ridge regression.}
 }
+
+Arguments are grouped by stage: HRF (\code{fit_hrf}, \code{hrf_library}), noise
+regressors (\code{denoise}, \code{max_pcs}, \code{n_pcs}, \verb{pc_*}, \verb{noise_pool_*}), ridge
+(\code{ridge}, \verb{ridge_*}) and cross-validation (\code{cv_folds}, \code{sessions},
+\code{cv_zero_variance}). The defaults are GLMsingle's defaults and are a good
+choice for typical event-related designs; the arguments most often worth
+setting are \code{nuisance} (e.g. motion), \code{cv_folds}/\code{sessions} for
+multi-session data, and \code{chunk_size} when memory is tight.
 }
-\section{Argument names}{
- Arguments use snake_case; the GLMsingle names are
-\code{wantlibrary} (\code{want_library}), \code{wantglmdenoise} (\code{want_glmdenoise}),
-\code{wantfracridge} (\code{want_fracridge}), \code{xvalscheme} (\code{xval_scheme}),
-\code{sessionindicator} (\code{session_indicator}), \code{maxpolydeg} (\code{max_poly_deg}),
-\code{brainthresh} (\code{brain_thresh}), \code{brainR2} (\code{brain_r2}), \code{brainexclude}
-(\code{brain_exclude}), \code{pcR2cutoff} (\code{pc_r2_cutoff}), \code{pcR2cutoffmask}
-(\code{pc_r2_cutoff_mask}), \code{wantpercentbold} (\code{want_percent_bold}),
-\code{wantautoscale} (\code{want_autoscale}) and \code{chunklen} (\code{chunk_size}). Output
-fields keep GLMsingle's names.
+\section{Correspondence with GLMsingle options}{
+ \code{fit_hrf} = \code{wantlibrary};
+\code{denoise} = \code{wantglmdenoise}; \code{ridge} = \code{wantfracridge}; \code{ridge_fracs} =
+\code{fracs}; \code{ridge_rescale} = \code{wantautoscale}; \code{max_pcs} = \code{n_pcs};
+\code{pc_stop} = \code{pcstop} (a fixed count, GLMsingle's \code{pcstop = -k}, is
+\code{n_pcs = k}); \code{pc_voxel_r2} = \code{pcR2cutoff}; \code{pc_voxel_mask} =
+\code{pcR2cutoffmask}; \code{noise_pool_r2} = \code{brainR2}; \code{noise_pool_brightness} =
+\code{brainthresh}; \code{noise_pool_mask} = \code{brainexclude}; \code{cv_folds} =
+\code{xvalscheme} (1-based run indices); \code{sessions} = \code{sessionindicator};
+\code{nuisance} = \code{extra_regressors}; \code{poly_degree} = \code{maxpolydeg};
+\code{percent_signal} = \code{wantpercentbold}; \code{chunk_size} = \code{chunklen};
+\code{stim_dur} = \code{stimdur}. Output fields keep GLMsingle's names.
 }
 
 \section{Differences from GLMsingle}{
  Defaults reproduce GLMsingle (Python,
 commit 1ab54a6) except where GLMsingle is internally inconsistent:
 \itemize{
-\item \code{extras_in_denoise = "always"} keeps user extra regressors in every
-GLMdenoise and ridge fit; GLMsingle (Python) drops them when zero noise
-PCs are used, including from the cross-validation reference.
-\code{"with_pcs"} reproduces GLMsingle.
-\item \code{zero_sd_cv = "zero"} gives voxels with zero beta variance no
-weight in cross-validation; GLMsingle's in-place division helper
-treats them inconsistently across candidates. \code{"python"} reproduces it.
+\item \code{nuisance_in_denoise = "always"} keeps \code{nuisance} regressors in
+every GLMdenoise and ridge fit; GLMsingle (Python) drops them when
+zero noise PCs are used, including from the cross-validation
+reference. \code{"with_pcs"} reproduces GLMsingle.
+\item \code{cv_zero_variance = "ignore"} gives voxels with zero beta variance
+no weight in cross-validation; GLMsingle's in-place division helper
+treats them inconsistently across candidates. \code{"glmsingle"}
+reproduces it.
 \item The ON-OFF R^2 threshold uses a deterministic two-Gaussian mixture
 fit with a small variance floor (as in GLMsingle's MATLAB code);
 GLMsingle's Python fit is unseeded.
-\item \code{want_percent_bold} applies to all model types (GLMsingle always
+\item \code{percent_signal} applies to all model types (GLMsingle always
 scales types C and D).
 \item Computation is in double precision (GLMsingle uses single).
 \item HRF indices are 1-based; betas are trials x voxels.
@@ -215,7 +260,7 @@ Y <- lapply(design, function(D) {
   X[is.na(X)] <- 0
   100 + X \%*\% matrix(rnorm(6 * n_vox, 2), 6) + matrix(rnorm(n_time * n_vox), n_time)
 })
-fit <- glmsingle(Y, design, tr = tr, stimdur = 3, n_pcs = 2, verbose = FALSE)
+fit <- glmsingle(Y, design, tr = tr, stim_dur = 3, max_pcs = 2, verbose = FALSE)
 dim(fit$typed$betasmd)
 }
 \references{

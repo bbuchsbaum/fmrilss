@@ -60,11 +60,11 @@
 #' GLMsingle canonical HRF and HRF library
 #'
 #' Reproduces GLMsingle's canonical HRF (`getcanonicalhrf`) and its library
-#' of 20 HRFs (`getcanonicalhrflibrary`) for a stimulus of duration `stimdur`
+#' of 20 HRFs (`getcanonicalhrflibrary`) for a stimulus of duration `stim_dur`
 #' sampled at `tr`. Each HRF is peak-normalised to 1, and the first sample is
 #' coincident with stimulus onset.
 #'
-#' @param stimdur Stimulus duration in seconds (rounded to 0.1 s).
+#' @param stim_dur Stimulus duration in seconds (rounded to 0.1 s).
 #' @param tr Repetition time in seconds.
 #' @return `glmsingle_hrf()` returns a numeric vector; `glmsingle_hrf_library()`
 #'   returns a time x 20 matrix.
@@ -72,15 +72,15 @@
 #'   single-trial fMRI response estimates using GLMsingle. eLife, 11, e77599.
 #' @export
 #' @examples
-#' lib <- glmsingle_hrf_library(stimdur = 3, tr = 1)
+#' lib <- glmsingle_hrf_library(stim_dur = 3, tr = 1)
 #' dim(lib)
-glmsingle_hrf_library <- function(stimdur, tr) {
-  stimdur <- .as_nonnegative_scalar(stimdur, "stimdur")
+glmsingle_hrf_library <- function(stim_dur, tr) {
+  stim_dur <- .as_nonnegative_scalar(stim_dur, "stim_dur")
   tr <- .glms_positive_scalar(tr, "tr")
   lib <- as.matrix(utils::read.table(.glms_extdata("glmsingle_hrflibrary.tsv")))
   sampler <- function(len) seq(0, by = tr, length.out = ceiling(ceiling(len * 0.1) / tr))
   out <- do.call(cbind, lapply(seq_len(ncol(lib)), function(j) {
-    .glms_hrf_resample(lib[, j], stimdur, tr, sampler)
+    .glms_hrf_resample(lib[, j], stim_dur, tr, sampler)
   }))
   out <- out / max(out)
   out <- sweep(out, 2L, apply(out, 2L, max), "/")
@@ -90,15 +90,15 @@ glmsingle_hrf_library <- function(stimdur, tr) {
 
 #' @rdname glmsingle_hrf_library
 #' @export
-glmsingle_hrf <- function(stimdur, tr) {
-  stimdur <- .as_nonnegative_scalar(stimdur, "stimdur")
+glmsingle_hrf <- function(stim_dur, tr) {
+  stim_dur <- .as_nonnegative_scalar(stim_dur, "stim_dur")
   tr <- .glms_positive_scalar(tr, "tr")
   basic <- scan(.glms_extdata("glmsingle_basichrf.txt"), quiet = TRUE)
   sampler <- function(len) {
     end <- (len - 1) * 0.1
     seq(0, by = tr, length.out = ceiling(end / tr))
   }
-  h <- .glms_hrf_resample(basic, stimdur, tr, sampler)
+  h <- .glms_hrf_resample(basic, stim_dur, tr, sampler)
   h / max(h)
 }
 
