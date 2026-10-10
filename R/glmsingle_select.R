@@ -11,11 +11,11 @@
 #   sum_i d_i z_i^2 - 2 sum_i z_i M_i + sum_j w_j z_ref[j]^2,
 # with d = rowSums(W), M = W z_ref and w = colSums(W) (glms_cv_compile, C++).
 # Only trials with d > 0 are kept ("used").
-.glms_cv_compile <- function(geom, ref, zero_sd = "zero") {
+.glms_cv_compile <- function(geom, ref, zero_sd = "ignore") {
   if (is.null(geom$cond_trials)) {
     geom$cond_trials <- split(seq_len(geom$n_trials) - 1L, geom$stimorder)
   }
-  test_runs <- vapply(geom$xval_scheme, function(f) seq_len(length(geom$validcolumns)) %in% f,
+  test_runs <- vapply(geom$cv_folds, function(f) seq_len(length(geom$validcolumns)) %in% f,
                       logical(length(geom$validcolumns)))
   cv <- glms_cv_compile(ref, match(geom$session, unique(geom$session))[geom$trial_run] - 1L,
                         geom$trial_run - 1L, unname(geom$cond_trials),
@@ -24,9 +24,9 @@
   cv$const <- drop(cv$const)
   cv$d <- drop(cv$d)
   cv$session_used <- as.integer(cv$session_used)
-  # candidates: zero-SD voxels get z = 0 ("zero"), or are divided by 1
-  # ("python", reproducing GLMsingle's in-place divisor update)
-  cv$isd <- if (identical(zero_sd, "python")) ifelse(cv$sd == 0, 1, cv$isd_ref) else cv$isd_ref
+  # candidates: zero-SD voxels get z = 0 ("ignore"), or are divided by 1
+  # ("glmsingle", reproducing GLMsingle's in-place divisor update)
+  cv$isd <- if (identical(zero_sd, "glmsingle")) ifelse(cv$sd == 0, 1, cv$isd_ref) else cv$isd_ref
   cv
 }
 
@@ -42,8 +42,8 @@
 .glms_cv_loss_ref <- function(cv, ref_used) .glms_cv_loss(cv, ref_used, ref = TRUE)
 
 # GLMsingle's select_noise_regressors(): first PC count whose improvement
-# over 0 PCs is within a factor pcstop of the best improvement.
-.glms_select_pcs <- function(xvaltrend, pcstop) {
+# over 0 PCs is within a factor pc_stop of the best improvement.
+.glms_select_pcs <- function(xvaltrend, pc_stop) {
   curve <- xvaltrend - xvaltrend[1L]
   chosen <- 0L
   best <- -Inf
@@ -51,7 +51,7 @@
     if (curve[p] > best) {
       chosen <- p - 1L
       best <- curve[p]
-      if (best * pcstop >= max(curve)) break
+      if (best * pc_stop >= max(curve)) break
     }
   }
   chosen

@@ -205,7 +205,7 @@
 }
 
 # Per-voxel alphas (fractions x voxels) for the requested fractions.
-.glms_frac_alphas <- function(sp, fracs, method = "fracridge") {
+.glms_frac_alphas <- function(sp, fracs, method = "grid") {
   a2 <- sp$a_all^2
   if (identical(method, "exact")) {
     return(glms_frac_alpha_exact(a2, sp$s2_all, fracs, .glms_nt()))

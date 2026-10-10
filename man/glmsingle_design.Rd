@@ -4,7 +4,7 @@
 \alias{glmsingle_design}
 \title{fmridesign front end for glmsingle()}
 \usage{
-glmsingle_design(Y, event_model, baseline_model = NULL, stimdur = NULL, ...)
+glmsingle_design(Y, event_model, baseline_model = NULL, stim_dur = NULL, ...)
 }
 \arguments{
 \item{Y}{Time x voxel data matrix covering all runs of the sampling frame.}
@@ -13,7 +13,7 @@ glmsingle_design(Y, event_model, baseline_model = NULL, stimdur = NULL, ...)
 
 \item{baseline_model}{Optional \code{baseline_model} from fmridesign.}
 
-\item{stimdur}{Trial duration in seconds. Default: the event durations,
+\item{stim_dur}{Trial duration in seconds. Default: the event durations,
 which must then be a single positive value.}
 
 \item{...}{Further arguments passed to \code{\link[=glmsingle]{glmsingle()}}.}
@@ -29,11 +29,11 @@ cross-validation). Onsets must lie on the TR grid.
 }
 \details{
 A \code{baseline_model} contributes its nuisance term (e.g. motion) as
-\code{extra_regressors}. Its drift and block terms are not used: GLMsingle
-models drift with its own per-run polynomials (\code{max_poly_deg}).
+\code{nuisance}. Its drift and block terms are not used: GLMsingle
+models drift with its own per-run polynomials (\code{poly_degree}).
 }
 \examples{
-\dontshow{if (requireNamespace("fmridesign", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+\dontshow{if (requireNamespace("fmridesign", quietly = TRUE)) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
 set.seed(1)
 sf <- fmrihrf::sampling_frame(c(80L, 80L), TR = 1)
 events <- data.frame(onset = rep(c(5, 20, 35, 50), 2),
@@ -43,8 +43,8 @@ em <- fmridesign::event_model(
   onset ~ fmridesign::hrf(stimulus), data = events, block = ~run,
   sampling_frame = sf, durations = rep(2, nrow(events)))
 Y <- matrix(100 + rnorm(160 * 4), 160, 4)
-fit <- glmsingle_design(Y, em, want_glmdenoise = FALSE,
-                        want_fracridge = FALSE, verbose = FALSE)
+fit <- glmsingle_design(Y, em, denoise = FALSE,
+                        ridge = FALSE, verbose = FALSE)
 dim(coef(fit, type = "b"))
 \dontshow{\}) # examplesIf}
 }

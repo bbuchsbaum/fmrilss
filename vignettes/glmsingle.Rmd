@@ -72,9 +72,9 @@ noise pool for GLMdenoise.
 ```{r simulate}
 library(fmrilss)
 set.seed(2024)
-tr <- 1; stimdur <- 3
+tr <- 1; stim_dur <- 3
 n_runs <- 4; n_time <- 110; n_vox <- 120; n_cond <- 8
-lib <- glmsingle_hrf_library(stimdur, tr)
+lib <- glmsingle_hrf_library(stim_dur, tr)
 true_hrf <- sample(ncol(lib), n_vox, replace = TRUE)
 responsive <- seq_len(n_vox) <= 80
 cond_mean <- matrix(rnorm(n_cond * n_vox, 1.5, 1), n_cond)
@@ -114,7 +114,7 @@ matched to the runs in data order.
 ## Fitting
 
 ```{r fit}
-fit <- glmsingle(Y, design, tr = tr, stimdur = stimdur, verbose = FALSE)
+fit <- glmsingle(Y, design, tr = tr, stim_dur = stim_dur, verbose = FALSE)
 fit
 ```
 
@@ -138,7 +138,7 @@ components, shared across voxels; `FRACvalue` contains one fraction per voxel.
 The left panel shows `xvaltrend`: the negative median cross-validation loss
 over the voxels used to choose the PC count. Higher is better; it measures
 agreement between betas for repeated conditions across runs, not time-series
-R^2. With the default `pcstop = 1.05`, the algorithm takes the first PC count
+R^2. With the default `pc_stop = 1.05`, the algorithm takes the first PC count
 whose improvement over zero PCs is at least `1 / 1.05` (about 95%) of the best
 improvement. The dashed line marks that threshold, and the red point marks
 the selected count.
@@ -154,7 +154,7 @@ pc_scores <- data.frame(
   score = fit$typec$xvaltrend
 )
 pc_threshold <- pc_scores$score[1] +
-  (max(pc_scores$score) - pc_scores$score[1]) / fit$settings$pcstop
+  (max(pc_scores$score) - pc_scores$score[1]) / fit$settings$pc_stop
 ridge_choices <- data.frame(
   fraction = fit$typed$FRACvalue,
   group = ifelse(responsive, "Task-responsive\n(n = 80)", "No task response\n(n = 40)")
@@ -240,7 +240,7 @@ simulated experiment, not a guarantee of improvement for another acquisition.
 
 ### Which HRF shapes were recovered?
 
-The library contains responses to a `r stimdur`-second stimulus, sampled every
+The library contains responses to a `r stim_dur`-second stimulus, sampled every
 `r tr` second and normalized to a peak of one. Its 20 shapes differ in their
 timing, width, and undershoot. The first panel shows the full library; the
 remaining panels compare the generating and selected shapes for voxels 1, 2,
@@ -290,32 +290,42 @@ differences, so the curves are more informative than index distance alone.
 These examples illustrate the selection step; the recovery plot above uses
 all responsive voxels.
 
+## Argument names
+
+Arguments use R-style names grouped by stage: `fit_hrf` and `hrf_library`;
+`denoise`, `max_pcs`, `n_pcs`, `pc_stop`, `pc_voxel_*` and `noise_pool_*` for
+GLMdenoise; `ridge` and `ridge_*` for fractional ridge; `cv_folds` and
+`sessions` for cross-validation. `?glmsingle` lists the GLMsingle option each
+one corresponds to (for example `wantlibrary` is `fit_hrf`, `brainR2` is
+`noise_pool_r2`, `pcR2cutoff` is `pc_voxel_r2`, `extra_regressors` is
+`nuisance`). A fixed number of PCs, GLMsingle's `pcstop = -k`, is `n_pcs = k`.
+
 ## Choices that differ from the reference implementation
 
 Two defaults differ from the pinned Python reference (commit `1ab54a6`):
 
 | Argument | fmrilss default | Option that follows the Python reference |
 |---|---|---|
-| `extras_in_denoise` | `"always"`: retain user nuisance regressors, such as motion, in every GLMdenoise and ridge fit | `"with_pcs"`: omit them when zero PCs are used, including from the cross-validation reference |
-| `zero_sd_cv` | `"zero"`: give zero cross-validation weight to voxels whose reference betas have zero variance | `"python"`: reproduce the reference helper's candidate-dependent treatment of zero variance |
+| `nuisance_in_denoise` | `"always"`: retain user nuisance regressors, such as motion, in every GLMdenoise and ridge fit | `"with_pcs"`: omit them when zero PCs are used, including from the cross-validation reference |
+| `cv_zero_variance` | `"ignore"`: give zero cross-validation weight to voxels whose reference betas have zero variance | `"glmsingle"`: reproduce the reference helper's candidate-dependent treatment of zero variance |
 
 Two further options control singular designs and the ridge calculation.
 `singular = "error"` follows GLMsingle's default; `"pinv"` instead returns a
-minimum-norm solution with a warning. `frac_alpha = "fracridge"` uses the
+minimum-norm solution with a warning. `ridge_alpha = "grid"` uses the
 reference grid interpolation to obtain ridge penalties; `"exact"` solves the
 fraction equation directly and is experimental.
 
 The automatic ON-OFF R^2 threshold uses a deterministic Gaussian-mixture
 fit with a small variance floor, following the MATLAB approach; the Python
-mixture fit is unseeded. Pass `brain_r2` and `pc_r2_cutoff` to set the thresholds
+mixture fit is unseeded. Pass `noise_pool_r2` and `pc_voxel_r2` to set the thresholds
 explicitly. Empty or rank-zero noise pools use zero PCs; otherwise the maximum
 PC count is capped at the available rank across runs.
 
 fmrilss computes in double precision, uses 1-based HRF indices, and applies
-`want_percent_bold` to all model types. The Python reference uses single
+`percent_signal` to all model types. The Python reference uses single
 precision and always scales types C and D to percent signal change.
 
-`full_glmbadness = TRUE` fills the PC cross-validation diagnostic for every
+`pc_cv_all_voxels = TRUE` fills the PC cross-validation diagnostic for every
 voxel. By default only the voxels that decide the number of PCs are
 evaluated, which gives identical estimates.
 

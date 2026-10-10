@@ -36,7 +36,7 @@
 # GLMdenoise noise regressors for one run: poly-projected noise-pool time
 # series, unit-normalised per voxel, covariance accumulated over voxel tiles,
 # leading eigenvectors scaled to unit standard deviation (ddof = 1).
-.glms_noise_pcs <- function(Yr, pool, Qp, n_pcs, chunk_size) {
+.glms_noise_pcs <- function(Yr, pool, Qp, max_pcs, chunk_size) {
   n_time <- nrow(Yr)
   idx <- which(pool)
   if (!length(idx)) return(matrix(0, n_time, 0L))
@@ -55,6 +55,6 @@
   e <- eigen(C, symmetric = TRUE)
   rank <- sum(e$values > n_time * .Machine$double.eps * max(e$values))
   if (!rank) return(matrix(0, n_time, 0L))
-  U <- e$vectors[, seq_len(min(n_pcs + 1L, rank)), drop = FALSE]
+  U <- e$vectors[, seq_len(min(max_pcs + 1L, rank)), drop = FALSE]
   sweep(U, 2L, apply(U, 2L, stats::sd), "/")
 }

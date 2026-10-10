@@ -6,9 +6,9 @@ glms_sim_fit <- local({
   function(key, ...) {
     if (is.null(cache[[key]])) {
       sim <- sim_glms(...)
-      fit <- glmsingle(sim$Y, sim$design, tr = sim$tr, stimdur = sim$stimdur,
-                       extra_regressors = sim$extras, n_pcs = 3, verbose = FALSE,
-                       brain_r2 = 2, pc_r2_cutoff = 2, chunk_size = 7)
+      fit <- glmsingle(sim$Y, sim$design, tr = sim$tr, stim_dur = sim$stim_dur,
+                       nuisance = sim$extras, max_pcs = 3, verbose = FALSE,
+                       noise_pool_r2 = 2, pc_voxel_r2 = 2, chunk_size = 7)
       cache[[key]] <<- list(sim = sim, fit = fit)
     }
     cache[[key]]
@@ -18,7 +18,7 @@ glms_sim_fit <- local({
 test_that("type A and B match dense OLS fits", {
   x <- glms_sim_fit("plain", seed = 21)
   fit <- x$fit; sim <- x$sim
-  deg <- fit$settings$max_poly_deg
+  deg <- fit$settings$poly_degree
   for (h in unique(fit$typeb$HRFindex)) {
     v <- which(fit$typeb$HRFindex == h)
     ref <- ref_fit_assume(lapply(sim$Y, function(y) y[, v, drop = FALSE]),
@@ -35,7 +35,7 @@ test_that("type A and B match dense OLS fits", {
 test_that("PC-count cross-validation matches dense fits and calcbadness", {
   x <- glms_sim_fit("extras", seed = 22, n_extras = 2)
   fit <- x$fit; sim <- x$sim
-  deg <- fit$settings$max_poly_deg
+  deg <- fit$settings$poly_degree
   g <- fit$design
   stimix <- lapply(g$validcolumns, function(cc) g$stimorder[cc])
   ix <- which(fit$typec$pcvoxels)
@@ -57,14 +57,14 @@ test_that("PC-count cross-validation matches dense fits and calcbadness", {
 test_that("type C and D match dense fracridge, calcbadness and autoscale", {
   x <- glms_sim_fit("extras", seed = 22, n_extras = 2)
   fit <- x$fit; sim <- x$sim
-  deg <- fit$settings$max_poly_deg
+  deg <- fit$settings$poly_degree
   g <- fit$design
   stimix <- lapply(g$validcolumns, function(cc) g$stimorder[cc])
   pcnum <- fit$typec$pcnum
   ex <- lapply(seq_along(sim$Y), function(r) {
     cbind(sim$extras[[r]], fit$typec$pcregressors[[r]][, seq_len(pcnum), drop = FALSE])
   })
-  fracs <- fit$settings$fracs
+  fracs <- fit$settings$ridge_fracs
   for (h in unique(fit$typeb$HRFindex)) {
     v <- which(fit$typeb$HRFindex == h)
     Yv <- lapply(sim$Y, function(y) y[, v, drop = FALSE])
@@ -96,9 +96,9 @@ test_that("results do not depend on chunking or input layout", {
     w <- which(sim$design[[r]] == 1, arr.ind = TRUE)
     data.frame(run = r, onset = (w[, 1] - 1) * sim$tr, condition = w[, 2])
   }))
-  fit2 <- glmsingle(do.call(rbind, sim$Y), ev, tr = sim$tr, stimdur = sim$stimdur,
-                    runs = runs, n_pcs = 3, verbose = FALSE, brain_r2 = 2,
-                    pc_r2_cutoff = 2, chunk_size = 1000)
+  fit2 <- glmsingle(do.call(rbind, sim$Y), ev, tr = sim$tr, stim_dur = sim$stim_dur,
+                    runs = runs, max_pcs = 3, verbose = FALSE, noise_pool_r2 = 2,
+                    pc_voxel_r2 = 2, chunk_size = 1000)
   for (tp in c("typeb", "typec", "typed")) {
     expect_equal(unname(fit2[[tp]]$betasmd), unname(x$fit[[tp]]$betasmd), tolerance = 1e-10)
   }
@@ -108,8 +108,8 @@ test_that("results do not depend on chunking or input layout", {
 test_that("restricting PC cross-validation to the selection voxels is exact", {
   x <- glms_sim_fit("plain", seed = 21)
   sim <- x$sim
-  full <- glmsingle(sim$Y, sim$design, tr = sim$tr, stimdur = sim$stimdur, n_pcs = 3,
-                    verbose = FALSE, brain_r2 = 2, pc_r2_cutoff = 2, full_glmbadness = TRUE)
+  full <- glmsingle(sim$Y, sim$design, tr = sim$tr, stim_dur = sim$stim_dur, max_pcs = 3,
+                    verbose = FALSE, noise_pool_r2 = 2, pc_voxel_r2 = 2, pc_cv_all_voxels = TRUE)
   expect_equal(full$typec$xvaltrend, x$fit$typec$xvaltrend)
   expect_identical(full$typec$pcnum, x$fit$typec$pcnum)
   expect_equal(full$typed$betasmd, x$fit$typed$betasmd)
@@ -122,9 +122,9 @@ test_that("restricting PC cross-validation to the selection voxels is exact", {
 test_that("extras policy only matters when extra regressors are supplied", {
   x <- glms_sim_fit("plain", seed = 21)
   sim <- x$sim
-  alt <- glmsingle(sim$Y, sim$design, tr = sim$tr, stimdur = sim$stimdur, n_pcs = 3,
-                   verbose = FALSE, brain_r2 = 2, pc_r2_cutoff = 2,
-                   extras_in_denoise = "with_pcs", chunk_size = 7)
+  alt <- glmsingle(sim$Y, sim$design, tr = sim$tr, stim_dur = sim$stim_dur, max_pcs = 3,
+                   verbose = FALSE, noise_pool_r2 = 2, pc_voxel_r2 = 2,
+                   nuisance_in_denoise = "with_pcs", chunk_size = 7)
   expect_equal(alt$typed$betasmd, x$fit$typed$betasmd)
 })
 
@@ -136,9 +136,9 @@ test_that("singular trial designs error by default and fall back with pinv", {
     E <- matrix(0, nrow(D), 2); E[on[1], 1] <- 1; E[on[2], 2] <- 1
     E
   })
-  args <- list(Y = sim$Y, design = sim$design, tr = sim$tr, stimdur = sim$stimdur,
-               hrf_library = impulse, extra_regressors = ex, verbose = FALSE,
-               want_glmdenoise = FALSE, brain_r2 = 2, pc_r2_cutoff = 2)
+  args <- list(Y = sim$Y, design = sim$design, tr = sim$tr, stim_dur = sim$stim_dur,
+               hrf_library = impulse, nuisance = ex, verbose = FALSE,
+               denoise = FALSE, noise_pool_r2 = 2, pc_voxel_r2 = 2)
   expect_error(do.call(glmsingle, args), "Singular")
   w <- testthat::capture_warnings(fit <- do.call(glmsingle, c(args, list(singular = "pinv"))))
   expect_length(w, 1L)
@@ -149,11 +149,11 @@ test_that("singular trial designs error by default and fall back with pinv", {
 test_that("input validation catches malformed designs", {
   sim <- sim_glms(seed = 4, n_runs = 2, n_time = 60, n_vox = 5)
   bad <- sim$design; bad[[1]][10, 1:2] <- 1
-  expect_error(glmsingle(sim$Y, bad, tr = 1, stimdur = 3, verbose = FALSE), "same trial onset")
-  expect_error(glmsingle(sim$Y, sim$design[1], tr = 1, stimdur = 3, verbose = FALSE), "one time x condition")
+  expect_error(glmsingle(sim$Y, bad, tr = 1, stim_dur = 3, verbose = FALSE), "same trial onset")
+  expect_error(glmsingle(sim$Y, sim$design[1], tr = 1, stim_dur = 3, verbose = FALSE), "one time x condition")
   ev <- data.frame(run = 1, onset = 2.5, condition = 1)
-  expect_error(glmsingle(sim$Y[1], ev, tr = 1, stimdur = 3, verbose = FALSE), "TR grid")
-  expect_error(glmsingle(sim$Y, sim$design, tr = 1, stimdur = 3, fracs = 1.5, verbose = FALSE), "fracs")
+  expect_error(glmsingle(sim$Y[1], ev, tr = 1, stim_dur = 3, verbose = FALSE), "TR grid")
+  expect_error(glmsingle(sim$Y, sim$design, tr = 1, stim_dur = 3, ridge_fracs = 1.5, verbose = FALSE), "ridge_fracs")
 })
 
 test_that("fmridesign front end matches the matrix interface", {
@@ -163,15 +163,15 @@ test_that("fmridesign front end matches the matrix interface", {
     w <- which(sim$design[[r]] == 1, arr.ind = TRUE)
     w <- w[order(w[, 1]), , drop = FALSE]
     data.frame(run = r, onset = (w[, 1] - 1) * sim$tr, stim = factor(w[, 2], levels = 1:8),
-               duration = sim$stimdur)
+               duration = sim$stim_dur)
   }))
   sf <- fmrihrf::sampling_frame(blocklens = vapply(sim$Y, nrow, integer(1)), TR = sim$tr)
   em <- fmridesign::event_model(onset ~ fmridesign::hrf(stim), data = ev, block = ~run,
                                 sampling_frame = sf, durations = ev$duration)
-  a <- glmsingle_design(do.call(rbind, sim$Y), em, n_pcs = 2, verbose = FALSE,
-                        brain_r2 = 2, pc_r2_cutoff = 2)
-  b <- glmsingle(sim$Y, sim$design, tr = sim$tr, stimdur = sim$stimdur, n_pcs = 2,
-                 verbose = FALSE, brain_r2 = 2, pc_r2_cutoff = 2)
+  a <- glmsingle_design(do.call(rbind, sim$Y), em, max_pcs = 2, verbose = FALSE,
+                        noise_pool_r2 = 2, pc_voxel_r2 = 2)
+  b <- glmsingle(sim$Y, sim$design, tr = sim$tr, stim_dur = sim$stim_dur, max_pcs = 2,
+                 verbose = FALSE, noise_pool_r2 = 2, pc_voxel_r2 = 2)
   expect_equal(unname(coef(a)), unname(coef(b)), tolerance = 1e-10)
   expect_output(print(a), "glmsingle_fit")
   expect_s3_class(summary(a), "summary.glmsingle_fit")
@@ -181,10 +181,10 @@ test_that("fmridesign front end matches the matrix interface", {
 test_that("results do not depend on the thread count", {
   x <- glms_sim_fit("plain", seed = 21)
   sim <- x$sim
-  one <- glmsingle(sim$Y, sim$design, tr = sim$tr, stimdur = sim$stimdur, n_pcs = 3,
-                   verbose = FALSE, brain_r2 = 2, pc_r2_cutoff = 2, n_threads = 1)
-  many <- glmsingle(sim$Y, sim$design, tr = sim$tr, stimdur = sim$stimdur, n_pcs = 3,
-                    verbose = FALSE, brain_r2 = 2, pc_r2_cutoff = 2, n_threads = 2)
+  one <- glmsingle(sim$Y, sim$design, tr = sim$tr, stim_dur = sim$stim_dur, max_pcs = 3,
+                   verbose = FALSE, noise_pool_r2 = 2, pc_voxel_r2 = 2, n_threads = 1)
+  many <- glmsingle(sim$Y, sim$design, tr = sim$tr, stim_dur = sim$stim_dur, max_pcs = 3,
+                    verbose = FALSE, noise_pool_r2 = 2, pc_voxel_r2 = 2, n_threads = 2)
   expect_identical(one$typed$betasmd, many$typed$betasmd)
   expect_identical(one$typed$FRACvalue, many$typed$FRACvalue)
 })

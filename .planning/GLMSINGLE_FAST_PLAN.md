@@ -292,36 +292,39 @@ For variant arguments, the first value is the default and the best choice.
 
 ```r
 glmsingle(
-  Y, onsets, conditions, runs, tr, stimdur,   # or via glmsingle_design()
-  hrf_library = NULL,            # NULL = GLMsingle library
-  want_library = TRUE, want_glmdenoise = TRUE, want_fracridge = TRUE,
-  fracs = seq(1, 0.05, by = -0.05), n_pcs = 10, pcstop = 1.05,
-  xval_scheme = NULL, session_indicator = NULL,
-  extra_regressors = NULL, max_poly_deg = NULL,
-  brain_thresh = c(99, 0.1), brain_r2 = NULL,
-  pc_r2_cutoff = NULL, pc_r2_cutoff_mask = NULL,
-  want_percent_bold = TRUE, want_autoscale = TRUE,
-  extras_in_denoise = c("always", "with_pcs"),   # S3
-  zero_sd_cv        = c("zero", "python"),       # S6
-  singular          = c("error", "pinv"),        # S2
-  frac_alpha        = c("fracridge", "exact"),   # §1 correction 1
-  full_glmbadness = FALSE,
-  memory_limit_gb = 4, verbose = TRUE
+  Y, design, tr, stim_dur, runs = NULL,          # or via glmsingle_design()
+  nuisance = NULL, poly_degree = NULL,
+  fit_hrf = TRUE, hrf_library = NULL,            # NULL = GLMsingle library
+  denoise = TRUE, max_pcs = 10, n_pcs = NULL, pc_stop = 1.05,
+  pc_voxel_r2 = NULL, pc_voxel_mask = NULL,
+  noise_pool_r2 = NULL, noise_pool_brightness = c(99, 0.1), noise_pool_mask = NULL,
+  ridge = TRUE, ridge_fracs = seq(1, 0.05, by = -0.05), ridge_rescale = TRUE,
+  ridge_alpha         = c("grid", "exact"),        # §1 correction 1
+  cv_folds = NULL, sessions = NULL, percent_signal = TRUE,
+  nuisance_in_denoise = c("always", "with_pcs"),   # S3
+  cv_zero_variance    = c("ignore", "glmsingle"),  # S6
+  singular            = c("error", "pinv"),        # S2
+  pc_cv_all_voxels = FALSE, chunk_size = 50000, n_threads = 1, verbose = TRUE
 )
 ```
+
+Names are R-style and grouped by stage (decided after implementation; the
+GLMsingle-derived names `want_*`, `pcstop`, `brainR2`, ... were replaced).
+GLMsingle's overloaded `pcstop <= 0` (fixed count) is the separate `n_pcs`
+argument; `?glmsingle` maps every argument to its GLMsingle option.
 
 **Variant arguments.** Each is documented in `@param` with its rationale and
 the GLMsingle behaviour it differs from.
 
 | Argument | Default (best choice) | Alternative | Notes |
 |---|---|---|---|
-| `extras_in_denoise` (S3) | `"always"`: nuisance basis `[poly, extras, PCs₁..k]` for every k, including the k = 0 CV reference and final C/D | `"with_pcs"`: pinned Python (extras only when k > 0) | Rationale in §9 |
-| `zero_sd_cv` (S6) | `"zero"`: zero-SD voxels contribute nothing to CV (MATLAB semantics) | `"python"`: emulate the in-place `zerodiv` mutation | |
+| `nuisance_in_denoise` (S3) | `"always"`: nuisance basis `[poly, extras, PCs₁..k]` for every k, including the k = 0 CV reference and final C/D | `"with_pcs"`: pinned Python (extras only when k > 0) | Rationale in §9 |
+| `cv_zero_variance` (S6) | `"ignore"`: zero-SD voxels contribute nothing to CV (MATLAB semantics) | `"glmsingle"`: emulate the in-place `zerodiv` mutation | |
 | `singular` (S2) | `"error"`: drop exact-zero columns, then Cholesky; on failure, error naming the colliding trials | `"pinv"`: minimum-norm, with a warning | |
-| `frac_alpha` | `"fracridge"`: pooled grid + log-interpolation, as upstream | `"exact"`: root-solve the fraction equation | `"exact"` is research (8.6) |
-| `full_glmbadness` | `FALSE`: PC CV on the selection subset only | `TRUE`: all voxels (diagnostic) | Estimates identical either way |
+| `ridge_alpha` | `"grid"`: pooled grid + log-interpolation, as upstream | `"exact"`: root-solve the fraction equation | `"exact"` is research (8.6) |
+| `pc_cv_all_voxels` | `FALSE`: PC CV on the selection subset only | `TRUE`: all voxels (diagnostic) | Estimates identical either way |
 
-Thresholds (`brain_r2`, `pc_r2_cutoff`) are ordinary arguments. Parity tests pass
+Thresholds (`noise_pool_r2`, `pc_voxel_r2`) are ordinary arguments. Parity tests pass
 Python's recorded values, so no special mode is needed for Python's unseeded
 GMM.
 

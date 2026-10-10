@@ -21,9 +21,9 @@ design <- lapply(seq_len(meta$n_runs), function(r) {
 })
 gc()
 t0 <- proc.time()[["elapsed"]]
-fit <- glmsingle(Y, design, tr = meta$tr, stimdur = meta$stimdur,
-                 brain_r2 = meta$brainR2, pc_r2_cutoff = meta$pcR2cutoff,
-                 extras_in_denoise = "with_pcs", zero_sd_cv = "python", verbose = FALSE)
+fit <- glmsingle(Y, design, tr = meta$tr, stim_dur = meta$stimdur,
+                 noise_pool_r2 = meta$brainR2, pc_voxel_r2 = meta$pcR2cutoff,
+                 nuisance_in_denoise = "with_pcs", cv_zero_variance = "glmsingle", verbose = FALSE)
 elapsed <- proc.time()[["elapsed"]] - t0
 pyb <- matrix(rd(file.path(out, "python_betas_typed.f32"), meta$n_vox * meta$n_trials),
               meta$n_trials, meta$n_vox)
